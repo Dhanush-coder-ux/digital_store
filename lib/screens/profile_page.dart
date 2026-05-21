@@ -1,15 +1,113 @@
-import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'dart:io';
+
 import 'package:animate_do/animate_do.dart';
-import '../theme/app_theme.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../theme/app_constants.dart';
+import '../theme/app_theme.dart';
+import 'favorites_page.dart';
 import 'my_orders_page.dart';
 import 'saved_addresses_page.dart';
-import 'favorites_page.dart';
-import 'main_screen.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  static const String _profileImagePathKey = 'profile_image_path';
+  static const String _defaultAvatarUrl =
+      'https://img.freepik.com/free-vector/businessman-character-avatar-isolated_24877-60111.jpg';
+
+  final ImagePicker _imagePicker = ImagePicker();
+  String? _profileImagePath;
+  bool _isPickingImage = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedPath = prefs.getString(_profileImagePathKey);
+
+    if (savedPath == null || savedPath.isEmpty) return;
+
+    final imageFile = File(savedPath);
+    if (!imageFile.existsSync()) {
+      await prefs.remove(_profileImagePathKey);
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _profileImagePath = savedPath;
+    });
+  }
+
+  Future<void> _pickProfileImage() async {
+    if (_isPickingImage) return;
+
+    setState(() {
+      _isPickingImage = true;
+    });
+
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+
+      if (pickedFile == null) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_profileImagePathKey, pickedFile.path);
+
+      if (!mounted) return;
+      setState(() {
+        _profileImagePath = pickedFile.path;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile photo updated'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to pick image right now'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPickingImage = false;
+        });
+      }
+    }
+  }
+
+  ImageProvider _profileImageProvider() {
+    if (_profileImagePath != null) {
+      final imageFile = File(_profileImagePath!);
+      if (imageFile.existsSync()) {
+        return FileImage(imageFile);
+      }
+    }
+
+    return const NetworkImage(_defaultAvatarUrl);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +147,8 @@ class ProfilePage extends StatelessWidget {
   }
 
   SliverAppBar _buildSliverHeader(BuildContext context) {
+    final profileImage = _profileImageProvider();
+
     return SliverAppBar(
       expandedHeight: 220,
       pinned: true,
@@ -69,7 +169,6 @@ class ProfilePage extends StatelessWidget {
           child: SafeArea(
             child: Stack(
               children: [
-                // Decorative circles
                 Positioned(
                   right: -40,
                   top: -40,
@@ -102,9 +201,9 @@ class ProfilePage extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
+                          const Text(
                             'Profile',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'Outfit',
                               fontSize: 22,
                               fontWeight: FontWeight.w800,
@@ -115,7 +214,9 @@ class ProfilePage extends StatelessWidget {
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: AppTheme.white.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                              borderRadius: BorderRadius.circular(
+                                AppTheme.radiusMd,
+                              ),
                             ),
                             child: const Icon(
                               LucideIcons.settings,
@@ -126,52 +227,74 @@ class ProfilePage extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: AppTheme.xl),
-                      // Avatar + info
                       FadeInLeft(
                         duration: AppDurations.normal,
                         child: Row(
                           children: [
-                            Stack(
-                              children: [
-                                Container(
-                                  width: 76,
-                                  height: 76,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: AppTheme.white.withOpacity(0.5),
-                                      width: 3,
-                                    ),
-                                    boxShadow: AppTheme.shadowLarge,
-                                    image: const DecorationImage(
-                                      image: NetworkImage(
-                                        "https://img.freepik.com/free-vector/businessman-character-avatar-isolated_24877-60111.jpg",
-                                      ),
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  bottom: 2,
-                                  right: 2,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
+                            GestureDetector(
+                              onTap: _pickProfileImage,
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    width: 76,
+                                    height: 76,
                                     decoration: BoxDecoration(
-                                      color: AppTheme.mutedCyan,
                                       shape: BoxShape.circle,
                                       border: Border.all(
-                                        color: AppTheme.white,
-                                        width: 2,
+                                        color: AppTheme.white.withOpacity(0.5),
+                                        width: 3,
+                                      ),
+                                      boxShadow: AppTheme.shadowLarge,
+                                      image: DecorationImage(
+                                        image: profileImage,
+                                        fit: BoxFit.cover,
                                       ),
                                     ),
-                                    child: const Icon(
-                                      LucideIcons.pencil,
-                                      color: AppTheme.white,
-                                      size: 10,
+                                  ),
+                                  if (_isPickingImage)
+                                    Positioned.fill(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.black.withOpacity(0.28),
+                                        ),
+                                        child: const Center(
+                                          child: SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    AppTheme.white,
+                                                  ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  Positioned(
+                                    bottom: 2,
+                                    right: 2,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.mutedCyan,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: AppTheme.white,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        LucideIcons.pencil,
+                                        color: AppTheme.white,
+                                        size: 10,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                             const SizedBox(width: AppTheme.lg),
                             Expanded(
@@ -204,21 +327,23 @@ class ProfilePage extends StatelessWidget {
                                     ),
                                     decoration: BoxDecoration(
                                       color: AppTheme.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                                      borderRadius: BorderRadius.circular(
+                                        AppTheme.radiusSm,
+                                      ),
                                       border: Border.all(
                                         color: AppTheme.white.withOpacity(0.3),
                                       ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
+                                      children: const [
+                                        Icon(
                                           LucideIcons.diamond,
                                           color: AppTheme.paleCyan,
                                           size: 11,
                                         ),
-                                        const SizedBox(width: 4),
-                                        const Text(
+                                        SizedBox(width: 4),
+                                        Text(
                                           'Gold Member',
                                           style: TextStyle(
                                             fontFamily: 'Outfit',
@@ -273,7 +398,12 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildStat(BuildContext context, String value, String label, IconData icon) {
+  Widget _buildStat(
+    BuildContext context,
+    String value,
+    String label,
+    IconData icon,
+  ) {
     return Expanded(
       child: Column(
         children: [
@@ -294,21 +424,14 @@ class ProfilePage extends StatelessWidget {
               color: AppTheme.textPrimary,
             ),
           ),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          Text(label, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
   }
 
   Widget _buildStatDivider() {
-    return Container(
-      height: 50,
-      width: 1,
-      color: AppTheme.veryLightGray,
-    );
+    return Container(height: 50, width: 1, color: AppTheme.veryLightGray);
   }
 
   Widget _buildSectionLabel(BuildContext context, String label) {
@@ -369,7 +492,7 @@ class ProfilePage extends StatelessWidget {
               iconBg: AppTheme.successGreen.withOpacity(0.1),
               iconColor: AppTheme.successGreen,
               title: 'Payment Methods',
-              subtitle: 'Visa ••4242',
+              subtitle: 'Visa â€¢â€¢4242',
             ),
           ],
         ),
@@ -476,14 +599,16 @@ class ProfilePage extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppTheme.errorRed.withOpacity(0.06),
             borderRadius: BorderRadius.circular(AppTheme.radiusXl),
-            border: Border.all(
-              color: AppTheme.errorRed.withOpacity(0.2),
-            ),
+            border: Border.all(color: AppTheme.errorRed.withOpacity(0.2)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(LucideIcons.logOut, color: AppTheme.errorRed, size: 18),
+              const Icon(
+                LucideIcons.logOut,
+                color: AppTheme.errorRed,
+                size: 18,
+              ),
               const SizedBox(width: AppTheme.sm),
               Text(
                 'Log Out',
@@ -541,10 +666,7 @@ class ProfilePage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
             ),
@@ -563,10 +685,7 @@ class ProfilePage extends StatelessWidget {
   Widget _buildDivider() {
     return Padding(
       padding: const EdgeInsets.only(left: 72, right: AppTheme.lg),
-      child: Divider(
-        height: 1,
-        color: AppTheme.veryLightGray,
-      ),
+      child: Divider(height: 1, color: AppTheme.veryLightGray),
     );
   }
 }

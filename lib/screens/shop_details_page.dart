@@ -371,81 +371,111 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
   }
 
   void _checkAndShowPopups(BuildContext context) {
-    // Check if store has announcements/offers
-    final announcements = widget.store['announcements'] as List<dynamic>? ?? [];
-    
-    if (announcements.isNotEmpty) {
-      _showOffersDialog(context, announcements);
-    } else {
-      _showWelcomeDialog(context);
-    }
+    // Use store announcements when available, otherwise show predictable dummy offers.
+    final rawAnnouncements = widget.store['announcements'] as List<dynamic>? ?? [];
+    final announcements = rawAnnouncements.isNotEmpty
+        ? rawAnnouncements
+        : <Map<String, dynamic>>[
+            {
+              'title': 'Weekend Flash Sale',
+              'description': 'Get 20% off on all bakery products above ₹299.',
+              'discount': '20% OFF',
+            },
+            {
+              'title': 'Free Delivery Offer',
+              'description': 'Free delivery on your first order from this store.',
+              'discount': 'FREE',
+            },
+            {
+              'title': 'Buy 1 Get 1',
+              'description': 'Selected snacks are now Buy 1 Get 1 for today.',
+              'discount': 'BOGO',
+            },
+          ];
+
+    _showOffersDialog(context, announcements);
   }
 
   void _showOffersDialog(BuildContext context, List<dynamic> announcements) {
     showDialog(
       context: context,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.3),
+      barrierColor: Colors.black.withOpacity(0.6),
       builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          child: FadeInUp(
-            duration: const Duration(milliseconds: 400),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.md,
+              vertical: AppTheme.xxl,
+            ),
+            child: FadeInUp(
+              duration: const Duration(milliseconds: 400),
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
+                constraints: const BoxConstraints(maxWidth: 430),
                 decoration: BoxDecoration(
-                  color: AppTheme.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppTheme.white.withOpacity(0.18),
+                      AppTheme.white.withOpacity(0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                   border: Border.all(
-                    color: AppTheme.white.withOpacity(0.25),
-                    width: 1.5,
+                    color: AppTheme.white.withOpacity(0.28),
+                    width: 1.4,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                      color: Colors.black.withOpacity(0.28),
+                      blurRadius: 32,
+                      offset: const Offset(0, 16),
                     ),
                   ],
                 ),
-                child: Column(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                    child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(AppTheme.lg),
+                      padding: const EdgeInsets.all(AppTheme.xl),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            const Color(0xFFF59E0B).withOpacity(0.3),
-                            const Color(0xFFEC4899).withOpacity(0.2),
+                            const Color(0xFFF59E0B).withOpacity(0.22),
+                            const Color(0xFFEC4899).withOpacity(0.16),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(AppTheme.radiusLg),
+                          top: Radius.circular(AppTheme.radiusXl),
                         ),
                       ),
                       child: Row(
                         children: [
                           Container(
-                            width: 48,
-                            height: 48,
+                            width: 52,
+                            height: 52,
                             decoration: BoxDecoration(
-                              color: AppTheme.white.withOpacity(0.2),
+                              color: AppTheme.white.withOpacity(0.16),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: AppTheme.white.withOpacity(0.3),
-                                width: 1.5,
+                                color: AppTheme.white.withOpacity(0.24),
+                                width: 1.2,
                               ),
                             ),
                             child: const Icon(
                               LucideIcons.sparkles,
                               color: AppTheme.white,
-                              size: 24,
+                              size: 22,
                             ),
                           ),
                           const SizedBox(width: AppTheme.md),
@@ -458,17 +488,16 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                                   style: const TextStyle(
                                     fontFamily: 'Outfit',
                                     color: AppTheme.white,
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.3,
                                   ),
                                 ),
                                 Text(
                                   '${announcements.length} new announcement${announcements.length > 1 ? 's' : ''}',
                                   style: TextStyle(
                                     fontFamily: 'Outfit',
-                                    color: AppTheme.white.withOpacity(0.8),
-                                    fontSize: 12,
+                                    color: AppTheme.white.withOpacity(0.76),
+                                    fontSize: 11,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -480,16 +509,16 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                             child: Container(
                               padding: const EdgeInsets.all(AppTheme.xs),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.1),
+                                color: Colors.white.withOpacity(0.08),
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: Colors.white.withOpacity(0.2),
+                                  color: Colors.white.withOpacity(0.18),
                                 ),
                               ),
                               child: const Icon(
                                 LucideIcons.x,
                                 color: AppTheme.white,
-                                size: 18,
+                                size: 16,
                               ),
                             ),
                           ),
@@ -497,11 +526,16 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                       ),
                     ),
                     Container(
-                      constraints: BoxConstraints(
-                        maxHeight: 250,
+                      constraints: const BoxConstraints(
+                        maxHeight: 300,
                       ),
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(AppTheme.lg),
+                        padding: const EdgeInsets.fromLTRB(
+                          AppTheme.xl,
+                          AppTheme.lg,
+                          AppTheme.xl,
+                          AppTheme.md,
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -520,7 +554,12 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(AppTheme.lg),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppTheme.xl,
+                        AppTheme.md,
+                        AppTheme.xl,
+                        AppTheme.xl,
+                      ),
                       child: GestureDetector(
                         onTap: () {
                           Navigator.pop(context);
@@ -534,15 +573,15 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                AppTheme.white.withOpacity(0.3),
-                                AppTheme.white.withOpacity(0.15),
+                                AppTheme.white.withOpacity(0.24),
+                                AppTheme.white.withOpacity(0.12),
                               ],
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
                             ),
                             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                             border: Border.all(
-                              color: AppTheme.white.withOpacity(0.2),
+                              color: AppTheme.white.withOpacity(0.18),
                             ),
                           ),
                           child: const Text(
@@ -551,15 +590,16 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                             style: TextStyle(
                               fontFamily: 'Outfit',
                               color: AppTheme.white,
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              letterSpacing: 0.3,
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -582,7 +622,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
         color: AppTheme.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         border: Border.all(
-          color: AppTheme.white.withOpacity(0.15),
+          color: AppTheme.white.withOpacity(0.12),
         ),
       ),
       child: Column(
@@ -597,7 +637,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                   style: const TextStyle(
                     fontFamily: 'Outfit',
                     color: AppTheme.white,
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -609,10 +649,10 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF59E0B).withOpacity(0.3),
+                    color: const Color(0xFFF59E0B).withOpacity(0.24),
                     borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                     border: Border.all(
-                      color: const Color(0xFFF59E0B).withOpacity(0.5),
+                      color: const Color(0xFFF59E0B).withOpacity(0.35),
                     ),
                   ),
                   child: Text(
@@ -620,7 +660,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                     style: const TextStyle(
                       fontFamily: 'Outfit',
                       color: AppTheme.white,
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -633,9 +673,10 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
               description,
               style: TextStyle(
                 fontFamily: 'Outfit',
-                color: AppTheme.white.withOpacity(0.8),
-                fontSize: 12,
+                color: AppTheme.white.withOpacity(0.78),
+                fontSize: 11,
                 fontWeight: FontWeight.w500,
+                height: 1.45,
               ),
             ),
           ],
@@ -648,53 +689,68 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
     showDialog(
       context: context,
       barrierDismissible: true,
-      barrierColor: Colors.black.withOpacity(0.3),
+      barrierColor: Colors.black.withOpacity(0.6),
       builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          child: FadeInUp(
-            duration: const Duration(milliseconds: 400),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        return BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Dialog(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: AppTheme.md,
+              vertical: AppTheme.xxl,
+            ),
+            child: FadeInUp(
+              duration: const Duration(milliseconds: 400),
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
-                padding: const EdgeInsets.all(AppTheme.lg),
+                constraints: const BoxConstraints(maxWidth: 430),
+                padding: const EdgeInsets.all(AppTheme.xl),
                 decoration: BoxDecoration(
-                  color: AppTheme.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppTheme.white.withOpacity(0.18),
+                      AppTheme.white.withOpacity(0.08),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
                   border: Border.all(
-                    color: AppTheme.white.withOpacity(0.25),
-                    width: 1.5,
+                    color: AppTheme.white.withOpacity(0.28),
+                    width: 1.4,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                      color: Colors.black.withOpacity(0.28),
+                      blurRadius: 32,
+                      offset: const Offset(0, 16),
                     ),
                   ],
                 ),
-                child: Column(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                    child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: [
                         Container(
-                          width: 48,
-                          height: 48,
+                          width: 52,
+                          height: 52,
                           decoration: BoxDecoration(
-                            color: AppTheme.white.withOpacity(0.2),
+                            color: AppTheme.white.withOpacity(0.16),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: AppTheme.white.withOpacity(0.3),
-                              width: 1.5,
+                              color: AppTheme.white.withOpacity(0.24),
+                              width: 1.2,
                             ),
                           ),
                           child: const Icon(
                             LucideIcons.store,
                             color: AppTheme.white,
-                            size: 24,
+                            size: 22,
                           ),
                         ),
                         const SizedBox(width: AppTheme.md),
@@ -707,9 +763,8 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                                 style: const TextStyle(
                                   fontFamily: 'Outfit',
                                   color: AppTheme.white,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.3,
                                 ),
                               ),
                               Text(
@@ -717,7 +772,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                                 style: const TextStyle(
                                   fontFamily: 'Outfit',
                                   color: AppTheme.white,
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -729,16 +784,16 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                           child: Container(
                             padding: const EdgeInsets.all(AppTheme.xs),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
+                              color: Colors.white.withOpacity(0.08),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withOpacity(0.18),
                               ),
                             ),
                             child: const Icon(
                               LucideIcons.x,
                               color: AppTheme.white,
-                              size: 18,
+                              size: 16,
                             ),
                           ),
                         ),
@@ -747,19 +802,19 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                     const SizedBox(height: AppTheme.lg),
                     Container(
                       padding: const EdgeInsets.all(AppTheme.md),
-                      decoration: BoxDecoration(
-                        color: AppTheme.white.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                        border: Border.all(
-                          color: AppTheme.white.withOpacity(0.1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                          border: Border.all(
+                            color: AppTheme.white.withOpacity(0.12),
+                          ),
                         ),
-                      ),
                       child: Text(
                         'Explore our exclusive deals and discover fresh items curated just for you. Enjoy fast delivery and premium quality with every order!',
                         style: TextStyle(
                           fontFamily: 'Outfit',
-                          color: AppTheme.white.withOpacity(0.95),
-                          fontSize: 13,
+                          color: AppTheme.white.withOpacity(0.9),
+                          fontSize: 11,
                           fontWeight: FontWeight.w500,
                           height: 1.5,
                         ),
@@ -792,20 +847,20 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              AppTheme.white.withOpacity(0.3),
-                              AppTheme.white.withOpacity(0.15),
+                              AppTheme.white.withOpacity(0.24),
+                              AppTheme.white.withOpacity(0.12),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                           border: Border.all(
-                            color: AppTheme.white.withOpacity(0.2),
+                            color: AppTheme.white.withOpacity(0.18),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: AppTheme.white.withOpacity(0.1),
-                              blurRadius: 10,
+                              color: AppTheme.white.withOpacity(0.08),
+                              blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
                           ],
@@ -816,14 +871,15 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                           style: TextStyle(
                             fontFamily: 'Outfit',
                             color: AppTheme.white,
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
                     ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -840,14 +896,14 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
         color: AppTheme.white.withOpacity(0.08),
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         border: Border.all(
-          color: AppTheme.white.withOpacity(0.15),
+          color: AppTheme.white.withOpacity(0.12),
         ),
       ),
       child: Column(
         children: [
           Text(
             emoji,
-            style: const TextStyle(fontSize: 16),
+            style: const TextStyle(fontSize: 14),
           ),
           const SizedBox(height: 3),
           Text(
@@ -855,7 +911,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
             style: const TextStyle(
               fontFamily: 'Outfit',
               color: AppTheme.white,
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -864,8 +920,8 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
             label,
             style: TextStyle(
               fontFamily: 'Outfit',
-              color: AppTheme.white.withOpacity(0.7),
-              fontSize: 9,
+              color: AppTheme.white.withOpacity(0.68),
+              fontSize: 8,
               fontWeight: FontWeight.w500,
             ),
           ),
