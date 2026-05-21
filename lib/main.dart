@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_screen.dart';
+import 'screens/cart_page.dart';
 import 'models/providers.dart';
 
 void main() {
@@ -24,6 +25,10 @@ class MyApp extends StatelessWidget {
         title: 'Digital Store',
         theme: AppTheme.lightTheme,
         home: const MainScreen(),
+        routes: {
+          '/home': (context) => const MainScreen(),
+          '/cart': (context) => const CartPage(),
+        },
       ),
     );
   }

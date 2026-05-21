@@ -60,7 +60,7 @@ class CartPage extends StatelessWidget {
       subtitle: "Browse our stores and add items to your cart",
       actionLabel: "Start Shopping",
       onAction: () {
-        // Navigate to stores page
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
       },
     );
   }
