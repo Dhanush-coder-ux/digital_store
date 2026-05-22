@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
+import '../models/providers.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 
@@ -12,72 +14,12 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  // Dummy notification data
-  final List<Map<String, dynamic>> _notifications = [
-    {
-      "id": "1",
-      "title": "Order Delivered!",
-      "message": "Your order from Fresh Mart has been delivered successfully.",
-      "time": "Just now",
-      "isRead": false,
-      "type": "order",
-      "icon": LucideIcons.packageCheck,
-      "color": AppTheme.successGreen,
-    },
-    {
-      "id": "2",
-      "title": "Special Offer \u{1F389}",
-      "message": "Get 20% off on your next grocery purchase. Use code: GROCERY20",
-      "time": "2 hours ago",
-      "isRead": false,
-      "type": "promo",
-      "icon": LucideIcons.tag,
-      "color": AppTheme.warningOrange,
-    },
-    {
-      "id": "3",
-      "title": "Payment Successful",
-      "message": "We've received your payment of \$45.00 for order #84920.",
-      "time": "Yesterday",
-      "isRead": true,
-      "type": "payment",
-      "icon": LucideIcons.creditCard,
-      "color": AppTheme.primaryBlue,
-    },
-    {
-      "id": "4",
-      "title": "Store Update",
-      "message": "Your favorite store 'Grace Super Market' added new items.",
-      "time": "Yesterday",
-      "isRead": true,
-      "type": "update",
-      "icon": LucideIcons.store,
-      "color": AppTheme.mutedCyan,
-    },
-    {
-      "id": "5",
-      "title": "Account Security",
-      "message": "A new login was detected from Chrome on Windows.",
-      "time": "May 18, 2026",
-      "isRead": true,
-      "type": "security",
-      "icon": LucideIcons.shieldAlert,
-      "color": AppTheme.errorRed,
-    },
-  ];
-
   void _markAllAsRead() {
-    setState(() {
-      for (var n in _notifications) {
-        n['isRead'] = true;
-      }
-    });
+    context.read<NotificationsProvider>().markAllAsRead();
   }
 
-  void _markAsRead(int index) {
-    setState(() {
-      _notifications[index]['isRead'] = true;
-    });
+  void _markAsRead(String id) {
+    context.read<NotificationsProvider>().markAsRead(id);
   }
 
   @override
@@ -112,28 +54,33 @@ class _NotificationsPageState extends State<NotificationsPage> {
           ),
         ],
       ),
-      body: _notifications.isEmpty
-          ? _buildEmptyState()
-          : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
-              physics: const BouncingScrollPhysics(),
-              itemCount: _notifications.length,
-              itemBuilder: (context, index) {
-                final notification = _notifications[index];
-                return FadeInUp(
-                  delay: Duration(milliseconds: 50 * index),
-                  child: _buildNotificationItem(notification, index),
-                );
-              },
-            ),
+      body: Consumer<NotificationsProvider>(
+        builder: (context, notificationsProvider, _) {
+          final notifications = notificationsProvider.notifications;
+          if (notifications.isEmpty) return _buildEmptyState();
+
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
+            physics: const BouncingScrollPhysics(),
+            itemCount: notifications.length,
+            itemBuilder: (context, index) {
+              final notification = notifications[index];
+              return FadeInUp(
+                delay: Duration(milliseconds: 50 * index),
+                child: _buildNotificationItem(notification),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildNotificationItem(Map<String, dynamic> notification, int index) {
-    final bool isRead = notification['isRead'];
-    
+  Widget _buildNotificationItem(AppNotification notification) {
+    final bool isRead = notification.isRead;
+
     return GestureDetector(
-      onTap: () => _markAsRead(index),
+      onTap: () => _markAsRead(notification.id),
       child: Container(
         margin: const EdgeInsets.symmetric(
           horizontal: AppTheme.xl,
@@ -157,12 +104,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: (notification['color'] as Color).withOpacity(0.1),
+                color: notification.color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                notification['icon'] as IconData,
-                color: notification['color'] as Color,
+                notification.icon,
+                color: notification.color,
                 size: 24,
               ),
             ),
@@ -178,7 +125,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          notification['title'] as String,
+                          notification.title,
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
                             color: AppTheme.textPrimary,
@@ -201,14 +148,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   ),
                   const SizedBox(height: AppTheme.xs),
                   Text(
-                    notification['message'] as String,
+                    notification.message,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: isRead ? AppTheme.textSecondary : AppTheme.textPrimary.withOpacity(0.8),
                     ),
                   ),
                   const SizedBox(height: AppTheme.sm),
                   Text(
-                    notification['time'] as String,
+                    notification.time,
                     style: Theme.of(context).textTheme.labelSmall,
                   ),
                 ],

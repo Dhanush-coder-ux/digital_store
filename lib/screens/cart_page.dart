@@ -7,6 +7,7 @@ import '../widgets/components.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 import 'delivery_address_page.dart';
+import 'stores_page.dart';
 
 class CartPage extends StatelessWidget {
   const CartPage({super.key});
@@ -38,8 +39,6 @@ class CartPage extends StatelessWidget {
 
           return Column(
             children: [
-              // Delivery info banner
-              _buildDeliveryBanner(context),
               // Cart items list
               Expanded(
                 child: _buildCartList(context, cart),
@@ -60,7 +59,10 @@ class CartPage extends StatelessWidget {
       subtitle: "Browse our stores and add items to your cart",
       actionLabel: "Start Shopping",
       onAction: () {
-        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const StoresPage()),
+        );
       },
     );
   }
@@ -150,12 +152,17 @@ Widget _buildDeliveryBanner(BuildContext context){
     String storeName,
     List<CartItem> items,
   ) {
+    int totalItems = items.fold(0, (sum, item) => sum + item.quantity);
+
     return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Store header
-          Row(
+      padding: EdgeInsets.zero,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          tilePadding: const EdgeInsets.all(AppTheme.lg),
+          childrenPadding: const EdgeInsets.only(left: AppTheme.lg, right: AppTheme.lg, bottom: AppTheme.lg),
+          title: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(AppTheme.md),
@@ -182,7 +189,7 @@ Widget _buildDeliveryBanner(BuildContext context){
                     ),
                     const SizedBox(height: AppTheme.xs),
                     Text(
-                      "Free Delivery • 15-20 mins",
+                      "$totalItems ${totalItems == 1 ? 'Item' : 'Items'} • Free Delivery",
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: AppTheme.successGreen,
                       ),
@@ -190,25 +197,20 @@ Widget _buildDeliveryBanner(BuildContext context){
                   ],
                 ),
               ),
-              PremiumBadge(
-                text: "Free Delivery",
-                backgroundColor: AppTheme.successGreen.withOpacity(0.1),
-                textColor: AppTheme.successGreen,
-                icon: LucideIcons.check,
-              ),
             ],
           ),
-          const SizedBox(height: AppTheme.xl),
-          const Divider(),
-          const SizedBox(height: AppTheme.xl),
-          // Items list
-          ...items.map((item) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppTheme.lg),
-              child: _buildCartItemRow(context, item),
-            );
-          }).toList(),
-        ],
+          children: [
+            const Divider(),
+            const SizedBox(height: AppTheme.lg),
+            // Items list
+            ...items.map((item) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppTheme.lg),
+                child: _buildCartItemRow(context, item),
+              );
+            }).toList(),
+          ],
+        ),
       ),
     );
   }
@@ -255,6 +257,42 @@ Widget _buildDeliveryBanner(BuildContext context){
                   color: AppTheme.textTertiary,
                 ),
               ),
+              if (item.scheduledFor != null && item.scheduledFor!.isNotEmpty) ...[
+                const SizedBox(height: AppTheme.sm),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.md,
+                    vertical: AppTheme.xs,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warningOrange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(
+                      color: AppTheme.warningOrange.withOpacity(0.18),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        LucideIcons.calendar,
+                        size: 12,
+                        color: AppTheme.warningOrange,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        item.scheduledFor!,
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          color: AppTheme.warningOrange,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: AppTheme.md),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -374,39 +412,28 @@ Widget _buildDeliveryBanner(BuildContext context){
             mainAxisSize: MainAxisSize.min,
             children: [
               // Price breakdown
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppTheme.lg,
-                  vertical: AppTheme.md,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgSecondary,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                ),
-                child: Column(
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  collapsedBackgroundColor: AppTheme.bgSecondary,
+                  backgroundColor: AppTheme.bgSecondary,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+                  collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+                  initiallyExpanded: false,
+                  tilePadding: const EdgeInsets.symmetric(horizontal: AppTheme.lg, vertical: 0),
+                  childrenPadding: const EdgeInsets.only(left: AppTheme.lg, right: AppTheme.lg, bottom: AppTheme.lg),
+                  title: _buildPriceRow(
+                    context,
+                    "Total",
+                    "₹${total.toStringAsFixed(2)}",
+                    isTotal: true,
+                  ),
                   children: [
-                    _buildPriceRow(
-                      context,
-                      "Subtotal",
-                      "₹${cart.subtotal.toStringAsFixed(2)}",
-                    ),
+                    Divider(color: AppTheme.textTertiary.withOpacity(0.2)),
                     const SizedBox(height: AppTheme.md),
-                    _buildPriceRow(
-                      context,
-                      "Delivery Fee",
-                      "₹${deliveryFee.toStringAsFixed(2)}",
-                    ),
+                    _buildPriceRow(context, "Subtotal", "₹${cart.subtotal.toStringAsFixed(2)}"),
                     const SizedBox(height: AppTheme.md),
-                    Divider(
-                      color: AppTheme.textTertiary.withOpacity(0.2),
-                    ),
-                    const SizedBox(height: AppTheme.md),
-                    _buildPriceRow(
-                      context,
-                      "Total",
-                      "₹${total.toStringAsFixed(2)}",
-                      isTotal: true,
-                    ),
+                    _buildPriceRow(context, "Delivery Fee", "₹${deliveryFee.toStringAsFixed(2)}"),
                   ],
                 ),
               ),

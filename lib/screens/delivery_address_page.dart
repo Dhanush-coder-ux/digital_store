@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 import 'payment_method_page.dart';
+import '../models/providers.dart';
+import 'saved_addresses_page.dart'; // We could import this to navigate to Add New Address if we want.
 
 class DeliveryAddressPage extends StatefulWidget {
   const DeliveryAddressPage({super.key});
@@ -14,27 +17,6 @@ class DeliveryAddressPage extends StatefulWidget {
 
 class _DeliveryAddressPageState extends State<DeliveryAddressPage> {
   int _selectedAddressIndex = 0;
-
-  final List<Map<String, dynamic>> _addresses = [
-    {
-      'title': 'Home',
-      'address': '123 Maple Street, Springfield, IL 62704',
-      'name': 'Jane Doe',
-      'phone': '+1 (217) 555-0123',
-    },
-    {
-      'title': 'Office',
-      'address': '456 Business Hub, Suite 200, Chicago, IL 60601',
-      'name': 'Jane Doe',
-      'phone': '+1 (312) 555-0199',
-    },
-    {
-      'title': 'Parent\'s House',
-      'address': '789 Oak Lane, Naperville, IL 60540',
-      'name': 'Jane Doe',
-      'phone': '+1 (630) 555-0456',
-    }
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -59,51 +41,73 @@ class _DeliveryAddressPageState extends State<DeliveryAddressPage> {
         ),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(AppTheme.xl),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FadeInUp(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'SAVED ADDRESSES',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: AppTheme.primaryBlue,
-                      letterSpacing: 1.2,
+      body: Consumer<LocationProvider>(
+        builder: (context, locationProvider, child) {
+          final addresses = locationProvider.savedAddresses;
+
+          // Ensure index doesn't go out of bounds if addresses are deleted
+          if (_selectedAddressIndex >= addresses.length && addresses.isNotEmpty) {
+            _selectedAddressIndex = 0;
+          }
+
+          return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(AppTheme.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                FadeInUp(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'SAVED ADDRESSES',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppTheme.primaryBlue,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      Text(
+                        '${addresses.length} Found',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppTheme.lg),
+                if (addresses.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        "No saved addresses yet.",
+                        style: TextStyle(color: Colors.grey.shade500),
+                      ),
                     ),
-                  ),
-                  Text(
-                    '${_addresses.length} Found',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
+                  )
+                else
+                  ...List.generate(addresses.length, (index) {
+                    return FadeInUp(
+                      delay: Duration(milliseconds: 80 * index),
+                      child: _buildAddressCard(addresses[index], index),
+                    );
+                  }),
+                const SizedBox(height: AppTheme.md),
+                FadeInUp(
+                  delay: const Duration(milliseconds: 300),
+                  child: _buildAddNewAddressBtn(),
+                ),
+                const SizedBox(height: 100),
+              ],
             ),
-            const SizedBox(height: AppTheme.lg),
-            ...List.generate(_addresses.length, (index) {
-              return FadeInUp(
-                delay: Duration(milliseconds: 80 * index),
-                child: _buildAddressCard(_addresses[index], index),
-              );
-            }),
-            const SizedBox(height: AppTheme.md),
-            FadeInUp(
-              delay: const Duration(milliseconds: 300),
-              child: _buildAddNewAddressBtn(),
-            ),
-            const SizedBox(height: 100),
-          ],
-        ),
+          );
+        },
       ),
       bottomSheet: _buildBottomBar(),
     );
   }
 
-  Widget _buildAddressCard(Map<String, dynamic> address, int index) {
+  Widget _buildAddressCard(SavedAddress address, int index) {
     final bool isSelected = _selectedAddressIndex == index;
 
     return GestureDetector(
@@ -157,7 +161,7 @@ class _DeliveryAddressPageState extends State<DeliveryAddressPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        address['title'],
+                        address.title,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -167,7 +171,7 @@ class _DeliveryAddressPageState extends State<DeliveryAddressPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    address['address'],
+                    address.address,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: AppTheme.textSecondary,
                       height: 1.4,
@@ -179,14 +183,14 @@ class _DeliveryAddressPageState extends State<DeliveryAddressPage> {
                       Icon(LucideIcons.user, size: 14, color: AppTheme.textTertiary),
                       const SizedBox(width: 4),
                       Text(
-                        address['name'],
+                        address.name,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(width: AppTheme.lg),
                       Icon(LucideIcons.phone, size: 14, color: AppTheme.textTertiary),
                       const SizedBox(width: 4),
                       Text(
-                        address['phone'],
+                        address.phone,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
@@ -202,7 +206,13 @@ class _DeliveryAddressPageState extends State<DeliveryAddressPage> {
 
   Widget _buildAddNewAddressBtn() {
     return GestureDetector(
-      onTap: () {},
+      onTap: () {
+        // Just route to the Saved Addresses page where they can add it via the beautiful modal
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SavedAddressesPage()),
+        );
+      },
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: AppTheme.lg),
@@ -243,6 +253,11 @@ class _DeliveryAddressPageState extends State<DeliveryAddressPage> {
         ),
         child: GestureDetector(
           onTap: () {
+            final provider = context.read<LocationProvider>();
+            if (provider.savedAddresses.isNotEmpty) {
+              // Update the global selected address to match what they picked in checkout!
+              provider.selectAddress(provider.savedAddresses[_selectedAddressIndex]);
+            }
             Navigator.push(
               context,
               MaterialPageRoute(builder: (context) => const PaymentMethodPage()),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
 import '../widgets/custom_bottom_bar.dart';
 import '../theme/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../models/providers.dart';
 import 'home_page.dart';
 import 'stores_page.dart';
 import 'cart_page.dart';
@@ -30,6 +32,9 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     MainScreen.pageIndexNotifier.addListener(_onPageIndexChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LocationProvider>().requestLocationAndGeocode();
+    });
   }
 
   void _onPageIndexChanged() {

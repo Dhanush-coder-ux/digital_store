@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_constants.dart';
+import 'live_tracking_page.dart';
+import '../models/providers.dart';
 
 class MyOrdersPage extends StatelessWidget {
   const MyOrdersPage({super.key});
@@ -86,7 +88,24 @@ class MyOrdersPage extends StatelessWidget {
   }
 
   Widget _buildOrderList(BuildContext context, {String? filter}) {
+    final cartProvider = context.watch<CartProvider>();
+    final dynamicOrders = cartProvider.orders.map((o) {
+      return {
+        "id": o.id,
+        "date": o.date,
+        "status": o.status,
+        "images": o.items.map((i) => i.product.image ?? "").toList(),
+        "title": o.items.first.product.name,
+        "subtitle": o.items.length > 1 ? "and ${o.items.length - 1} more items" : null,
+        "total": o.total.toStringAsFixed(2),
+        "actionText": "Track Order",
+        "isPrimary": true,
+        "items": o.items,
+      };
+    }).toList();
+
     List<Map<String, dynamic>> orders = [
+      ...dynamicOrders,
       {
         "id": "ORD-9921",
         "date": "14 Oct 2023",
@@ -187,7 +206,6 @@ class MyOrdersPage extends StatelessWidget {
   Widget _buildOrderCard(BuildContext context, Map<String, dynamic> order) {
     final bool isDelivered = order['status'] == 'DELIVERED';
     final bool isCancelled = order['status'] == 'CANCELLED';
-    final bool isOngoing = order['status'] == 'ONGOING';
 
     Color statusColor;
     Color statusBg;
@@ -307,6 +325,47 @@ class MyOrdersPage extends StatelessWidget {
               ),
             ],
           ),
+          // Scheduled Delivery Badge if any item has it
+          if (order['items'] != null) ...[
+            for (var item in (order['items'] as List<CartItem>))
+              if (item.scheduledFor != null && item.scheduledFor!.isNotEmpty) ...[
+                const SizedBox(height: AppTheme.md),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.md,
+                    vertical: AppTheme.sm,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.warningOrange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    border: Border.all(
+                      color: AppTheme.warningOrange.withOpacity(0.18),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        LucideIcons.calendar,
+                        size: 14,
+                        color: AppTheme.warningOrange,
+                      ),
+                      const SizedBox(width: AppTheme.sm),
+                      Expanded(
+                        child: Text(
+                          "Scheduled: ${item.product.name} - ${item.scheduledFor!}",
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            color: AppTheme.warningOrange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+          ],
           const SizedBox(height: AppTheme.lg),
           // Divider
           Divider(color: AppTheme.veryLightGray, height: 1),
@@ -389,7 +448,16 @@ class MyOrdersPage extends StatelessWidget {
     final isPrimary = order['isPrimary'] == true;
 
     return GestureDetector(
-      onTap: () {},
+      onTap: () {
+        if (order['actionText'] == 'Track Order') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => LiveTrackingPage(order: order),
+            ),
+          );
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppTheme.lg,

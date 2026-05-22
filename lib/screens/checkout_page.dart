@@ -229,14 +229,94 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   Widget _buildOrderSummary(double itemTotal, double deliveryFee, double totalAmount) {
+    final cart = context.watch<CartProvider>();
+
     return Container(
       padding: const EdgeInsets.all(AppTheme.lg),
       decoration: BoxDecoration(
-        color: AppTheme.bgSecondary,
+        color: AppTheme.white,
         borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        border: Border.all(color: AppTheme.veryLightGray),
+        boxShadow: AppTheme.shadowSmall,
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // List of items in checkout
+          ...cart.items.map((item) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppTheme.md),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          "${item.product.name} (x${item.quantity})",
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        "₹${item.subtotal.toStringAsFixed(2)}",
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (item.scheduledFor != null && item.scheduledFor!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppTheme.md,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warningOrange.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        border: Border.all(
+                          color: AppTheme.warningOrange.withOpacity(0.18),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.calendar,
+                            size: 11,
+                            color: AppTheme.warningOrange,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            item.scheduledFor!,
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              color: AppTheme.warningOrange,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: AppTheme.sm),
+                  Divider(color: AppTheme.veryLightGray),
+                ],
+              ),
+            );
+          }).toList(),
+          const SizedBox(height: AppTheme.sm),
           _buildSummaryRow('Subtotal', '₹${itemTotal.toStringAsFixed(2)}'),
           const SizedBox(height: AppTheme.md),
           _buildSummaryRow('Delivery Fee', '₹${deliveryFee.toStringAsFixed(2)}'),
@@ -298,6 +378,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
         ),
         child: GestureDetector(
           onTap: () {
+            // Place order inside dynamic state history
+            context.read<CartProvider>().placeOrder();
+
             showDialog(
               context: context,
               barrierDismissible: false,

@@ -135,6 +135,108 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                 ),
               ),
             ),
+            const SizedBox(height: AppTheme.xxl),
+            FadeInUp(
+              delay: const Duration(milliseconds: 360),
+              child: Text(
+                'ORDER ITEMS',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  letterSpacing: 1.5,
+                  color: AppTheme.textTertiary,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppTheme.md),
+            FadeInUp(
+              delay: const Duration(milliseconds: 400),
+              child: Container(
+                padding: const EdgeInsets.all(AppTheme.lg),
+                decoration: BoxDecoration(
+                  color: AppTheme.white,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+                  border: Border.all(color: AppTheme.veryLightGray),
+                  boxShadow: AppTheme.shadowSmall,
+                ),
+                child: Column(
+                  children: cart.items.map((item) {
+                    final isLast = cart.items.last == item;
+                    return Padding(
+                      padding: EdgeInsets.only(bottom: isLast ? 0 : AppTheme.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  "${item.product.name} (x${item.quantity})",
+                                  style: const TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                "₹${item.subtotal.toStringAsFixed(2)}",
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (item.scheduledFor != null && item.scheduledFor!.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppTheme.md,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.warningOrange.withOpacity(0.08),
+                                borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                                border: Border.all(
+                                  color: AppTheme.warningOrange.withOpacity(0.18),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    LucideIcons.calendar,
+                                    size: 11,
+                                    color: AppTheme.warningOrange,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    item.scheduledFor!,
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      color: AppTheme.warningOrange,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (!isLast) ...[
+                            const SizedBox(height: AppTheme.sm),
+                            Divider(color: AppTheme.veryLightGray),
+                          ],
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
             const SizedBox(height: 120),
           ],
         ),
@@ -372,6 +474,9 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
             // CTA button
             GestureDetector(
               onTap: () {
+                // Place the order dynamically in provider
+                context.read<CartProvider>().placeOrder();
+
                 showDialog(
                   context: context,
                   barrierDismissible: false,
