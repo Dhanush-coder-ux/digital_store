@@ -48,6 +48,9 @@ dependencies:
   # Local Storage
   shared_preferences: ^2.2.2
   
+  # HTTP Client
+  http: ^1.2.0
+
   # Form Validation & Utils
   intl: ^0.19.0
   connectivity_plus: ^5.0.2
@@ -113,3 +116,5 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+dependency_overrides:
+  objective_c: ^9.4.1

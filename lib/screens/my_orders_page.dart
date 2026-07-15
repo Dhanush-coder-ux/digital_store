@@ -5,14 +5,28 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import 'live_tracking_page.dart';
 import '../models/providers.dart';
+import '../models/api_cart_provider.dart';
 
-class MyOrdersPage extends StatelessWidget {
+class MyOrdersPage extends StatefulWidget {
   const MyOrdersPage({super.key});
+
+  @override
+  State<MyOrdersPage> createState() => _MyOrdersPageState();
+}
+
+class _MyOrdersPageState extends State<MyOrdersPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ApiCartProvider>().refreshOrders();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 6,
       child: Scaffold(
         backgroundColor: AppTheme.bgPrimary,
         appBar: AppBar(
@@ -64,12 +78,15 @@ class MyOrdersPage extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                   fontSize: 12,
                 ),
-                labelPadding: EdgeInsets.zero,
+                labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                isScrollable: true,
                 tabs: const [
-                  Tab(text: 'All'),
-                  Tab(text: 'Active'),
-                  Tab(text: 'Done'),
-                  Tab(text: 'Cancelled'),
+                  Tab(text: 'Pending'),
+                  Tab(text: 'Processing'),
+                  Tab(text: 'Completed'),
+                  Tab(text: 'Canceled'),
+                  Tab(text: 'Refunded'),
+                  Tab(text: 'Exchanged'),
                 ],
               ),
             ),
@@ -77,10 +94,12 @@ class MyOrdersPage extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
-            _buildOrderList(context),
-            _buildOrderList(context, filter: 'ONGOING'),
-            _buildOrderList(context, filter: 'DELIVERED'),
-            _buildOrderList(context, filter: 'CANCELLED'),
+            _buildOrderList(context, filter: 'PENDING'),
+            _buildOrderList(context, filter: 'PROCESSING'),
+            _buildOrderList(context, filter: 'COMPLETED'),
+            _buildOrderList(context, filter: 'CANCELED'),
+            _buildOrderList(context, filter: 'REFUNDED'),
+            _buildOrderList(context, filter: 'EXCHANGED'),
           ],
         ),
       ),
@@ -88,16 +107,16 @@ class MyOrdersPage extends StatelessWidget {
   }
 
   Widget _buildOrderList(BuildContext context, {String? filter}) {
-    final cartProvider = context.watch<CartProvider>();
-    final dynamicOrders = cartProvider.orders.map((o) {
+    final cartProvider = context.watch<ApiCartProvider>();
+    final dynamicOrders = cartProvider.myOrders.map((o) {
       return {
         "id": o.id,
-        "date": o.date,
+        "date": o.createdAt != null ? o.createdAt!.split('T').first : "Today",
         "status": o.status,
-        "images": o.items.map((i) => i.product.image ?? "").toList(),
-        "title": o.items.first.product.name,
+        "images": o.items.isNotEmpty ? ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=100"] : [],
+        "title": o.items.isNotEmpty ? (o.items.first.productName ?? "Unknown Product") : "Unknown",
         "subtitle": o.items.length > 1 ? "and ${o.items.length - 1} more items" : null,
-        "total": o.total.toStringAsFixed(2),
+        "total": o.totalAmount.toStringAsFixed(2),
         "actionText": "Track Order",
         "isPrimary": true,
         "items": o.items,
@@ -327,8 +346,8 @@ class MyOrdersPage extends StatelessWidget {
           ),
           // Scheduled Delivery Badge if any item has it
           if (order['items'] != null) ...[
-            for (var item in (order['items'] as List<CartItem>))
-              if (item.scheduledFor != null && item.scheduledFor!.isNotEmpty) ...[
+            for (var item in (order['items'] as List<dynamic>))
+              if (item is CartItem && item.scheduledFor != null && item.scheduledFor!.isNotEmpty) ...[
                 const SizedBox(height: AppTheme.md),
                 Container(
                   padding: const EdgeInsets.symmetric(

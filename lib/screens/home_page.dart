@@ -8,12 +8,17 @@ import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 import 'product_detail_page.dart';
 import 'shop_details_page.dart';
+import 'api_shop_details_page.dart';
 import 'notifications_page.dart';
 import 'see_all_page.dart';
+import 'package:shimmer/shimmer.dart';
 
 import 'package:provider/provider.dart';
 import '../models/providers.dart';
+import '../models/shop_provider.dart';
+import '../models/shop_model.dart';
 import 'saved_addresses_page.dart';
+import 'main_screen.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,6 +28,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ShopProvider>().fetchAllShops();
+    });
+  }
   final CarouselSliderController _carouselController = CarouselSliderController();
   int _currentCarouselIndex = 0;
   int _selectedCategory = 0;
@@ -423,35 +435,7 @@ class _HomePageState extends State<HomePage> {
             ),
             GestureDetector(
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SeeAllPage(
-                      title: 'All Categories',
-                      isGrid: true,
-                      crossAxisCount: 2,
-                      childAspectRatio: 2.5,
-                      items: _categories.map((c) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            color: AppTheme.white,
-                            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                            border: Border.all(color: AppTheme.veryLightGray),
-                            boxShadow: AppTheme.shadowSmall,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(c['icon'] as IconData, size: 16, color: AppTheme.primaryBlue),
-                              const SizedBox(width: AppTheme.sm),
-                              Text(c['label'] as String, style: const TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w600)),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                );
+                MainScreen.pageIndexNotifier.value = 1;
               },
               child: Text(
                 'See all',
@@ -1660,88 +1644,98 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-        GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => SeeAllPage(
-                  title: 'Nearby Stores',
-                  isGrid: false,
-                  items: _stores.map((s) => StoreCard(
-                    name: s['name'] as String,
-                    imageUrl: s['image'] as String,
-                    rating: s['rating'].toString(),
-                    reviews: '${s['reviews']}+',
-                    time: s['time'] as String,
-                    distance: '${s['distance']}km',
-                    categories: (s['categories'] as List<String>).take(2).toList(),
-                    isOpen: s['isOpen'] as bool,
-                    isVerified: s['isVerified'] as bool,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ShopDetailsPage(
-                            store: s,
-                            heroTag: 'home-seeall-store-${s["id"]}',
-                          ),
-                        ),
-                      );
-                    },
-                  )).toList(),
-                ),
-              ),
-            );
-          },
-          child: Text(
-            'View all',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppTheme.primaryBlue,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
       ],
     );
   }
 
   Widget _buildStoresList() {
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _stores.length,
-      itemBuilder: (context, index) {
-        final store = _stores[index];
-        return FadeInUp(
-          delay: Duration(milliseconds: 80 * index),
-          child: StoreCard(
-            name: store['name'] as String,
-            imageUrl: store['image'] as String,
-            rating: (store['rating'] as double).toString(),
-            reviews: store['reviews'].toString(),
-            time: store['time'] as String,
-            distance: '${store["distance"]}km',
-            categories: store['categories'] as List<String>,
-            isOpen: store['isOpen'] as bool,
-            isVerified: store['isVerified'] as bool,
-            heroTag: 'home-store-${store["id"]}',
-            onTap: () {
-              Navigator.push(
-                context,
-                PageRouteBuilder(
-                  pageBuilder: (_, animation, __) => ShopDetailsPage(
-                    store: store,
-                    heroTag: 'home-store-${store["id"]}',
+    return Consumer<ShopProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading && provider.shops.isEmpty) {
+          // Shimmer loading state
+          return Shimmer.fromColors(
+            baseColor: Colors.grey[200]!,
+            highlightColor: Colors.grey[100]!,
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: 3,
+              itemBuilder: (_, __) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Container(
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  transitionsBuilder: (_, animation, __, child) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  transitionDuration: AppDurations.normal,
                 ),
-              );
-            },
-          ),
+              ),
+            ),
+          );
+        }
+
+        if (provider.error != null && provider.shops.isEmpty) {
+          return Center(
+            child: Column(
+              children: [
+                Text(provider.error!, style: const TextStyle(color: Colors.red)),
+                TextButton(
+                  onPressed: () => provider.fetchAllShops(),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        final shops = provider.shops;
+        if (shops.isEmpty) {
+          return const Center(child: Text('No stores found nearby.'));
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: shops.length,
+          itemBuilder: (context, index) {
+            final shop = shops[index];
+            // Provide reasonable defaults or calculate them for the UI mock parts
+            final rating = '4.5';
+            final categories = shop.categories.isNotEmpty ? shop.categories : ['General'];
+            final imageUrl = (shop.bannerUrl != null && shop.bannerUrl!.isNotEmpty) 
+                             ? shop.bannerUrl! 
+                             : 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop';
+            
+            return FadeInUp(
+              delay: Duration(milliseconds: 80 * (index % 5)),
+              child: StoreCard(
+                name: shop.name,
+                imageUrl: imageUrl,
+                rating: rating,
+                reviews: '100+',
+                time: '15-25 min',
+                distance: '1.2km', // Mock for now
+                categories: categories,
+                isOpen: true,
+                isVerified: true,
+                heroTag: 'home-store-${shop.id}',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    PageRouteBuilder(
+                      pageBuilder: (_, animation, __) => ApiShopDetailsPage(
+                        shop: shop,
+                      ),
+                      transitionsBuilder: (_, animation, __, child) {
+                        return FadeTransition(opacity: animation, child: child);
+                      },
+                      transitionDuration: AppDurations.normal,
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         );
       },
     );

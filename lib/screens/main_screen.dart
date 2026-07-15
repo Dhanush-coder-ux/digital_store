@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../widgets/custom_bottom_bar.dart';
 import '../theme/app_theme.dart';
 import 'package:provider/provider.dart';
 import '../models/providers.dart';
+import '../models/api_cart_provider.dart';
+import '../models/shop_provider.dart';
 import 'home_page.dart';
+import 'api_checkout_page.dart';
+import 'categories_page.dart';
 import 'stores_page.dart';
-import 'cart_page.dart';
 import 'profile_page.dart';
 
 class MainScreen extends StatefulWidget {
@@ -23,8 +27,8 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const HomePage(),
+    const CategoriesPage(),
     const StoresPage(),
-    const CartPage(),
     const ProfilePage(),
   ];
 
@@ -53,9 +57,14 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bgPrimary,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentIndex,
+            children: _screens,
+          ),
+          _buildFloatingCartBar(context),
+        ],
       ),
       bottomNavigationBar: CustomBottomBar(
         currentIndex: _currentIndex,
@@ -63,6 +72,131 @@ class _MainScreenState extends State<MainScreen> {
           MainScreen.pageIndexNotifier.value = index;
         },
       ),
+    );
+  }
+
+  Widget _buildFloatingCartBar(BuildContext context) {
+    return Consumer<ApiCartProvider>(
+      builder: (context, cart, child) {
+        if (cart.isEmpty) return const SizedBox.shrink();
+
+        String? imageUrl;
+        if (cart.items.isNotEmpty) {
+          imageUrl = cart.items.first.productImage;
+        } else if (cart.localItems.isNotEmpty) {
+          final p = cart.localItems.first.product;
+          imageUrl = p.imageUrls.isNotEmpty ? p.imageUrls.first : null;
+        }
+        
+        final totalQty = cart.itemCount;
+        final totalAmount = cart.subtotal;
+
+        return Positioned(
+          left: 16,
+          right: 16,
+          bottom: 16,
+          child: FadeInUp(
+            duration: const Duration(milliseconds: 300),
+            child: GestureDetector(
+              onTap: () {
+                final shopId = cart.shopId;
+                if (shopId != null) {
+                  final shopProvider = context.read<ShopProvider>();
+                  final shop = shopProvider.shops.where((s) => s.id == shopId).firstOrNull;
+                  if (shop != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => ApiCheckoutPage(shop: shop)),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not find shop details for checkout.')),
+                    );
+                  }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cart is missing shop information.')),
+                  );
+                }
+              },
+              child: Container(
+                height: 60,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primaryBlue.withOpacity(0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppTheme.white,
+                        image: imageUrl != null && imageUrl.isNotEmpty
+                            ? DecorationImage(
+                                image: NetworkImage(imageUrl),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: imageUrl == null || imageUrl.isEmpty
+                          ? const Icon(LucideIcons.shoppingBag, color: AppTheme.primaryBlue, size: 20)
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            '$totalQty Item${totalQty > 1 ? 's' : ''}',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              color: AppTheme.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            '₹${totalAmount.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              color: AppTheme.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w500,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Text(
+                      'View Cart',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        color: AppTheme.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(LucideIcons.chevronRight, color: AppTheme.white, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

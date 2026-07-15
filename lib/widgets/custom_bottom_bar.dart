@@ -43,8 +43,8 @@ class CustomBottomBar extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _NavItem(index: 0, icon: LucideIcons.home, label: "Home", currentIndex: currentIndex, onTap: onTap),
-              _NavItem(index: 1, icon: LucideIcons.store, label: "Stores", currentIndex: currentIndex, onTap: onTap),
-              _NavItemBadge(index: 2, icon: LucideIcons.shoppingCart, label: "Cart", currentIndex: currentIndex, onTap: onTap),
+              _NavItem(index: 1, icon: LucideIcons.layoutGrid, label: "Categories", currentIndex: currentIndex, onTap: onTap),
+              _NavItem(index: 2, icon: LucideIcons.store, label: "Stores", currentIndex: currentIndex, onTap: onTap),
               _NavItem(index: 3, icon: LucideIcons.user, label: "Profile", currentIndex: currentIndex, onTap: onTap),
             ],
           ),
