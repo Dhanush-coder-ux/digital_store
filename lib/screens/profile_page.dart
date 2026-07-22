@@ -11,6 +11,10 @@ import '../theme/app_theme.dart';
 import 'favorites_page.dart';
 import 'my_orders_page.dart';
 import 'saved_addresses_page.dart';
+import 'package:provider/provider.dart';
+import '../models/profile_provider.dart';
+import '../models/favorites_api_provider.dart';
+import '../core/auth/auth_provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -32,6 +36,21 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     _loadProfileImage();
+    // Ensure profile is fetched when page is opened
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = context.read<AuthProvider>();
+      final profileProvider = context.read<ProfileProvider>();
+      final userId = authProvider.userId;
+      if (userId != null && !profileProvider.hasFetched) {
+        profileProvider.fetchProfile(userId).then((_) {
+          // Auto-create profile if it doesn't exist yet
+          if (profileProvider.profile == null && profileProvider.error == null) {
+            final displayName = authProvider.email?.split('@').first ?? 'User';
+            profileProvider.createProfile(userId, displayName);
+          }
+        });
+      }
+    });
   }
 
   Future<void> _loadProfileImage() async {
@@ -109,16 +128,27 @@ class _ProfilePageState extends State<ProfilePage> {
     return const NetworkImage(_defaultAvatarUrl);
   }
 
+  Future<void> _onRefresh() async {
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.userId;
+    if (userId != null) {
+      await context.read<ProfileProvider>().fetchProfile(userId, force: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bgPrimary,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          _buildSliverHeader(context),
-          SliverToBoxAdapter(
-            child: Column(
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        color: AppTheme.primaryBlue,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          slivers: [
+            _buildSliverHeader(context),
+            SliverToBoxAdapter(
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: AppTheme.xl),
@@ -141,7 +171,8 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -298,64 +329,71 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                             const SizedBox(width: AppTheme.lg),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Deepak Roshan',
-                                    style: TextStyle(
-                                      fontFamily: 'Outfit',
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppTheme.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    '+91 88380 7xxxx',
-                                    style: TextStyle(
-                                      fontFamily: 'Outfit',
-                                      fontSize: 13,
-                                      color: AppTheme.white.withOpacity(0.7),
-                                    ),
-                                  ),
-                                  const SizedBox(height: AppTheme.sm),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: AppTheme.sm,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(
-                                        AppTheme.radiusSm,
-                                      ),
-                                      border: Border.all(
-                                        color: AppTheme.white.withOpacity(0.3),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Icon(
-                                          LucideIcons.diamond,
-                                          color: AppTheme.paleCyan,
-                                          size: 11,
+                              child: Consumer<ProfileProvider>(
+                                builder: (context, profile, child) {
+                                   return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        profile.userName.isNotEmpty 
+                                            ? profile.userName 
+                                            : (context.watch<AuthProvider>().email?.split('@').first ?? 'Guest'),
+                                        style: const TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppTheme.white,
                                         ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'Gold Member',
-                                          style: TextStyle(
-                                            fontFamily: 'Outfit',
-                                            color: AppTheme.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        context.watch<AuthProvider>().email ?? context.watch<AuthProvider>().mobile ?? '',
+                                        style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 13,
+                                          color: AppTheme.white.withOpacity(0.7),
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: AppTheme.sm),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: AppTheme.sm,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.white.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(
+                                            AppTheme.radiusSm,
+                                          ),
+                                          border: Border.all(
+                                            color: AppTheme.white.withOpacity(0.3),
                                           ),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: const [
+                                            Icon(
+                                              LucideIcons.diamond,
+                                              color: AppTheme.paleCyan,
+                                              size: 11,
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Member',
+                                              style: TextStyle(
+                                                fontFamily: 'Outfit',
+                                                color: AppTheme.white,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -593,7 +631,15 @@ class _ProfilePageState extends State<ProfilePage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
       child: GestureDetector(
-        onTap: () {},
+        onTap: () async {
+          // Reset user-specific providers before logging out
+          context.read<ProfileProvider>().reset();
+          context.read<FavoritesApiProvider>().reset();
+          await context.read<AuthProvider>().logout();
+          if (context.mounted) {
+            Navigator.of(context).pushReplacementNamed('/login');
+          }
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: AppTheme.lg),
           decoration: BoxDecoration(

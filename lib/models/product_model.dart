@@ -19,6 +19,7 @@ class ApiProduct {
   final List<Map<String, dynamic>> variants;
   final List<Map<String, dynamic>> batches;
   final bool isActive;
+  final bool visibleOnline;
   final String? barcode;
   final String? sku;
   final Map<String, dynamic>? customFields;
@@ -40,6 +41,7 @@ class ApiProduct {
     this.variants = const [],
     this.batches = const [],
     this.isActive = true,
+    this.visibleOnline = false,
     this.barcode,
     this.sku,
     this.customFields,
@@ -174,6 +176,7 @@ class ApiProduct {
       variants: parsedVariants,
       batches: parsedBatches,
       isActive: productData['is_active'] != false,
+      visibleOnline: productData['visible_online'] == true,
       barcode: productData['barcode']?.toString(),
       sku: productData['sku']?.toString(),
       customFields: productData['custom_fields'] is Map
@@ -228,6 +231,7 @@ class ApiProduct {
         'image_url': imageUrls,
         'type_infos': typeInfos,
         'is_active': isActive,
+        'visible_online': visibleOnline,
         'barcode': barcode,
         'sku': sku,
       };

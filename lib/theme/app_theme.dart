@@ -8,24 +8,24 @@ class AppTheme {
   // COLORS - Modern Blue-Muted Gradient Palette
   // ═══════════════════════════════════════════════════════════════════
 
-  // Primary Colors
-  static const Color deepBlue = Color(0xFF0F172A); // Slate 900
-  static const Color primaryBlue = Color(0xFF2563EB); // Vibrant Royal Blue (Top)
-  static const Color softRoyalBlue = Color(0xFF1D4ED8); // Deep Vibrant Blue (Bottom)
-  static const Color lightBlue = Color(0xFF4A7BA7); // Light blue
-  static const Color skyBlue = Color(0xFF5E9BC3); // Sky blue
+  // Primary Colors (Renamed to yellow values but keeping var names for safety)
+  static const Color deepBlue = Color(0xFF2A1708); // Espresso
+  static const Color primaryBlue = Color(0xFFE0922F); // Caramel Yellow
+  static const Color softRoyalBlue = Color(0xFFD4842B); // Deep Yellow
+  static const Color lightBlue = Color(0xFFFFD88C); // Light Yellow
+  static const Color skyBlue = Color(0xFFFFE8B0); // Sky Yellow
   
-  // Accent Colors (Muted Cyan)
-  static const Color mutedCyan = Color(0xFF4DB8A8); // Muted cyan
-  static const Color softCyan = Color(0xFF5ED3C3); // Soft cyan
-  static const Color paleCyan = Color(0xFF8FE4D9); // Pale cyan
+  // Accent Colors (Renamed to brown values but keeping var names for safety)
+  static const Color mutedCyan = Color(0xFF5C3A21); // Medium brown
+  static const Color softCyan = Color(0xFF7B4F2D); // Soft brown
+  static const Color paleCyan = Color(0xFFA06A3E); // Pale brown
   
-  // Neutral Colors (Muted Grays)
-  static const Color darkGray = Color(0xFF1A1D24); // Dark gray
-  static const Color mediumGray = Color(0xFF4A4E57); // Medium gray
-  static const Color lightGray = Color(0xFF8B8F99); // Light gray
-  static const Color veryLightGray = Color(0xFFF0F3F7); // Very light gray
-  static const Color ultraLightGray = Color(0xFFF9FAFB); // Ultra light gray
+  // Neutral Colors (Muted Grays -> Browns)
+  static const Color darkGray = Color(0xFF2A1708); // Espresso
+  static const Color mediumGray = Color(0xFF5C3A21); // Medium brown
+  static const Color lightGray = Color(0xFF8C6549); // Light brown
+  static const Color veryLightGray = Color(0xFFF4EBE1); // Warm very light gray
+  static const Color ultraLightGray = Color(0xFFFFFBF4); // Cream
   static const Color white = Color(0xFFFFFFFF); // White
   
   // Status Colors
@@ -35,19 +35,19 @@ class AppTheme {
   static const Color infoBlue = Color(0xFF3B82F6); // Info
   
   // Semantic Colors
-  static const Color textPrimary = Color(0xFF1A1D24); // Dark gray
-  static const Color textSecondary = Color(0xFF6B7280); // Medium gray
-  static const Color textTertiary = Color(0xFF9CA3AF); // Light gray
+  static const Color textPrimary = Color(0xFF2A1708); // Espresso
+  static const Color textSecondary = Color(0xFF5C3A21); // Medium brown
+  static const Color textTertiary = Color(0xFF8C6549); // Light brown
   static const Color textInverse = Color(0xFFFFFFFF); // White
   
   // Background Colors
-  static const Color bgPrimary = Color(0xFFF9FAFB); // Ultra light
-  static const Color bgSecondary = Color(0xFFF0F3F7); // Very light
-  static const Color bgTertiary = Color(0xFFE5ECF3); // Light blue tinted
+  static const Color bgPrimary = Color(0xFFFFFBF4); // Cream
+  static const Color bgSecondary = Color(0xFFF4EBE1); // Warm very light gray
+  static const Color bgTertiary = Color(0xFFEADCCB); // Warm tinted
   
   // Glass Colors (Glassmorphism)
   static const Color glassLight = Color(0xFFFFFFFF); // White with opacity
-  static const Color glassDark = Color(0xFF1A3A52); // Blue with opacity
+  static const Color glassDark = Color(0xFF2A1708); // Espresso with opacity
   
   // Gradients
   static LinearGradient get primaryGradient => LinearGradient(

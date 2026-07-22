@@ -5,14 +5,18 @@
 
 import 'package:flutter/foundation.dart';
 import '../services/shop_service.dart';
-import '../services/auth_service.dart';
 import '../models/shop_model.dart';
+import '../core/network/api_exceptions.dart';
 
 class ShopProvider extends ChangeNotifier {
+  final ShopService _service;
+
   List<Shop> _shops = [];
   bool _isLoading = false;
   String? _error;
   bool _hasFetched = false;
+
+  ShopProvider(this._service);
 
   List<Shop> get shops => _shops;
   bool get isLoading => _isLoading;
@@ -31,14 +35,9 @@ class ShopProvider extends ChangeNotifier {
 
     try {
       print('ShopProvider: Fetching all shops...');
-      const service = ShopService();
-      _shops = await service.fetchAllShops();
+      _shops = await _service.fetchAllShops();
       print('ShopProvider: Successfully fetched ${_shops.length} shops');
       _hasFetched = true;
-    } on AuthException catch (e) {
-      print('ShopProvider: AuthException - ${e.message}');
-      _error = e.message;
-      _shops = [];
     } on ApiException catch (e) {
       print('ShopProvider: ApiException - ${e.message}');
       _error = e.message;

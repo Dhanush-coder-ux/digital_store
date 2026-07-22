@@ -163,6 +163,15 @@ class CreateOrderPayload {
   final Map<String, dynamic> chargesInfos;
   final Map<String, dynamic> paymentInfos;
   final Map<String, dynamic>? additionalInfos;
+  
+  final String? userId;
+  final String? name;
+  final String? phone;
+  final String? addressId;
+  final String? fullAddress;
+  final String? city;
+  final String? pincode;
+  final String? state;
 
   const CreateOrderPayload({
     required this.shopId,
@@ -174,6 +183,14 @@ class CreateOrderPayload {
     this.chargesInfos = const {},
     this.paymentInfos = const {},
     this.additionalInfos,
+    this.userId,
+    this.name,
+    this.phone,
+    this.addressId,
+    this.fullAddress,
+    this.city,
+    this.pincode,
+    this.state,
   });
 
   Map<String, dynamic> toJson() => {
@@ -186,5 +203,13 @@ class CreateOrderPayload {
         'payment_infos': paymentInfos,
         if (customerId != null) 'customer_id': customerId,
         if (additionalInfos != null) 'additional_infos': additionalInfos,
+        if (userId != null) 'user_id': userId,
+        if (name != null) 'name': name,
+        if (phone != null) 'phone': phone,
+        if (addressId != null) 'address_id': addressId,
+        if (fullAddress != null) 'full_address': fullAddress,
+        if (city != null) 'city': city,
+        if (pincode != null) 'pincode': pincode,
+        if (state != null) 'state': state,
       };
 }

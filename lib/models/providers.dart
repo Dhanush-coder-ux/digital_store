@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:shared_preferences/shared_preferences.dart';/// Product model
+import 'package:shared_preferences/shared_preferences.dart';
+import '../core/models/address_model.dart';
+
+/// Product model
 class Product {
   final String id;
   final String name;
@@ -537,7 +540,7 @@ class LocationProvider with ChangeNotifier {
     await prefs.setString('saved_addresses', encoded);
   }
 
-  Future<void> requestLocationAndGeocode() async {
+  Future<AddressModel?> requestLocationAndGeocode() async {
     _isLoading = true;
     notifyListeners();
 
@@ -567,6 +570,14 @@ class LocationProvider with ChangeNotifier {
           if (_currentAddressName.length > 25) {
             _currentAddressName = _currentAddressName.substring(0, 25) + '...';
           }
+
+          return AddressModel(
+            phone: '',
+            fullAddress: _fullAddressName,
+            city: place.locality ?? '',
+            pincode: place.postalCode ?? '',
+            state: place.administrativeArea ?? '',
+          );
         } else {
           _currentAddressName = 'Location found';
           _fullAddressName = 'Location found';
@@ -582,6 +593,7 @@ class LocationProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+    return null;
   }
 
   void selectAddress(SavedAddress address) {
@@ -590,6 +602,15 @@ class LocationProvider with ChangeNotifier {
     String shortAddr = address.address.split(',').first;
     if (shortAddr.length > 15) shortAddr = shortAddr.substring(0, 15) + '...';
     _currentAddressName = '${address.title} • $shortAddr';
+    notifyListeners();
+  }
+
+  void selectAddressModel(AddressModel address) {
+    _fullAddressName = address.fullAddress;
+    String shortAddr = address.city.isNotEmpty ? address.city : address.fullAddress.split(',').first;
+    if (shortAddr.length > 15) shortAddr = shortAddr.substring(0, 15) + '...';
+    String title = address.isDefault ? 'Default' : 'Saved';
+    _currentAddressName = '$title • $shortAddr';
     notifyListeners();
   }
 

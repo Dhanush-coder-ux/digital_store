@@ -6,6 +6,8 @@ import '../theme/app_theme.dart';
 import 'live_tracking_page.dart';
 import '../models/providers.dart';
 import '../models/api_cart_provider.dart';
+import '../models/user_order_provider.dart';
+import '../core/auth/auth_provider.dart';
 
 class MyOrdersPage extends StatefulWidget {
   const MyOrdersPage({super.key});
@@ -19,8 +21,22 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ApiCartProvider>().refreshOrders();
+      final auth = context.read<AuthProvider>();
+      if (auth.userId != null) {
+        context.read<UserOrderProvider>().fetchUserOrders(auth.userId!, limit: 50);
+      } else {
+        context.read<ApiCartProvider>().refreshOrders();
+      }
     });
+  }
+
+  Future<void> _onRefresh() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.userId != null) {
+      await context.read<UserOrderProvider>().fetchUserOrders(auth.userId!, limit: 50, force: true);
+    } else {
+      await context.read<ApiCartProvider>().refreshOrders();
+    }
   }
 
   @override
@@ -107,8 +123,19 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   }
 
   Widget _buildOrderList(BuildContext context, {String? filter}) {
+    final auth = context.watch<AuthProvider>();
     final cartProvider = context.watch<ApiCartProvider>();
-    final dynamicOrders = cartProvider.myOrders.map((o) {
+    final userOrderProvider = context.watch<UserOrderProvider>();
+    
+    final sourceOrders = auth.userId != null 
+        ? userOrderProvider.orders 
+        : cartProvider.myOrders;
+
+    if (auth.userId != null && userOrderProvider.isLoading && sourceOrders.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final dynamicOrders = sourceOrders.map((o) {
       return {
         "id": o.id,
         "date": o.createdAt != null ? o.createdAt!.split('T').first : "Today",
@@ -123,65 +150,38 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       };
     }).toList();
 
-    List<Map<String, dynamic>> orders = [
-      ...dynamicOrders,
-      {
-        "id": "ORD-9921",
-        "date": "14 Oct 2023",
-        "status": "ONGOING",
-        "images": [
-          "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=100",
-          "https://images.unsplash.com/photo-1523275335684-37898b6baf30?q=80&w=100",
-        ],
-        "moreItems": "+1",
-        "title": "Premium Wireless ANC Headphones",
-        "total": "342.00",
-        "actionText": "Track Order",
-        "isPrimary": true,
-      },
-      {
-        "id": "ORD-7721",
-        "date": "08 Oct 2023",
-        "status": "DELIVERED",
-        "images": [
-          "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=100",
-        ],
-        "title": "Nike Air Zoom Pegasus 38",
-        "subtitle": "Crimson Red • Size 42",
-        "total": "120.50",
-        "actionText": "Buy Again",
-        "isPrimary": false,
-      },
-      {
-        "id": "ORD-6540",
-        "date": "22 Sep 2023",
-        "status": "CANCELLED",
-        "images": [
-          "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?q=80&w=100",
-        ],
-        "title": "MacBook Pro M2 - 512GB Space Grey",
-        "total": "1,299.00",
-        "isRefunded": true,
-        "actionText": "View Receipt",
-        "isText": true,
-      },
-    ];
+    List<Map<String, dynamic>> orders = [...dynamicOrders];
 
     if (filter != null) {
       orders = orders.where((o) => o['status'] == filter).toList();
     }
 
     if (orders.isEmpty) {
-      return _buildEmptyState(context);
+      return RefreshIndicator(
+        onRefresh: _onRefresh,
+        color: AppTheme.primaryBlue,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.6,
+            alignment: Alignment.center,
+            child: _buildEmptyState(context),
+          ),
+        ),
+      );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(AppTheme.xl),
-      physics: const BouncingScrollPhysics(),
-      itemCount: orders.length,
-      itemBuilder: (context, index) => FadeInUp(
-        delay: Duration(milliseconds: 80 * index),
-        child: _buildOrderCard(context, orders[index]),
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      color: AppTheme.primaryBlue,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(AppTheme.xl),
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        itemCount: orders.length,
+        itemBuilder: (context, index) => FadeInUp(
+          delay: Duration(milliseconds: 80 * index),
+          child: _buildOrderCard(context, orders[index]),
+        ),
       ),
     );
   }

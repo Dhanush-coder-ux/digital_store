@@ -4,6 +4,7 @@
 // and the add-to-cart flow with quantity selector.
 //
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -12,6 +13,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import '../models/product_model.dart';
 import '../models/shop_model.dart';
 import '../models/api_cart_provider.dart';
+import '../models/favorites_api_provider.dart';
+import '../core/auth/auth_provider.dart';
 import '../theme/app_theme.dart';
 import 'api_checkout_page.dart';
 
@@ -34,6 +37,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
   int _qty = 1;
   String? _selectedVariantId;
   String? _selectedBatchId;
+  Timer? _imageTimer;
 
   @override
   void initState() {
@@ -45,6 +49,23 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
     if (widget.product.batches.isNotEmpty) {
       _selectedBatchId = widget.product.batches.first['id']?.toString();
     }
+    
+    // Auto carousel timer
+    if (widget.product.imageUrls.length > 1) {
+      _imageTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+        if (mounted) {
+          setState(() {
+            _selectedImageIndex = (_selectedImageIndex + 1) % widget.product.imageUrls.length;
+          });
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _imageTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -104,17 +125,73 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
           child: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary, size: 20),
         ),
       ),
+      actions: [
+        Consumer2<FavoritesApiProvider, AuthProvider>(
+          builder: (context, favorites, auth, child) {
+            final isFav = favorites.isProductFavorited(widget.product.id);
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: IconButton(
+                icon: Icon(
+                  isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  color: isFav ? AppTheme.errorRed : AppTheme.textPrimary,
+                  size: 20,
+                ),
+                onPressed: () {
+                  if (auth.userId != null) {
+                    favorites.toggleProductFavorite(auth.userId!, widget.product.id);
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please log in to save favourites'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+            );
+          },
+        ),
+        const SizedBox(width: 8),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: images.isNotEmpty
-            ? PageView.builder(
-                itemCount: images.length,
-                onPageChanged: (i) => setState(() => _selectedImageIndex = i),
-                itemBuilder: (_, i) => CachedNetworkImage(
-                  imageUrl: images[i],
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) =>
-                      Container(color: AppTheme.bgSecondary),
-                  errorWidget: (_, __, ___) => _buildImageFallback(),
+            ? GestureDetector(
+                onHorizontalDragEnd: (details) {
+                  if (details.primaryVelocity! > 0) { // swipe right
+                    setState(() {
+                      _selectedImageIndex = (_selectedImageIndex - 1) % images.length;
+                      if (_selectedImageIndex < 0) _selectedImageIndex += images.length;
+                    });
+                  } else if (details.primaryVelocity! < 0) { // swipe left
+                    setState(() {
+                      _selectedImageIndex = (_selectedImageIndex + 1) % images.length;
+                    });
+                  }
+                },
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 800),
+                  transitionBuilder: (Widget child, Animation<double> animation) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                  child: CachedNetworkImage(
+                    key: ValueKey<int>(_selectedImageIndex),
+                    imageUrl: images[_selectedImageIndex],
+                    fit: BoxFit.cover,
+                    placeholder: (_, __) => Container(color: AppTheme.bgSecondary),
+                    errorWidget: (_, __, ___) => _buildImageFallback(),
+                  ),
                 ),
               )
             : _buildImageFallback(),

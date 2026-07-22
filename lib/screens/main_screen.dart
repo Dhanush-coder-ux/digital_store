@@ -7,10 +7,14 @@ import 'package:provider/provider.dart';
 import '../models/providers.dart';
 import '../models/api_cart_provider.dart';
 import '../models/shop_provider.dart';
+import '../models/profile_provider.dart';
+import '../models/favorites_api_provider.dart';
+import '../core/auth/auth_provider.dart';
 import 'home_page.dart';
 import 'api_checkout_page.dart';
 import 'categories_page.dart';
 import 'stores_page.dart';
+import 'search_page.dart';
 import 'profile_page.dart';
 
 class MainScreen extends StatefulWidget {
@@ -36,8 +40,33 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     MainScreen.pageIndexNotifier.addListener(_onPageIndexChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<LocationProvider>().requestLocationAndGeocode();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final authProvider = context.read<AuthProvider>();
+      final userId = authProvider.userId;
+
+      if (userId != null) {
+        // Fetch profile first so we can check existing addresses
+        await context.read<ProfileProvider>().fetchProfile(userId);
+        context.read<FavoritesApiProvider>().fetchFavorites(userId);
+      }
+
+      final locationAddress = await context.read<LocationProvider>().requestLocationAndGeocode();
+      
+      if (locationAddress != null && userId != null) {
+        final profile = context.read<ProfileProvider>();
+        final existing = profile.addresses.any((a) => 
+          a.fullAddress == locationAddress.fullAddress || 
+          (a.city.isNotEmpty && a.city == locationAddress.city && a.pincode == locationAddress.pincode)
+        );
+        
+        if (!existing) {
+          final newAddress = locationAddress.copyWith(
+            addressId: DateTime.now().millisecondsSinceEpoch.toString(),
+            isDefault: profile.addresses.isEmpty,
+          );
+          await profile.addAddress(userId, newAddress);
+        }
+      }
     });
   }
 

@@ -1,56 +1,42 @@
 // lib/services/product_service.dart
 //
 // HTTP layer for the Inventory Service — product endpoints.
+// Uses ApiClient for authenticated/standardized requests.
 //
 
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../core/network/api_client.dart';
+import '../core/network/api_exceptions.dart';
 import 'api_config.dart';
-import 'auth_service.dart';
 import '../models/product_model.dart';
 
 class ProductService {
-  const ProductService();
+  final ApiClient _client;
 
-  Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-      };
+  const ProductService(this._client);
 
   // ── Fetch Products By Shop ─────────────────────────────────────────
 
   /// Returns all products for the given [shopId].
   Future<List<ApiProduct>> fetchProductsByShop(String shopId) async {
-    final uri = Uri.parse(ApiConfig.productsByShop(shopId));
-    final response = await http.get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 20));
-
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
+    try {
+      final body = await _client.get(
+        ApiConfig.productsByShop(shopId),
+        requiresAuth: true,
+      );
       return _parseProductList(body);
-    } else if (response.statusCode == 404) {
+    } on NotFoundException {
       return []; // No products yet — treat as empty
-    } else {
-      throw ApiException(
-          'Failed to load products (${response.statusCode})');
     }
   }
 
   // ── Fetch Single Product ───────────────────────────────────────────
 
   Future<ApiProduct> fetchProductById(String shopId, String productId) async {
-    final uri = Uri.parse(ApiConfig.productById(shopId, productId));
-    final response = await http.get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode == 200) {
-      final body = jsonDecode(response.body);
-      return _parseSingleProduct(body);
-    } else if (response.statusCode == 404) {
-      throw ApiException('Product not found.');
-    } else {
-      throw ApiException(
-          'Failed to load product (${response.statusCode})');
-    }
+    final body = await _client.get(
+      ApiConfig.productById(shopId, productId),
+      requiresAuth: true,
+    );
+    return _parseSingleProduct(body);
   }
 
   // ── Parsers ────────────────────────────────────────────────────────
@@ -63,7 +49,7 @@ class ProductService {
           .toList();
     }
     if (body is Map<String, dynamic>) {
-      final data = body['data'];
+      final data = body['data'] ?? body['datas'];
       if (data is List) {
         return data
             .whereType<Map<String, dynamic>>()
@@ -77,10 +63,10 @@ class ProductService {
 
   ApiProduct _parseSingleProduct(dynamic body) {
     if (body is Map<String, dynamic>) {
-      final data = body['data'];
+      final data = body['data'] ?? body['datas'];
       if (data is Map<String, dynamic>) return ApiProduct.fromJson(data);
       return ApiProduct.fromJson(body);
     }
-    throw ApiException('Unexpected response format for product.');
+    throw Exception('Unexpected response format for product.');
   }
 }

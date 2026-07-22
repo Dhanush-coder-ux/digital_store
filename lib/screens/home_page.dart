@@ -17,8 +17,11 @@ import 'package:provider/provider.dart';
 import '../models/providers.dart';
 import '../models/shop_provider.dart';
 import '../models/shop_model.dart';
+import '../models/profile_provider.dart';
+import '../core/auth/auth_provider.dart';
 import 'saved_addresses_page.dart';
 import 'main_screen.dart';
+import 'search_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -115,28 +118,37 @@ class _HomePageState extends State<HomePage> {
     },
   ];
 
+  Future<void> _onRefresh() async {
+    await context.read<ShopProvider>().refresh();
+    final auth = context.read<AuthProvider>();
+    if (auth.isAuthenticated) {
+      await context.read<ProfileProvider>().fetchProfile(auth.userId!, force: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bgPrimary,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          SliverToBoxAdapter(
-            child: _buildCurvedHeaderAndCarousel(),
-          ),
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        color: AppTheme.primaryBlue,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+          slivers: [
+            SliverToBoxAdapter(
+              child: _buildCurvedHeaderAndCarousel(),
+            ),
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
+                const SizedBox(height: AppTheme.md),
+                _buildLocationFilter(),
+                const SizedBox(height: AppTheme.xl),
+                _buildTrustBanner(),
                 const SizedBox(height: AppTheme.xxl),
                 _buildCategoryRow(),
-                const SizedBox(height: AppTheme.xxl),
-                _buildDealsSection(),
-                const SizedBox(height: AppTheme.xxl),
-                _buildTrendingSection(),
-                const SizedBox(height: AppTheme.xxl),
-                _buildBestRatedStoresSection(),
                 const SizedBox(height: AppTheme.xxl),
                 _buildStoresHeader(),
                 const SizedBox(height: AppTheme.lg),
@@ -145,7 +157,8 @@ class _HomePageState extends State<HomePage> {
               ]),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -182,8 +195,6 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
             ),
-            const SizedBox(height: AppTheme.sm),
-            _buildCarouselSection(),
             const SizedBox(height: AppTheme.xxxl), // Extra padding for the curve cutout
           ],
         ),
@@ -215,14 +226,21 @@ class _HomePageState extends State<HomePage> {
               FadeInLeft(
                 delay: const Duration(milliseconds: 80),
                 duration: AppDurations.normal,
-                child: const Text(
-                  'Deepak Roshan',
-                  style: TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 20,
-                    color: AppTheme.white,
-                    fontWeight: FontWeight.w800,
-                  ),
+                child: Consumer<ProfileProvider>(
+                  builder: (context, profile, _) {
+                    final name = profile.userName.isNotEmpty
+                        ? profile.userName
+                        : (context.read<AuthProvider>().isAuthenticated ? 'Loading...' : 'Guest');
+                    return Text(
+                      name,
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 20,
+                        color: AppTheme.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(height: 6),
@@ -348,20 +366,25 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(width: AppTheme.sm),
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppTheme.white.withOpacity(0.4),
-                    width: 2,
-                  ),
-                  image: const DecorationImage(
-                    image: NetworkImage(
-                      "https://img.freepik.com/free-vector/businessman-character-avatar-isolated_24877-60111.jpg",
+              GestureDetector(
+                onTap: () {
+                  MainScreen.pageIndexNotifier.value = 3;
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppTheme.white.withOpacity(0.4),
+                      width: 2,
                     ),
-                    fit: BoxFit.cover,
+                    image: const DecorationImage(
+                      image: NetworkImage(
+                        "https://img.freepik.com/free-vector/businessman-character-avatar-isolated_24877-60111.jpg",
+                      ),
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               ),
@@ -386,21 +409,30 @@ class _HomePageState extends State<HomePage> {
           const Icon(LucideIcons.search, size: 18, color: AppTheme.textTertiary),
           const SizedBox(width: AppTheme.sm),
           Expanded(
-            child: TextField(
-              style: const TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 14,
-                color: AppTheme.textPrimary,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'Search stores, products...',
-                hintStyle: TextStyle(
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SearchPage()),
+                );
+              },
+              child: const TextField(
+                enabled: false,
+                style: TextStyle(
                   fontFamily: 'Outfit',
-                  color: AppTheme.textTertiary,
                   fontSize: 14,
+                  color: AppTheme.textPrimary,
                 ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
+                decoration: InputDecoration(
+                  hintText: 'Search stores, products...',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Outfit',
+                    color: AppTheme.textTertiary,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                ),
               ),
             ),
           ),
@@ -414,6 +446,136 @@ class _HomePageState extends State<HomePage> {
               borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             ),
             child: const Icon(LucideIcons.sliders, size: 14, color: AppTheme.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  int _selectedLocationFilter = 2; // Default to Nationwide
+
+  Widget _buildLocationFilter() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          _buildFilterOption(0, 'Near you', LucideIcons.mapPin),
+          _buildFilterOption(1, 'Across city', LucideIcons.building2),
+          _buildFilterOption(2, 'Nationwide', LucideIcons.globe),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterOption(int index, String title, IconData icon) {
+    final isSelected = _selectedLocationFilter == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedLocationFilter = index;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            gradient: isSelected
+                ? LinearGradient(
+                    colors: [AppTheme.primaryBlue, AppTheme.softRoyalBlue],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: isSelected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? AppTheme.white : AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? AppTheme.white : AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrustBanner() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F7ED), // Light green background
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF1B7339).withOpacity(0.1)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B7339), // Dark green background
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              LucideIcons.heart,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  'Every order supports a local business',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0D5C32), // Dark green text
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'No giant warehouses. Just neighbours you can trust.',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11,
+                    color: const Color(0xFF0F8A6A), // Teal text
+                    height: 1.2,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -447,49 +609,52 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-        const SizedBox(height: AppTheme.md),
+        const SizedBox(height: AppTheme.lg),
         SizedBox(
-          height: 44,
+          height: 80,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: _categories.length,
             itemBuilder: (context, index) {
               final isSelected = _selectedCategory == index;
+              final cat = _categories[index];
               return GestureDetector(
                 onTap: () => setState(() => _selectedCategory = index),
-                child: AnimatedContainer(
-                  duration: AppDurations.normal,
-                  curve: Curves.easeInOut,
-                  margin: const EdgeInsets.only(right: AppTheme.sm),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.lg,
-                    vertical: AppTheme.sm,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected ? AppTheme.primaryBlue : AppTheme.white,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                    border: Border.all(
-                      color: isSelected
-                          ? AppTheme.primaryBlue
-                          : AppTheme.veryLightGray,
-                    ),
-                    boxShadow: isSelected ? AppTheme.shadowMedium : [],
-                  ),
-                  child: Row(
+                child: Container(
+                  margin: const EdgeInsets.only(right: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        _categories[index]['icon'] as IconData,
-                        size: 14,
-                        color: isSelected ? AppTheme.white : AppTheme.textTertiary,
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppTheme.primaryBlue.withOpacity(0.1) : AppTheme.bgSecondary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          cat['icon'] as IconData,
+                          size: 20,
+                          color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+                        ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(height: 8),
                       Text(
-                        _categories[index]['label'] as String,
+                        cat['label'] as String,
                         style: TextStyle(
                           fontFamily: 'Outfit',
-                          fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected ? AppTheme.white : AppTheme.textSecondary,
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                          color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 3,
+                        width: 24,
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ],

@@ -1,77 +1,201 @@
 // lib/services/api_config.dart
 //
 // Central configuration for all backend service base URLs.
-// All requests go through the API Gateway at port 8900.
-// For Android emulator use 10.0.2.2. For physical device use your machine's LAN IP.
-// For emulator/web, 127.0.0.1 works if adb reverse is set up.
+// All requests go through the API Gateway.
 //
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ApiConfig {
-  static String get baseIp {
-    // Hardcoding to your host's actual LAN IP so it works on your physical Android device over Wi-Fi
-    return '10.167.188.101';
-  }
-  // static String get gatewayBase => 'http://$baseIp:8900/api';
-  static String get gatewayBase => 'https://marketplace.debuggers.co.in/api';
+  static String get baseIp => '10.167.188.101';
 
-  // ── ShopEmp endpoints ──────────────────────────────────────────────
-  /// List all shops: GET /api/shops?q=&limit=&offset=
+  static String get gatewayBase => 'http://$baseIp:8000/api';
+//   static String get gatewayBase => 'https://marketplace.debuggers.co.in/api';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // AUTHENTICATION ENDPOINTS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /// GET /api/auth/login-url?service=&version=
+  static String get authLoginUrl => '$gatewayBase/auth/login-url?entity_name=HYPERLOCAL&entity_type=app';
+
+  /// GET /api/auth/callback?token_id=&service=&version=
+  static String get authCallback => '$gatewayBase/auth/callback';
+
+  /// POST /api/auth/refresh  body: {refresh_token, version}
+  static String get authRefresh => '$gatewayBase/auth/refresh';
+
+  /// POST /api/auth/revoke  body: {token}
+  static String get authRevoke => '$gatewayBase/auth/revoke';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DIGITALSTORE USER ENDPOINTS (OpenAPI: DigiStore.json)
+  // ═══════════════════════════════════════════════════════════════════
+
+  static String get _dsBase => '$gatewayBase/digitalstore';
+
+  // ── Profile ─────────────────────────────────────────────────────
+
+  /// POST /api/digitalstore/users/profile
+  static String get profileCreate => '$_dsBase/users/profile';
+
+  /// GET /api/digitalstore/users/profile/{user_id}
+  static String profileGet(String userId) => '$_dsBase/users/profile/$userId';
+
+  /// PUT /api/digitalstore/users/profile/{user_id}
+  static String profileUpdate(String userId) => '$_dsBase/users/profile/$userId';
+
+  // ── Address ─────────────────────────────────────────────────────
+
+  /// GET /api/digitalstore/users/{user_id}/address/{address_id}
+  static String userAddress(String userId, String addressId) =>
+      '$_dsBase/users/$userId/address/$addressId';
+
+  // ── Search History ──────────────────────────────────────────────
+
+  /// POST /api/digitalstore/users/search
+  static String get searchHistoryAdd => '$_dsBase/users/search';
+
+  /// GET /api/digitalstore/users/search/{user_id}?limit=&offset=
+  static String searchHistoryGet(String userId) =>
+      '$_dsBase/users/search/$userId';
+
+  /// DELETE /api/digitalstore/users/search/{user_id}
+  static String searchHistoryClear(String userId) =>
+      '$_dsBase/users/search/$userId';
+
+  // ── Favorite Products ───────────────────────────────────────────
+
+  /// POST /api/digitalstore/users/favorites/product
+  static String get favoriteProductAdd => '$_dsBase/users/favorites/product';
+
+  /// DELETE /api/digitalstore/users/favorites/product/{user_id}/{product_id}
+  static String favoriteProductRemove(String userId, String productId) =>
+      '$_dsBase/users/favorites/product/$userId/$productId';
+
+  /// GET /api/digitalstore/users/favorites/products/{user_id}?limit=&offset=
+  static String favoriteProductsGet(String userId) =>
+      '$_dsBase/users/favorites/products/$userId';
+
+  // ── Favorite Shops ──────────────────────────────────────────────
+
+  /// POST /api/digitalstore/users/favorites/shop
+  static String get favoriteShopAdd => '$_dsBase/users/favorites/shop';
+
+  /// DELETE /api/digitalstore/users/favorites/shop/{user_id}/{shop_id}
+  static String favoriteShopRemove(String userId, String shopId) =>
+      '$_dsBase/users/favorites/shop/$userId/$shopId';
+
+  /// GET /api/digitalstore/users/favorites/shops/{user_id}?limit=&offset=
+  static String favoriteShopsGet(String userId) =>
+      '$_dsBase/users/favorites/shops/$userId';
+
+  // ── Reviews ─────────────────────────────────────────────────────
+
+  /// POST /api/digitalstore/users/reviews
+  static String get reviewCreate => '$_dsBase/users/reviews';
+
+  /// GET /api/digitalstore/users/reviews/shop/{shop_id}?limit=&offset=
+  static String shopReviewsGet(String shopId) =>
+      '$_dsBase/users/reviews/shop/$shopId';
+
+  /// GET /api/digitalstore/users/reviews/user/{user_id}?limit=&offset=
+  static String userReviewsGet(String userId) =>
+      '$_dsBase/users/reviews/user/$userId';
+
+  // ── User Orders (DigitalStore) ──────────────────────────────────
+
+  /// POST /api/digitalstore/users/orders
+  static String get userOrderLink => '$_dsBase/users/orders';
+
+  /// GET /api/digitalstore/users/orders/{user_id}?limit=&offset=
+  static String userOrdersGet(String userId) =>
+      '$_dsBase/users/orders/$userId';
+
+  /// POST /api/digitalstore/users/orders/bulk  body: [order_id, ...]
+  static String get userOrdersBulk => '$_dsBase/users/orders/bulk';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DIGITALSTORE AGGREGATED ENDPOINTS (Shops, Products, Orders, Cart)
+  // ═══════════════════════════════════════════════════════════════════
+
+  // ── Shops (aggregated) ──────────────────────────────────────────
+
+  /// GET /api/digitalstore/shops?q=&limit=&offset=
+  static String get dsShops => '$_dsBase/shops';
+
+  /// GET /api/digitalstore/shops/{shop_id}
+  static String dsShopById(String shopId) => '$_dsBase/shops/$shopId';
+
+  // ── Products (aggregated) ───────────────────────────────────────
+
+  /// GET /api/digitalstore/products?q=&limit=&offset=
+  static String get dsProducts => '$_dsBase/products';
+
+  /// GET /api/digitalstore/products/{shop_id}/{id}
+  static String dsProductById(String shopId, String id) =>
+      '$_dsBase/products/$shopId/$id';
+
+  // ── Orders (aggregated) ─────────────────────────────────────────
+
+  /// GET /api/digitalstore/orders/by/user/{user_id}?limit=&offset=
+  static String dsOrdersByUser(String userId) =>
+      '$_dsBase/orders/by/user/$userId';
+
+  /// GET /api/digitalstore/orders/{shop_id}/{id}
+  static String dsOrderById(String shopId, String id) =>
+      '$_dsBase/orders/$shopId/$id';
+
+  // ── Cart (aggregated) ───────────────────────────────────────────
+
+  /// POST /api/digitalstore/cart/init
+  static String get dsCartInit => '$_dsBase/cart/init';
+
+  /// POST /api/digitalstore/cart/add
+  static String get dsCartAdd => '$_dsBase/cart/add';
+
+  /// POST /api/digitalstore/cart/remove
+  static String get dsCartRemove => '$_dsBase/cart/remove';
+
+  /// POST /api/digitalstore/cart/cancel
+  static String get dsCartCancel => '$_dsBase/cart/cancel';
+
+  /// GET /api/digitalstore/cart/{session_id}
+  static String dsCartGet(String sessionId) => '$_dsBase/cart/$sessionId';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // DIRECT GATEWAY ENDPOINTS (existing, kept for backward compat)
+  // ═══════════════════════════════════════════════════════════════════
+
+  // ── ShopEmp endpoints ──────────────────────────────────────────
   static String get allShops => '$gatewayBase/shops';
-
-  /// Get shop by ID: GET /api/shops/by/{shopId}
   static String shopById(String shopId) => '$gatewayBase/shops/by/$shopId';
-
-  /// Get operating hours for a shop: GET /api/shops/{shopId}/operating-hours
   static String shopOperatingHours(String shopId) =>
       '$gatewayBase/shops/$shopId/operating-hours';
-
-  /// Get delivery options for a shop: GET /api/shops/{shopId}/delivery
   static String shopDeliveryOptions(String shopId) =>
       '$gatewayBase/shops/$shopId/delivery';
-
-  /// Get announcements for a shop: GET /api/shops/{shopId}/announcements
   static String shopAnnouncements(String shopId) =>
       '$gatewayBase/shops/$shopId/announcements';
 
-  // ── Inventory / Products ───────────────────────────────────────────
-  /// Get all products for a shop: GET /api/inventories/inventories/by/shop/{shopId}
+  // ── Inventory / Products ───────────────────────────────────────
   static String productsByShop(String shopId) =>
-      '$gatewayBase/inventories/inventories/by/shop/$shopId';
-
-  /// Get single product by ID: GET /api/inventories/inventories/by/id/{shopId}/{productId}
+      '$_dsBase/products/$shopId';
   static String productById(String shopId, String productId) =>
-      '$gatewayBase/inventories/inventories/by/id/$shopId/$productId';
+      '$_dsBase/products/$shopId/$productId';
 
-  // ── Cart endpoints (Order Service) ────────────────────────────────
+  // ── Cart endpoints (Order Service) ────────────────────────────
   static String get cartBase => '$gatewayBase/cart';
-
-  /// POST /api/cart/init — creates a new cart session, returns session_id
   static String get cartInit => '$cartBase/init';
-
-  /// POST /api/cart/add — adds item to cart session
   static String get cartAdd => '$cartBase/add';
-
-  /// POST /api/cart/remove — removes item from cart session
   static String get cartRemove => '$cartBase/remove';
-
-  /// POST /api/cart/cancel — cancels entire cart session
   static String get cartCancel => '$cartBase/cancel';
-
-  /// GET /api/cart/{sessionId} — fetches enriched cart items
   static String cartGet(String sessionId) => '$cartBase/$sessionId';
 
-  // ── Order endpoints ────────────────────────────────────────────────
+  // ── Order endpoints ────────────────────────────────────────────
   static String get orderBase => '$gatewayBase/orders';
+  static String get orderCreate => orderBase;
+  static String ordersByShop(String shopId) => '$orderBase/$shopId';
 
-  // ── Customer endpoints ─────────────────────────────────────────────
+  // ── Customer endpoints ─────────────────────────────────────────
   static String get customerBase => '$gatewayBase/customers';
   static String get customerCreate => customerBase;
-
-  /// POST /api/orders — place a new order
-  static String get orderCreate => orderBase;
-
-  /// GET /api/orders/{shopId}/{customerId}/... (not used in customer flow directly)
-  static String ordersByShop(String shopId) => '$orderBase/$shopId';
+  static String customerByShop(String shopId) => '$customerBase/by/shop/$shopId';
 }

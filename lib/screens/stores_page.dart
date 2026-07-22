@@ -10,6 +10,7 @@ import '../models/shop_model.dart';
 import '../models/shop_provider.dart';
 import 'api_shop_details_page.dart';
 import 'notifications_page.dart';
+import 'search_page.dart';
 
 class StoresPage extends StatefulWidget {
   const StoresPage({super.key});
@@ -69,9 +70,7 @@ class _StoresPageState extends State<StoresPage> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader(),
-          _buildSearchBar(),
-          _buildCategoryChips(),
+          _buildWhiteHeader(),
           _buildResultsRow(),
           Expanded(child: _buildStoresList()),
         ],
@@ -79,207 +78,179 @@ class _StoresPageState extends State<StoresPage> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildWhiteHeader() {
     return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.primaryBlue, AppTheme.softRoyalBlue],
-        ),
-      ),
+      color: AppTheme.white,
       child: SafeArea(
         bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppTheme.xl, AppTheme.lg, AppTheme.xl, AppTheme.lg,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Explore Shops',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(color: AppTheme.white),
-                  ),
-                  Consumer<ShopProvider>(
-                    builder: (_, sp, __) => Text(
-                      sp.hasShops
-                          ? '${sp.shops.length} shop${sp.shops.length != 1 ? 's' : ''} connected'
-                          : 'Manage your shops',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.white.withOpacity(0.8),
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  // Refresh
-                  GestureDetector(
-                    onTap: () => _loadShops(force: true),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      ),
-                      child: const Icon(
-                        Icons.refresh_rounded,
-                        color: AppTheme.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => const NotificationsPage()),
-                      );
-                    },
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppTheme.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                      ),
-                      child: const Icon(
-                        LucideIcons.bell,
-                        color: AppTheme.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppTheme.xl, AppTheme.lg, AppTheme.xl, 0,
-      ),
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(color: AppTheme.veryLightGray),
-          boxShadow: AppTheme.shadowSmall,
-        ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(width: AppTheme.lg),
-            const Icon(LucideIcons.search, color: AppTheme.textTertiary, size: 18),
-            const SizedBox(width: AppTheme.sm),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                onChanged: (v) => setState(() => _searchQuery = v),
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 14,
-                  color: AppTheme.textPrimary,
-                ),
-                decoration: const InputDecoration(
-                  hintText: 'Search shops by name...',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Outfit',
-                    color: AppTheme.textTertiary,
-                    fontSize: 14,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppTheme.xl, AppTheme.md, AppTheme.xl, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Explore Shops',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      Consumer<ShopProvider>(
+                        builder: (_, sp, __) => Text(
+                          sp.hasShops
+                              ? '${sp.shops.length} shop${sp.shops.length != 1 ? 's' : ''} connected'
+                              : 'Manage your shops',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                        ),
+                      ),
+                    ],
                   ),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
-                ),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsPage()));
+                        },
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgSecondary,
+                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                          ),
+                          child: const Icon(LucideIcons.bell, color: AppTheme.textPrimary, size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            if (_searchQuery.isNotEmpty)
-              GestureDetector(
-                onTap: () {
-                  _searchController.clear();
-                  setState(() => _searchQuery = '');
-                },
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Icon(Icons.close_rounded,
-                      size: 18, color: AppTheme.textTertiary),
-                ),
-              ),
+            _buildZeptoSearchBar(),
+            Consumer<ShopProvider>(
+              builder: (_, sp, __) {
+                final categories = _buildCategories(sp.shops);
+                if (categories.length <= 1) return const SizedBox(height: AppTheme.md);
+                return _buildZeptoCategories(categories);
+              },
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCategoryChips() {
-    return Consumer<ShopProvider>(
-      builder: (_, sp, __) {
-        final categories = _buildCategories(sp.shops);
-        if (categories.length <= 1) return const SizedBox(height: AppTheme.md);
-
-        return Container(
-          height: 46,
-          margin: const EdgeInsets.only(top: AppTheme.md),
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
-            itemCount: categories.length,
-            itemBuilder: (context, index) {
-              final isSelected = index == _selectedIndex;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedIndex = index),
-                child: AnimatedContainer(
-                  duration: AppDurations.normal,
-                  curve: Curves.easeInOut,
-                  margin: const EdgeInsets.only(right: AppTheme.sm),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppTheme.lg,
-                    vertical: AppTheme.sm,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        isSelected ? AppTheme.primaryBlue : AppTheme.white,
-                    borderRadius:
-                        BorderRadius.circular(AppTheme.radiusLg),
-                    border: Border.all(
-                      color: isSelected
-                          ? AppTheme.primaryBlue
-                          : AppTheme.veryLightGray,
-                    ),
-                  ),
-                  child: Text(
-                    categories[index],
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 13,
-                      fontWeight: isSelected
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      color: isSelected
-                          ? AppTheme.white
-                          : AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
+  Widget _buildZeptoSearchBar() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SearchPage()),
         );
       },
+      child: Container(
+        height: 48,
+        margin: const EdgeInsets.symmetric(horizontal: AppTheme.xl, vertical: AppTheme.md),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSecondary,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.veryLightGray.withOpacity(0.5)),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 14),
+            const Icon(LucideIcons.search, size: 18, color: AppTheme.textTertiary),
+            const SizedBox(width: 10),
+            Text(
+              'Search for products...',
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 14,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getIconForCategory(String cat) {
+    switch (cat.toLowerCase()) {
+      case 'all': return LucideIcons.layoutGrid;
+      case 'fresh': return LucideIcons.leaf;
+      case 'electronics': return LucideIcons.cpu;
+      case 'fashion': return LucideIcons.shirt;
+      case 'bakery': return LucideIcons.cake;
+      case 'grocery': return LucideIcons.shoppingBag;
+      case 'pharmacy': return LucideIcons.cross;
+      default: return LucideIcons.box;
+    }
+  }
+
+  Widget _buildZeptoCategories(List<String> categories) {
+    return SizedBox(
+      height: 74,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
+        itemCount: categories.length,
+        itemBuilder: (ctx, i) {
+          final cat = categories[i];
+          final isSelected = i == _selectedIndex;
+          return GestureDetector(
+            onTap: () => setState(() => _selectedIndex = i),
+            child: Container(
+              margin: const EdgeInsets.only(right: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppTheme.primaryBlue.withOpacity(0.1) : AppTheme.bgSecondary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _getIconForCategory(cat),
+                      size: 20,
+                      color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    cat,
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                      color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    height: 3,
+                    width: 24,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -363,8 +334,15 @@ class _StoresPageState extends State<StoresPage> {
   }
 
   Widget _buildError(ShopProvider sp) {
-    return Center(
-      child: FadeIn(
+    return RefreshIndicator(
+      onRefresh: () async => _loadShops(force: true),
+      color: AppTheme.primaryBlue,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.6,
+          alignment: Alignment.center,
+          child: FadeIn(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -417,12 +395,21 @@ class _StoresPageState extends State<StoresPage> {
           ],
         ),
       ),
+        ),
+      ),
     );
   }
 
   Widget _buildEmpty(ShopProvider sp) {
-    return Center(
-      child: FadeIn(
+    return RefreshIndicator(
+      onRefresh: () async => _loadShops(force: true),
+      color: AppTheme.primaryBlue,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.6,
+          alignment: Alignment.center,
+          child: FadeIn(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -468,6 +455,8 @@ class _StoresPageState extends State<StoresPage> {
               ),
             ],
           ],
+        ),
+      ),
         ),
       ),
     );

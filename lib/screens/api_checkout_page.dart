@@ -14,6 +14,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/shop_model.dart';
 import '../models/api_cart_provider.dart';
 import '../models/cart_session_model.dart';
+import '../models/profile_provider.dart';
+import '../core/auth/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 import 'order_success_page.dart';
@@ -47,6 +49,23 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
     // Refresh cart items to get latest enriched data
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ApiCartProvider>().refreshCart();
+      
+      // Auto-populate from user profile + default address
+      final authProvider = context.read<AuthProvider>();
+      final profileProvider = context.read<ProfileProvider>();
+      final defaultAddress = profileProvider.defaultAddress;
+      
+      if (_nameController.text.isEmpty) {
+        _nameController.text = profileProvider.userName.isNotEmpty
+            ? profileProvider.userName
+            : (authProvider.email?.split('@').first ?? '');
+      }
+      if (_phoneController.text.isEmpty && defaultAddress != null) {
+        _phoneController.text = defaultAddress.phone;
+      }
+      if (_addressController.text.isEmpty && defaultAddress != null) {
+        _addressController.text = '${defaultAddress.fullAddress}, ${defaultAddress.city}, ${defaultAddress.state} - ${defaultAddress.pincode}';
+      }
     });
   }
 

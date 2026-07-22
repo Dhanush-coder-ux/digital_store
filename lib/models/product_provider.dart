@@ -5,11 +5,13 @@
 
 import 'package:flutter/foundation.dart';
 import '../services/product_service.dart';
-import '../services/auth_service.dart';
+import '../core/network/api_exceptions.dart';
 import '../models/product_model.dart';
 
 class ProductProvider extends ChangeNotifier {
-  final _service = const ProductService();
+  final ProductService _service;
+
+  ProductProvider(this._service);
 
   // Keyed by shopId so multiple shops can be cached concurrently
   final Map<String, List<ApiProduct>> _productsByShop = {};
@@ -17,7 +19,11 @@ class ProductProvider extends ChangeNotifier {
   final Map<String, String?> _errorByShop = {};
 
   List<ApiProduct> productsForShop(String shopId) =>
-      _productsByShop[shopId] ?? [];
+      (_productsByShop[shopId] ?? []).where((p) => p.visibleOnline).toList();
+
+  /// All products across all cached shops — used by the Favorites page.
+  List<ApiProduct> get allCachedProducts =>
+      _productsByShop.values.expand((list) => list).toList();
 
   bool isLoadingShop(String shopId) => _loadingByShop[shopId] ?? false;
 
