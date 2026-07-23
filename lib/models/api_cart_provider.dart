@@ -414,6 +414,7 @@ class ApiCartProvider extends ChangeNotifier {
     String? paymentMethod,
     String? note,
     Map<String, dynamic>? deliveryAddress,
+    String? userId,
   }) async {
     if (_sessionId == null) {
       _error = 'No active cart session.';
@@ -455,7 +456,13 @@ class ApiCartProvider extends ChangeNotifier {
 
       // Build payment_infos
       final Map<String, dynamic> paymentInfos = {};
-      if (paymentMethod != null) paymentInfos['method'] = paymentMethod;
+      if (paymentMethod != null) {
+        if (paymentMethod.toUpperCase() == 'CASH ON DELIVERY' || paymentMethod.toUpperCase() == 'COD') {
+          paymentInfos[paymentMethod] = 0.0;
+        } else {
+          paymentInfos[paymentMethod] = currentTotal;
+        }
+      }
 
       final payload = CreateOrderPayload(
         shopId: shopId,
@@ -465,7 +472,7 @@ class ApiCartProvider extends ChangeNotifier {
         origin: 'ONLINE',
         paymentInfos: paymentInfos,
         additionalInfos: additionalInfos.isNotEmpty ? additionalInfos : null,
-        userId: createdCustomerId ?? 'anonymous',
+        userId: userId ?? createdCustomerId ?? 'anonymous',
         name: customerName,
         phone: customerPhone,
         addressId: deliveryAddress?['id']?.toString() ?? 'N/A',

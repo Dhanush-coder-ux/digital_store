@@ -7,6 +7,7 @@
 
 class ApiOrder {
   final String id;
+  final String? uiId;
   final String shopId;
   final String? customerId;
   final String status;
@@ -20,6 +21,7 @@ class ApiOrder {
 
   const ApiOrder({
     required this.id,
+    this.uiId,
     required this.shopId,
     this.customerId,
     required this.status,
@@ -58,11 +60,18 @@ class ApiOrder {
       total = parseDouble(calcInfos['total'] ?? calcInfos['grand_total'] ?? 0);
     }
     if (total == 0) {
+      final itemInfos = json['item_infos'];
+      if (itemInfos is Map<String, dynamic>) {
+        total = parseDouble(itemInfos['total_order_amount'] ?? 0);
+      }
+    }
+    if (total == 0) {
       total = parseDouble(json['total_amount'] ?? json['total'] ?? 0);
     }
 
     return ApiOrder(
       id: json['id']?.toString() ?? '',
+      uiId: json['ui_id']?.toString(),
       shopId: json['shop_id']?.toString() ?? '',
       customerId: json['customer_id']?.toString(),
       status: json['status']?.toString() ?? 'PENDING',
@@ -124,8 +133,8 @@ class ApiOrderItem {
       batchId: json['batch_id']?.toString(),
       qty: parseDouble(json['qty'] ?? json['quantity']),
       unit: json['unit']?.toString(),
-      unitPrice: parseDouble(json['unit_price'] ?? json['selling_price'] ?? 0),
-      lineTotal: parseDouble(json['line_total'] ?? 0),
+      unitPrice: parseDouble(json['unit_price'] ?? json['selling_price'] ?? json['sell_price'] ?? 0),
+      lineTotal: parseDouble(json['line_total'] ?? json['total_amount'] ?? 0),
       productName: json['product_name']?.toString() ??
           json['name']?.toString(),
     );

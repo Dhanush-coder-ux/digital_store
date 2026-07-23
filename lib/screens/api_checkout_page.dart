@@ -98,6 +98,8 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
       deliveryAddress = {'address': _addressController.text.trim()};
     }
 
+    final auth = context.read<AuthProvider>();
+
     final success = await cart.placeOrder(
       shopId: widget.shop.id,
       customerName: name,
@@ -107,6 +109,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
           ? _noteController.text.trim()
           : null,
       deliveryAddress: deliveryAddress,
+      userId: auth.userId,
     );
 
     if (success && mounted) {

@@ -137,7 +137,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
 
     final dynamicOrders = sourceOrders.map((o) {
       return {
-        "id": o.id,
+        "id": o.uiId ?? o.id.split('-').first,
         "date": o.createdAt != null ? o.createdAt!.split('T').first : "Today",
         "status": o.status,
         "images": o.items.isNotEmpty ? ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=100"] : [],
@@ -260,22 +260,26 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Order #${order["id"]}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Order #${order["id"]}',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Placed on ${order["date"]}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      'Placed on ${order["date"]}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: AppTheme.sm),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: AppTheme.sm,

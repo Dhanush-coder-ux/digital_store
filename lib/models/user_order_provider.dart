@@ -179,7 +179,15 @@ class UserOrderProvider extends ChangeNotifier {
           .toList();
     }
     if (body is Map<String, dynamic>) {
-      final data = body['data'];
+      dynamic data = body['data'];
+      
+      // If the gateway returned the 'datas' object directly without the 'data' wrapper
+      if (body.containsKey('datas') && body['datas'] is List) {
+        data = body['datas'];
+      } else if (data is Map<String, dynamic> && data.containsKey('datas')) {
+        data = data['datas'];
+      }
+
       if (data is List) {
         return data
             .whereType<Map<String, dynamic>>()

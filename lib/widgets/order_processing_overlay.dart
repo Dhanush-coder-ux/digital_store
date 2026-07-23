@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:animate_do/animate_do.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 

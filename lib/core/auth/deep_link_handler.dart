@@ -63,20 +63,13 @@ class DeepLinkHandler {
   }
 
   bool _isAuthCallbackUri(Uri uri) {
-    // hyperlocal-app://auth/callback OR http://localhost:5173/auth/callback
-    final isCustomScheme = uri.scheme == 'hyperlocal-app' && uri.host == 'auth' && uri.path.startsWith('/callback');
+    // hyperlocal://auth/callback OR hyperlocal-app://auth/callback OR http://localhost:5173/auth/callback
+    final isCustomScheme = (uri.scheme == 'hyperlocal' || uri.scheme == 'hyperlocal-app') && uri.host == 'auth' && uri.path.startsWith('/callback');
     final isWebScheme = (uri.scheme == 'http' || uri.scheme == 'https') && uri.path.startsWith('/auth/callback');
+    // We also support intercepting the gateway URL if needed
+    final isGatewayCallback = uri.host == '10.167.188.101' && uri.path.startsWith('/api/auth/callback');
     
-    if (isCustomScheme || isWebScheme) {
-      return true;
-    }
-    // https://auth.hyperlocal.com/callback
-    if ((uri.scheme == 'https' || uri.scheme == 'http') &&
-        uri.host == 'auth.hyperlocal.com' &&
-        uri.path.startsWith('/callback')) {
-      return true;
-    }
-    return false;
+    return isCustomScheme || isWebScheme || isGatewayCallback;
   }
   
   /// Starts a local HTTP server to intercept the localhost redirect from the browser.
