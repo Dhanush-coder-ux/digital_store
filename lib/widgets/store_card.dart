@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../theme/app_theme.dart';
+import 'package:provider/provider.dart';
+import '../models/review_provider.dart';
 
 class StoreCard extends StatefulWidget {
   final String name;
   final String imageUrl;
-  final String rating;
-  final String reviews;
+  final String shopId;
   final String time;
   final String distance;
   final List<String> categories;
@@ -19,8 +20,7 @@ class StoreCard extends StatefulWidget {
     super.key,
     required this.name,
     required this.imageUrl,
-    required this.rating,
-    required this.reviews,
+    required this.shopId,
     required this.time,
     required this.distance,
     required this.categories,
@@ -275,43 +275,54 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
   }
 
   Widget _buildRatingChip(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.sm,
-        vertical: AppTheme.xs,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFBEB),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: const Color(0xFFFDE68A)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
-          const SizedBox(width: 3),
-          Text(
-            widget.rating,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF92400E),
-            ),
+    return Consumer<ReviewProvider>(
+      builder: (context, provider, child) {
+        final rating = provider.averageRatingForShop(widget.shopId);
+        final count = provider.reviewCountForShop(widget.shopId);
+        
+        if (count == 0) return const SizedBox.shrink();
+
+        return Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppTheme.sm,
+            vertical: AppTheme.xs,
           ),
-          Text(
-            ' (${widget.reviews})',
-            style: TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF92400E).withOpacity(0.7),
-            ),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(color: const Color(0xFFFDE68A)),
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+              const SizedBox(width: 3),
+              Text(
+                rating.toStringAsFixed(1),
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF92400E),
+                ),
+              ),
+              const SizedBox(width: 3),
+              Text(
+                '($count)',
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF92400E),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
+
 
   Widget _buildInfoChip(BuildContext context, IconData icon, String text) {
     return Container(

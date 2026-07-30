@@ -23,6 +23,7 @@ class ShopProvider extends ChangeNotifier {
   String? get error => _error;
   bool get hasFetched => _hasFetched;
   bool get hasShops => _shops.isNotEmpty;
+  ShopService get service => _service;
 
   // ── Fetch ─────────────────────────────────────────────────────────
 

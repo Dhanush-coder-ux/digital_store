@@ -1865,7 +1865,7 @@ class _HomePageState extends State<HomePage> {
           itemBuilder: (context, index) {
             final shop = shops[index];
             // Provide reasonable defaults or calculate them for the UI mock parts
-            final rating = '4.5';
+
             final categories = shop.categories.isNotEmpty ? shop.categories : ['General'];
             final imageUrl = (shop.bannerUrl != null && shop.bannerUrl!.isNotEmpty) 
                              ? shop.bannerUrl! 
@@ -1876,8 +1876,7 @@ class _HomePageState extends State<HomePage> {
               child: StoreCard(
                 name: shop.name,
                 imageUrl: imageUrl,
-                rating: rating,
-                reviews: '100+',
+                shopId: shop.id,
                 time: '15-25 min',
                 distance: '1.2km', // Mock for now
                 categories: categories,

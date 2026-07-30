@@ -28,6 +28,22 @@ class ShopService {
     return _parseSingleShop(body);
   }
 
+  // ── Announcements ──────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getShopAnnouncements(String shopId) async {
+    final body = await _client.get(ApiConfig.shopAnnouncements(shopId), requiresAuth: true);
+    if (body is List) {
+      return body.whereType<Map<String, dynamic>>().toList();
+    }
+    if (body is Map<String, dynamic>) {
+      final data = body['data'];
+      if (data is List) {
+        return data.whereType<Map<String, dynamic>>().toList();
+      }
+    }
+    return [];
+  }
+
   // ── Parsers ────────────────────────────────────────────────────────
 
   List<Shop> _parseShopList(dynamic body) {

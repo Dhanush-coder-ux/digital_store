@@ -185,6 +185,20 @@ class DigitalStoreService {
   }
 
   // ═══════════════════════════════════════════════════════════════════
+  // ANNOUNCEMENTS
+  // ═══════════════════════════════════════════════════════════════════
+
+  /// GET /shops/{shop_id}/announcements
+  Future<List<Map<String, dynamic>>> getShopAnnouncements(String shopId) async {
+    final body = await _client.get(
+      ApiConfig.shopAnnouncements(shopId),
+    );
+    if (body is List) {
+      return body.whereType<Map<String, dynamic>>().toList();
+    }
+    return [];
+  }
+  // ═══════════════════════════════════════════════════════════════════
   // REVIEWS
   // ═══════════════════════════════════════════════════════════════════
 

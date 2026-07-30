@@ -1,0 +1,13 @@
+1: // lib/screens/api_shop_details_page.dart
+3: // Shop detail page showing real products from the Inventory Service.
+4: // Products are loaded lazily when the page is first opened.
+28: class ApiShopDetailsPage extends StatefulWidget {
+37: class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
+1084: // ── Product Card ────────────────────────────────────────────────────
+1086: class _ProductCard extends StatelessWidget {
+1263: Widget _buildReviewsSection() {
+1438: void _showReviewModal() {
+1596: // ── Quick Add Button ───────────────────────────────────────────────
+1598: class _QuickAddButton extends StatelessWidget {
+1690: // ── Cart Badge Button ──────────────────────────────────────────────
+1692: class _CartBadgeButton extends StatelessWidget {

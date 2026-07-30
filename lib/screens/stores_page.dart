@@ -481,8 +481,7 @@ class _StoresPageState extends State<StoresPage> {
               imageUrl: shop.bannerUrl ??
                   shop.logoUrl ??
                   'https://placehold.co/400x200/1D4ED8/FFFFFF?text=${Uri.encodeComponent(shop.name)}',
-              rating: '4.8',
-              reviews: '—',
+              shopId: shop.id,
               time: shop.hasDelivery ? 'Delivery' : 'Pickup',
               distance: shop.displayAddress.isNotEmpty
                   ? shop.displayAddress.split(',').first
