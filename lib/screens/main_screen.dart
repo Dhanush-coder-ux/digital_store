@@ -50,8 +50,15 @@ class _MainScreenState extends State<MainScreen> {
         context.read<FavoritesApiProvider>().fetchFavorites(userId);
       }
 
-      final locationAddress = await context.read<LocationProvider>().requestLocationAndGeocode();
+      final locProvider = context.read<LocationProvider>();
+      final locationAddress = await locProvider.requestLocationAndGeocode();
       
+      // Fetch shops with location
+      context.read<ShopProvider>().fetchAllShops(
+        lat: locProvider.latitude,
+        lng: locProvider.longitude,
+      );
+
       if (locationAddress != null && userId != null) {
         final profile = context.read<ProfileProvider>();
         final existing = profile.addresses.any((a) => 

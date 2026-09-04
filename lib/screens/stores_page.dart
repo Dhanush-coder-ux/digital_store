@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 import '../models/shop_model.dart';
 import '../models/shop_provider.dart';
+import '../models/providers.dart';
 import 'api_shop_details_page.dart';
 import 'notifications_page.dart';
 import 'search_page.dart';
@@ -33,7 +34,12 @@ class _StoresPageState extends State<StoresPage> {
   }
 
   void _loadShops({bool force = false}) {
-    context.read<ShopProvider>().fetchAllShops(force: force);
+    final loc = context.read<LocationProvider>();
+    context.read<ShopProvider>().fetchAllShops(
+      force: force,
+      lat: loc.latitude,
+      lng: loc.longitude,
+    );
   }
 
   List<String> _buildCategories(List<Shop> shops) {
@@ -483,9 +489,11 @@ class _StoresPageState extends State<StoresPage> {
                   'https://placehold.co/400x200/1D4ED8/FFFFFF?text=${Uri.encodeComponent(shop.name)}',
               shopId: shop.id,
               time: shop.hasDelivery ? 'Delivery' : 'Pickup',
-              distance: shop.displayAddress.isNotEmpty
-                  ? shop.displayAddress.split(',').first
-                  : shop.city,
+              distance: shop.distance != null 
+                  ? '${shop.distance!.toStringAsFixed(1)} km'
+                  : (shop.displayAddress.isNotEmpty
+                      ? shop.displayAddress.split(',').first
+                      : shop.city),
               categories: shop.categories.isNotEmpty
                   ? shop.categories
                   : ['General'],

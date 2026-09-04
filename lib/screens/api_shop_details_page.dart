@@ -1469,6 +1469,33 @@ class _ProductCard extends StatelessWidget {
                           : _buildImageFallback(product.name),
                     ),
                   ),
+                  if (product.hasVariant && product.variants.isNotEmpty)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryBlue,
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          '${product.variants.length} Options',
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
                   Positioned(
                     top: 8,
                     right: 8,
@@ -1542,7 +1569,7 @@ class _ProductCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '₹${product.displayPrice.toStringAsFixed(0)}',
+                              '₹${product.displayPrice.toStringAsFixed(product.displayPrice.truncateToDouble() == product.displayPrice ? 0 : 2)}',
                               style: TextStyle(
                                 fontFamily: 'Outfit',
                                 fontSize: 15,
@@ -1550,7 +1577,17 @@ class _ProductCard extends StatelessWidget {
                                 color: AppTheme.primaryBlue,
                               ),
                             ),
-                            if (product.unit != null)
+                            if (product.hasVariant && product.variants.isNotEmpty)
+                              Text(
+                                '${product.variants.length} variants',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textTertiary,
+                                ),
+                              )
+                            else if (product.unit != null)
                               Text(
                                 product.unit!,
                                 style: TextStyle(
@@ -1621,11 +1658,14 @@ class _QuickAddButton extends StatelessWidget {
               children: [
                 GestureDetector(
                   onTap: () async {
-                    final item = cart.items.firstWhere(
-                      (i) => i.productId == product.id,
-                      orElse: () => CartSessionItem(productId: '', shopId: '', qty: 0),
-                    );
-                    if (item.productId.isNotEmpty) {
+                    CartSessionItem? item;
+                    for (final i in cart.items) {
+                      if (i.productId == product.id) {
+                        item = i;
+                        break;
+                      }
+                    }
+                    if (item != null) {
                       await cart.updateQuantity(item, qty - 1);
                     } else {
                       await cart.removeItem(productId: product.id);

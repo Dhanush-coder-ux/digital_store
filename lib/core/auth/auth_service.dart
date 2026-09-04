@@ -90,6 +90,7 @@ class AuthService {
     final queryParams = Map<String, String>.from(baseUri.queryParameters);
     queryParams['service'] = service;
     queryParams['version'] = version;
+    queryParams['redirect_url'] = 'http://127.0.0.1:8000/api/auth/callback';
     
     final uri = baseUri.replace(queryParameters: queryParams);
     print('DEBUG: Requesting login URL: $uri');

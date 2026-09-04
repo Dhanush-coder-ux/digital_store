@@ -119,7 +119,7 @@ class ApiConfig {
 
   // ── Shops (aggregated) ──────────────────────────────────────────
 
-  /// GET /api/digitalstore/shops?q=&limit=&offset=
+  /// GET /api/digitalstore/shops?latitude=&longitude=&delivery_type=&limit=&offset=
   static String get dsShops => '$_dsBase/shops';
 
   /// GET /api/digitalstore/shops/{shop_id}
@@ -177,7 +177,7 @@ class ApiConfig {
 
   // ── Inventory / Products ───────────────────────────────────────
   static String productsByShop(String shopId) =>
-      '$_dsBase/products/$shopId';
+      '$_dsBase/shops/$shopId/products';
   static String productById(String shopId, String productId) =>
       '$_dsBase/products/$shopId/$productId';
 
@@ -190,7 +190,7 @@ class ApiConfig {
   static String cartGet(String sessionId) => '$cartBase/$sessionId';
 
   // ── Order endpoints ────────────────────────────────────────────
-  static String get orderBase => '$gatewayBase/orders';
+  static String get orderBase => '$_dsBase/orders';
   static String get orderCreate => orderBase;
   static String ordersByShop(String shopId) => '$orderBase/$shopId';
 

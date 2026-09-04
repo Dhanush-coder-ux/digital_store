@@ -6,6 +6,7 @@
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import '../services/digitalstore_service.dart';
 import '../core/models/search_history_model.dart';
 import '../models/shop_model.dart';
@@ -94,7 +95,17 @@ class SearchProvider extends ChangeNotifier {
 
   Future<List<Shop>> _searchShops(String query) async {
     try {
-      final body = await _service.fetchShops(query: query, limit: 20, offset: 1);
+      double lat = 0.0;
+      double lon = 0.0;
+      try {
+        Position position = await Geolocator.getCurrentPosition(
+            desiredAccuracy: LocationAccuracy.low);
+        lat = position.latitude;
+        lon = position.longitude;
+      } catch (_) {}
+
+      final body = await _service.fetchShops(
+          latitude: lat, longitude: lon, limit: 20, offset: 1);
       return _parseShopList(body);
     } catch (_) {
       return [];
@@ -163,19 +174,23 @@ class SearchProvider extends ChangeNotifier {
   List<ApiProduct> _parseProductList(dynamic body) {
     if (body is List) {
       return body
-          .whereType<Map<String, dynamic>>()
-          .map((e) => ApiProduct.fromJson(e))
-          .where((p) => p.isActive)
+          .whereType<Map>()
+          .map((e) => ApiProduct.fromJson(Map<String, dynamic>.from(e)))
+          .where((p) => p.isActive || p.visibleOnline)
           .toList();
     }
-    if (body is Map<String, dynamic>) {
-      final data = body['data'];
+    if (body is Map) {
+      final data = body['data'] ?? body['datas'];
       if (data is List) {
         return data
-            .whereType<Map<String, dynamic>>()
-            .map((e) => ApiProduct.fromJson(e))
-            .where((p) => p.isActive)
+            .whereType<Map>()
+            .map((e) => ApiProduct.fromJson(Map<String, dynamic>.from(e)))
+            .where((p) => p.isActive || p.visibleOnline)
             .toList();
+      }
+      if (data is Map) {
+        final p = ApiProduct.fromJson(Map<String, dynamic>.from(data));
+        return (p.isActive || p.visibleOnline) ? [p] : [];
       }
     }
     return [];

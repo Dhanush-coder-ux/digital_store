@@ -4,6 +4,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../models/shop_provider.dart';
+import '../models/providers.dart';
 import 'main_screen.dart';
 
 class CategoriesPage extends StatelessWidget {
@@ -97,7 +98,12 @@ class CategoriesPage extends StatelessWidget {
 
         return RefreshIndicator(
           color: AppTheme.primaryBlue,
-          onRefresh: () async => sp.fetchAllShops(force: true),
+          onRefresh: () async {
+            final loc = context.read<LocationProvider>();
+            await sp.fetchAllShops(
+              force: true,
+            );
+          },
           child: GridView.builder(
             padding: const EdgeInsets.all(AppTheme.xl),
             physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),

@@ -108,11 +108,15 @@ class ApiCartProvider extends ChangeNotifier {
       if (savedSession != null && savedSession.isNotEmpty && savedShop == shopId) {
         // Try to resume session
         _sessionId = savedSession;
-        await _syncCart(); // if expired, it returns [], auto-handled on next addItem
-        await _loadPersistedOrders();
-        _state = CartState.idle;
-        notifyListeners();
-        return;
+        await _syncCart();
+        
+        // If _syncCart wiped _sessionId because it was expired or invalid in Redis, fall through to init a new one
+        if (_sessionId != null) {
+          await _loadPersistedOrders();
+          _state = CartState.idle;
+          notifyListeners();
+          return;
+        }
       }
 
       // Start fresh
@@ -196,6 +200,50 @@ class ApiCartProvider extends ChangeNotifier {
     String? batchId,
   }) async {
     int attempts = 0;
+
+    // Auto-resolve variantId and batchId if missing or nested in variant
+    String? effectiveVariantId = variantId;
+    String? effectiveBatchId = batchId;
+
+    if (effectiveVariantId == null && product.variants.isNotEmpty) {
+      Map<String, dynamic>? selectedV;
+      for (final v in product.variants) {
+        if (ApiProduct.getVariantStock(v, haveTracking: product.haveTracking) > 0 || ApiProduct.getVariantPrice(v) > 0) {
+          selectedV = v;
+          break;
+        }
+      }
+      selectedV ??= product.variants.first;
+      effectiveVariantId = selectedV['id']?.toString();
+
+      if (effectiveBatchId == null && selectedV['batch_infos'] is List && (selectedV['batch_infos'] as List).isNotEmpty) {
+        for (final b in (selectedV['batch_infos'] as List)) {
+          if (b is Map && b['id'] != null) {
+            effectiveBatchId = b['id'].toString();
+            break;
+          }
+        }
+      }
+    } else if (effectiveVariantId != null && effectiveBatchId == null) {
+      // Find matching variant map to check for nested batch_infos
+      for (final v in product.variants) {
+        if (v['id']?.toString() == effectiveVariantId) {
+          if (v['batch_infos'] is List && (v['batch_infos'] as List).isNotEmpty) {
+            for (final b in (v['batch_infos'] as List)) {
+              if (b is Map && b['id'] != null) {
+                effectiveBatchId = b['id'].toString();
+                break;
+              }
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    if (effectiveBatchId == null && product.batches.isNotEmpty) {
+      effectiveBatchId = product.batches.first['id']?.toString();
+    }
     
     while (attempts < 2) {
       attempts++;
@@ -222,8 +270,8 @@ class ApiCartProvider extends ChangeNotifier {
           shopId: shopId,
           productId: product.id,
           qty: qty,
-          variantId: variantId,
-          batchId: batchId,
+          variantId: effectiveVariantId,
+          batchId: effectiveBatchId,
           unit: product.unit,
         );
         
@@ -235,7 +283,13 @@ class ApiCartProvider extends ChangeNotifier {
         return; // Success!
         
       } on ApiException catch (e) {
-        if (e.statusCode == 400 || e.statusCode == 404 || e.message.toLowerCase().contains('invalid or expired')) {
+        final msg = e.message.toLowerCase();
+        if (e.statusCode == 400 || 
+            e.statusCode == 404 || 
+            msg.contains('invalid') || 
+            msg.contains('expired') || 
+            msg.contains('session') ||
+            msg.contains('not found')) {
           _sessionId = null;
           try {
             final prefs = await SharedPreferences.getInstance();
@@ -243,7 +297,7 @@ class ApiCartProvider extends ChangeNotifier {
             await prefs.remove(_shopKey);
           } catch (_) {}
           
-          if (attempts < 2) continue; // Retry!
+          if (attempts < 2) continue; // Retry with a fresh session!
         }
         _error = e.message;
         _state = CartState.idle;
@@ -330,7 +384,13 @@ class ApiCartProvider extends ChangeNotifier {
         notifyListeners();
         return; // Success!
       } on ApiException catch (e) {
-        if (e.statusCode == 400 || e.statusCode == 404 || e.message.toLowerCase().contains('invalid or expired')) {
+        final msg = e.message.toLowerCase();
+        if (e.statusCode == 400 || 
+            e.statusCode == 404 || 
+            msg.contains('invalid') || 
+            msg.contains('expired') || 
+            msg.contains('session') ||
+            msg.contains('not found')) {
           _sessionId = null;
           try {
             final prefs = await SharedPreferences.getInstance();
@@ -400,8 +460,27 @@ class ApiCartProvider extends ChangeNotifier {
 
       // Clear local mirror after successful sync
       _localMirror.clear();
+    } on NotFoundException catch (_) {
+      _sessionId = null;
+      _items = [];
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_sessionKey);
+        await prefs.remove(_shopKey);
+      } catch (_) {}
+    } on ApiException catch (e) {
+      final msg = e.message.toLowerCase();
+      if (e.statusCode == 404 || e.statusCode == 400 || msg.contains('session') || msg.contains('expired') || msg.contains('invalid') || msg.contains('not found')) {
+        _sessionId = null;
+        _items = [];
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove(_sessionKey);
+          await prefs.remove(_shopKey);
+        } catch (_) {}
+      }
     } catch (_) {
-      // Keep local mirror if sync fails
+      // Keep local mirror if network sync fails
     }
   }
 
@@ -415,6 +494,13 @@ class ApiCartProvider extends ChangeNotifier {
     String? note,
     Map<String, dynamic>? deliveryAddress,
     String? userId,
+    String? addressId,
+    String? fullAddress,
+    double? latitude,
+    double? longitude,
+    String? city,
+    String? pincode,
+    String? state,
   }) async {
     if (_sessionId == null) {
       _error = 'No active cart session.';
@@ -429,24 +515,7 @@ class ApiCartProvider extends ChangeNotifier {
     try {
       final currentTotal = subtotal;
       
-      // 1. Create Customer first using the provided details
-      String? createdCustomerId;
-      try {
-        createdCustomerId = await _customerService.createCustomer(
-          shopId: shopId,
-          name: customerName,
-          mobileNumber: customerPhone,
-          deliveryAddress: deliveryAddress,
-        );
-        _lastCustomerId = createdCustomerId;
-        await _savePersistedCustomerId(createdCustomerId!);
-      } catch (e) {
-        // If customer creation fails, we might still want to proceed, or fail the order.
-        // Failing the order is safer to guarantee customer data integrity.
-        throw Exception('Failed to create customer: $e');
-      }
-
-      // 2. Build additional_infos with customer details, delivery + note
+      // Build additional_infos with customer details, delivery + note (without calling /api/customers)
       final Map<String, dynamic> additionalInfos = {
         'customer_name': customerName,
         'customer_phone': customerPhone,
@@ -464,22 +533,32 @@ class ApiCartProvider extends ChangeNotifier {
         }
       }
 
+      final String? finalAddressId = addressId ?? deliveryAddress?['address_id']?.toString() ?? deliveryAddress?['id']?.toString();
+      final String? finalFullAddress = fullAddress ?? deliveryAddress?['full_address']?.toString() ?? deliveryAddress?['address']?.toString();
+      final double? finalLat = latitude ?? (deliveryAddress?['latitude'] != null ? double.tryParse(deliveryAddress!['latitude'].toString()) : (deliveryAddress?['lat'] != null ? double.tryParse(deliveryAddress!['lat'].toString()) : null));
+      final double? finalLng = longitude ?? (deliveryAddress?['longitude'] != null ? double.tryParse(deliveryAddress!['longitude'].toString()) : (deliveryAddress?['lng'] != null ? double.tryParse(deliveryAddress!['lng'].toString()) : null));
+      final String? finalCity = city ?? deliveryAddress?['city']?.toString();
+      final String? finalPincode = pincode ?? deliveryAddress?['pincode']?.toString();
+      final String? finalState = state ?? deliveryAddress?['state']?.toString();
+
       final payload = CreateOrderPayload(
         shopId: shopId,
         sessionId: _sessionId!,
-        customerId: createdCustomerId,
+        customerId: null,
         status: 'PENDING',
         origin: 'ONLINE',
         paymentInfos: paymentInfos,
         additionalInfos: additionalInfos.isNotEmpty ? additionalInfos : null,
-        userId: userId ?? createdCustomerId ?? 'anonymous',
+        userId: userId,
         name: customerName,
         phone: customerPhone,
-        addressId: deliveryAddress?['id']?.toString() ?? 'N/A',
-        fullAddress: deliveryAddress?['full_address']?.toString() ?? 'Store Pickup',
-        city: deliveryAddress?['city']?.toString() ?? 'Unknown',
-        pincode: deliveryAddress?['pincode']?.toString() ?? '000000',
-        state: deliveryAddress?['state']?.toString() ?? 'Unknown',
+        addressId: finalAddressId,
+        fullAddress: finalFullAddress,
+        latitude: finalLat,
+        longitude: finalLng,
+        city: finalCity,
+        pincode: finalPincode,
+        state: finalState,
       );
 
       final orderItems = _items.map((cartItem) {
@@ -580,11 +659,9 @@ class ApiCartProvider extends ChangeNotifier {
   }
 
   int quantityOf(String productId) {
-    final serverItem = _items.firstWhere(
-      (i) => i.productId == productId,
-      orElse: () => const CartSessionItem(productId: '', shopId: '', qty: 0),
-    );
-    if (serverItem.productId.isNotEmpty) return serverItem.qty.round();
+    for (final item in _items) {
+      if (item.productId == productId) return item.qty.round();
+    }
     return _localMirror[productId]?.qty ?? 0;
   }
 

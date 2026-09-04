@@ -1098,14 +1098,37 @@
         "operationId": "fetch_shops_digitalstore_shops_get",
         "parameters": [
           {
-            "name": "q",
+            "name": "latitude",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "description": "User latitude",
+              "title": "Latitude"
+            },
+            "description": "User latitude"
+          },
+          {
+            "name": "longitude",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "description": "User longitude",
+              "title": "Longitude"
+            },
+            "description": "User longitude"
+          },
+          {
+            "name": "delivery_type",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Q"
-            }
+              "$ref": "#/components/schemas/DeliveryTypeEnum",
+              "description": "Delivery type: PICKUP_ONLY, INSTANT, STANDARD, NATIONWIDE",
+              "default": "INSTANT"
+            },
+            "description": "Delivery type: PICKUP_ONLY, INSTANT, STANDARD, NATIONWIDE"
           },
           {
             "name": "limit",
@@ -1129,6 +1152,18 @@
               "default": 1,
               "title": "Offset"
             }
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "User timezone",
+              "default": "Asia/Kolkata",
+              "title": "Timezone"
+            },
+            "description": "User timezone"
           }
         ],
         "responses": {
@@ -1497,6 +1532,16 @@
           "state"
         ],
         "title": "AddressModel"
+      },
+      "DeliveryTypeEnum": {
+        "type": "string",
+        "enum": [
+          "PICKUP_ONLY",
+          "INSTANT",
+          "STANDARD",
+          "NATIONWIDE"
+        ],
+        "title": "DeliveryTypeEnum"
       },
       "FavoriteProductSchema": {
         "properties": {

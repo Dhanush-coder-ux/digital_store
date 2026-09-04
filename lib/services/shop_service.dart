@@ -15,9 +15,25 @@ class ShopService {
 
   // ── Fetch My Shops ─────────────────────────────────────────────────
 
-  /// Returns all shops
-  Future<List<Shop>> fetchAllShops() async {
-    final body = await _client.get(ApiConfig.dsShops, requiresAuth: true);
+  /// Returns shops based on location using /digitalstore/shops
+  Future<List<Shop>> fetchAllShops({double? lat, double? lng, String? deliveryType}) async {
+    final latitude = lat ?? 0.0;
+    final longitude = lng ?? 0.0;
+
+    final queryParams = {
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+    };
+
+    if (deliveryType != null) {
+      queryParams['delivery_type'] = deliveryType;
+    }
+
+    final body = await _client.get(
+      ApiConfig.dsShops,
+      queryParams: queryParams,
+      requiresAuth: true
+    );
     return _parseShopList(body);
   }
 
@@ -47,19 +63,39 @@ class ShopService {
   // ── Parsers ────────────────────────────────────────────────────────
 
   List<Shop> _parseShopList(dynamic body) {
+    print('ShopService: parseShopList received body of type ${body.runtimeType}');
+    if (body is Map<String, dynamic>) {
+      print('ShopService: body keys = ${body.keys.toList()}');
+    }
     if (body is List) {
-      return body
+      final parsedShops = body
           .whereType<Map<String, dynamic>>()
           .map((e) => Shop.fromJson(e))
           .toList();
+          
+      final Map<String, Shop> uniqueShops = {};
+      for (var shop in parsedShops) {
+        if (shop.id.isNotEmpty) {
+          uniqueShops[shop.id] = shop;
+        }
+      }
+      return uniqueShops.values.toList();
     }
     if (body is Map<String, dynamic>) {
-      final data = body['data'];
+      final data = body['data'] ?? body['datas'];
       if (data is List) {
-        return data
+        final parsedShops = data
             .whereType<Map<String, dynamic>>()
             .map((e) => Shop.fromJson(e))
             .toList();
+            
+        final Map<String, Shop> uniqueShops = {};
+        for (var shop in parsedShops) {
+          if (shop.id.isNotEmpty) {
+            uniqueShops[shop.id] = shop;
+          }
+        }
+        return uniqueShops.values.toList();
       }
       if (data is Map<String, dynamic>) return [Shop.fromJson(data)];
       if (body.containsKey('id')) return [Shop.fromJson(body)];

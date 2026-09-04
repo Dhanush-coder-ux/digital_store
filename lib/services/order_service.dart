@@ -43,7 +43,7 @@ class OrderService {
   Future<List<ApiOrder>> getOrdersByCustomer(String shopId, String customerId) async {
     try {
       final body = await _client.get(
-        '${ApiConfig.orderBase}/by/customer/$shopId/$customerId',
+        ApiConfig.dsOrdersByUser(customerId),
         requiresAuth: true,
       );
       final data = (body is Map) ? body['data'] : null;

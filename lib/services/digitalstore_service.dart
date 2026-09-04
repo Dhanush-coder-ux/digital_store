@@ -307,16 +307,20 @@ class DigitalStoreService {
   // AGGREGATED — SHOPS (via DigitalStore proxy)
   // ═══════════════════════════════════════════════════════════════════
 
-  /// GET /digitalstore/shops?q=&limit=&offset=
+  /// GET /digitalstore/shops?latitude=&longitude=&delivery_type=&limit=&offset=
   Future<dynamic> fetchShops({
-    String query = '',
+    required double latitude,
+    required double longitude,
+    String? deliveryType,
     int limit = 10,
     int offset = 1,
   }) async {
     return await _client.get(
       ApiConfig.dsShops,
       queryParams: {
-        if (query.isNotEmpty) 'q': query,
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        if (deliveryType != null && deliveryType.isNotEmpty) 'delivery_type': deliveryType,
         'limit': limit.toString(),
         'offset': offset.toString(),
       },

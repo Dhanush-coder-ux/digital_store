@@ -17,10 +17,20 @@ class ProductService {
   // ── Fetch Products By Shop ─────────────────────────────────────────
 
   /// Returns all products for the given [shopId].
-  Future<List<ApiProduct>> fetchProductsByShop(String shopId) async {
+  Future<List<ApiProduct>> fetchProductsByShop(
+    String shopId, {
+    String q = '',
+    int limit = 100,
+    int offset = 1,
+  }) async {
     try {
       final body = await _client.get(
         ApiConfig.productsByShop(shopId),
+        queryParams: {
+          if (q.isNotEmpty) 'q': q,
+          'limit': limit.toString(),
+          'offset': offset.toString(),
+        },
         requiresAuth: true,
       );
       return _parseProductList(body);
@@ -44,28 +54,28 @@ class ProductService {
   List<ApiProduct> _parseProductList(dynamic body) {
     if (body is List) {
       return body
-          .whereType<Map<String, dynamic>>()
-          .map((e) => ApiProduct.fromJson(e))
+          .whereType<Map>()
+          .map((e) => ApiProduct.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     }
-    if (body is Map<String, dynamic>) {
+    if (body is Map) {
       final data = body['data'] ?? body['datas'];
       if (data is List) {
         return data
-            .whereType<Map<String, dynamic>>()
-            .map((e) => ApiProduct.fromJson(e))
+            .whereType<Map>()
+            .map((e) => ApiProduct.fromJson(Map<String, dynamic>.from(e)))
             .toList();
       }
-      if (data is Map<String, dynamic>) return [ApiProduct.fromJson(data)];
+      if (data is Map) return [ApiProduct.fromJson(Map<String, dynamic>.from(data))];
     }
     return [];
   }
 
   ApiProduct _parseSingleProduct(dynamic body) {
-    if (body is Map<String, dynamic>) {
+    if (body is Map) {
       final data = body['data'] ?? body['datas'];
-      if (data is Map<String, dynamic>) return ApiProduct.fromJson(data);
-      return ApiProduct.fromJson(body);
+      if (data is Map) return ApiProduct.fromJson(Map<String, dynamic>.from(data));
+      return ApiProduct.fromJson(Map<String, dynamic>.from(body));
     }
     throw Exception('Unexpected response format for product.');
   }

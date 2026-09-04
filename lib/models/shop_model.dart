@@ -20,6 +20,7 @@ class Shop {
   final List<Map<String, dynamic>> announcements;
   final String? createdAt;
   final String? updatedAt;
+  final double? distance;
 
   const Shop({
     required this.id,
@@ -38,6 +39,7 @@ class Shop {
     this.announcements = const [],
     this.createdAt,
     this.updatedAt,
+    this.distance,
   });
 
   factory Shop.fromJson(Map<String, dynamic> json) {
@@ -80,6 +82,7 @@ class Shop {
       announcements: parseListOfMaps(json['announcements']),
       createdAt: json['created_at']?.toString(),
       updatedAt: json['updated_at']?.toString(),
+      distance: json['distance'] != null ? double.tryParse(json['distance'].toString()) : null,
     );
   }
 
@@ -133,5 +136,6 @@ class Shop {
         'announcements': announcements,
         'created_at': createdAt,
         'updated_at': updatedAt,
+        'distance': distance,
       };
 }

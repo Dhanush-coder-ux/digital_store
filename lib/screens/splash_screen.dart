@@ -51,8 +51,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       if (mounted) _haloController.forward();
     });
     
-    // We check session in background but don't auto-navigate
-    _checkSessionInBackground();
+    // We check session in background after first frame but don't auto-navigate
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _checkSessionInBackground();
+    });
   }
 
   Future<void> _checkSessionInBackground() async {

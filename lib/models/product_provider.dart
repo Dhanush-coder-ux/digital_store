@@ -31,7 +31,13 @@ class ProductProvider extends ChangeNotifier {
 
   // ── Fetch Products by Shop ─────────────────────────────────────────
 
-  Future<void> fetchProductsByShop(String shopId, {bool force = false}) async {
+  Future<void> fetchProductsByShop(
+    String shopId, {
+    bool force = false,
+    String q = '',
+    int limit = 100,
+    int offset = 1,
+  }) async {
     if (!force && _productsByShop.containsKey(shopId) && _errorByShop[shopId] == null) {
       return; // Already cached
     }
@@ -41,7 +47,12 @@ class ProductProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _productsByShop[shopId] = await _service.fetchProductsByShop(shopId);
+      _productsByShop[shopId] = await _service.fetchProductsByShop(
+        shopId,
+        q: q,
+        limit: limit,
+        offset: offset,
+      );
     } on ApiException catch (e) {
       _errorByShop[shopId] = e.message;
     } catch (e) {

@@ -94,8 +94,23 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
     }
 
     Map<String, dynamic>? deliveryAddress;
-    if (_addressController.text.trim().isNotEmpty) {
-      deliveryAddress = {'address': _addressController.text.trim()};
+    final profileProvider = context.read<ProfileProvider>();
+    final defaultAddress = profileProvider.defaultAddress;
+    
+    if (defaultAddress != null) {
+      deliveryAddress = {
+        'address_id': defaultAddress.addressId,
+        'full_address': _addressController.text.trim().isNotEmpty
+            ? _addressController.text.trim()
+            : defaultAddress.fullAddress,
+        'city': defaultAddress.city,
+        'pincode': defaultAddress.pincode,
+        'state': defaultAddress.state,
+      };
+    } else if (_addressController.text.trim().isNotEmpty) {
+      deliveryAddress = {
+        'full_address': _addressController.text.trim(),
+      };
     }
 
     final auth = context.read<AuthProvider>();

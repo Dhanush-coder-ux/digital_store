@@ -67,7 +67,7 @@ class DeepLinkHandler {
     final isCustomScheme = (uri.scheme == 'hyperlocal' || uri.scheme == 'hyperlocal-app') && uri.host == 'auth' && uri.path.startsWith('/callback');
     final isWebScheme = (uri.scheme == 'http' || uri.scheme == 'https') && uri.path.startsWith('/auth/callback');
     // We also support intercepting the gateway URL if needed
-    final isGatewayCallback = uri.host == '10.167.188.101' && uri.path.startsWith('/api/auth/callback');
+    final isGatewayCallback = (uri.host == '10.167.188.101' || uri.host == '127.0.0.1' || uri.host == 'localhost') && uri.path.startsWith('/api/auth/callback');
     
     return isCustomScheme || isWebScheme || isGatewayCallback;
   }
@@ -76,11 +76,11 @@ class DeepLinkHandler {
   Future<void> _startLocalServer() async {
     try {
       if (_localAuthServer != null) return;
-      _localAuthServer = await HttpServer.bind(InternetAddress.anyIPv4, 8010);
-      if (kDebugMode) print('[DeepLinkHandler] Local auth server listening on port 8010');
+      _localAuthServer = await HttpServer.bind(InternetAddress.anyIPv4, 8000);
+      if (kDebugMode) print('[DeepLinkHandler] Local auth server listening on port 8000');
       
       _localAuthServer?.listen((HttpRequest request) {
-        if (request.uri.path == '/auth/callback') {
+        if (request.uri.path == '/auth/callback' || request.uri.path == '/api/auth/callback') {
           final tokenId = request.uri.queryParameters['token_id'];
           
           // Respond to the browser

@@ -39,12 +39,61 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
   String? _selectedBatchId;
   Timer? _imageTimer;
 
+  Map<String, dynamic>? get _selectedVariant {
+    if (_selectedVariantId == null || widget.product.variants.isEmpty) return null;
+    for (final v in widget.product.variants) {
+      if (v['id']?.toString() == _selectedVariantId) return v;
+    }
+    return widget.product.variants.first;
+  }
+
+  double get _effectivePrice {
+    if (_selectedVariant != null) {
+      final vp = ApiProduct.getVariantPrice(_selectedVariant!);
+      if (vp > 0) return vp;
+    }
+    return widget.product.displayPrice;
+  }
+
+  double get _effectiveStock {
+    if (_selectedVariant != null) {
+      return ApiProduct.getVariantStock(_selectedVariant!, haveTracking: widget.product.haveTracking);
+    }
+    return widget.product.availableQty;
+  }
+
+  bool get _effectiveInStock => !widget.product.haveTracking || _effectiveStock > 0;
+
+  String? get _effectiveBatchId {
+    if (_selectedBatchId != null) return _selectedBatchId;
+    final v = _selectedVariant;
+    if (v != null && v['batch_infos'] is List && (v['batch_infos'] as List).isNotEmpty) {
+      for (final b in (v['batch_infos'] as List)) {
+        if (b is Map && b['id'] != null) {
+          return b['id'].toString();
+        }
+      }
+    }
+    if (widget.product.batches.isNotEmpty) {
+      return widget.product.batches.first['id']?.toString();
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
-    // Default select first variant/batch if available
+    // Default select first variant/batch if available (prefer one with price or stock)
     if (widget.product.variants.isNotEmpty) {
-      _selectedVariantId = widget.product.variants.first['id']?.toString();
+      Map<String, dynamic>? withStock;
+      for (final v in widget.product.variants) {
+        if (ApiProduct.getVariantStock(v, haveTracking: widget.product.haveTracking) > 0 || ApiProduct.getVariantPrice(v) > 0) {
+          withStock = v;
+          break;
+        }
+      }
+      withStock ??= widget.product.variants.first;
+      _selectedVariantId = withStock['id']?.toString();
     }
     if (widget.product.batches.isNotEmpty) {
       _selectedBatchId = widget.product.batches.first['id']?.toString();
@@ -167,32 +216,10 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
       ],
       flexibleSpace: FlexibleSpaceBar(
         background: images.isNotEmpty
-            ? GestureDetector(
-                onHorizontalDragEnd: (details) {
-                  if (details.primaryVelocity! > 0) { // swipe right
-                    setState(() {
-                      _selectedImageIndex = (_selectedImageIndex - 1) % images.length;
-                      if (_selectedImageIndex < 0) _selectedImageIndex += images.length;
-                    });
-                  } else if (details.primaryVelocity! < 0) { // swipe left
-                    setState(() {
-                      _selectedImageIndex = (_selectedImageIndex + 1) % images.length;
-                    });
-                  }
-                },
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 800),
-                  transitionBuilder: (Widget child, Animation<double> animation) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                  child: CachedNetworkImage(
-                    key: ValueKey<int>(_selectedImageIndex),
-                    imageUrl: images[_selectedImageIndex],
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(color: AppTheme.bgSecondary),
-                    errorWidget: (_, __, ___) => _buildImageFallback(),
-                  ),
-                ),
+            ? CachedNetworkImage(
+                imageUrl: images[_selectedImageIndex],
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => _buildImageFallback(),
               )
             : _buildImageFallback(),
       ),
@@ -259,6 +286,11 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
   // ── Product Info ───────────────────────────────────────────────────
 
   Widget _buildProductInfo(ApiProduct product) {
+    final price = _effectivePrice;
+    final stock = _effectiveStock;
+    final inStock = _effectiveInStock;
+    final selectedVariantName = _selectedVariant?['name']?.toString();
+
     return FadeInUp(
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -322,6 +354,33 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                 ],
               ],
             ),
+            if (selectedVariantName != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSecondary,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.veryLightGray),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(LucideIcons.layers, size: 12, color: AppTheme.primaryBlue),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Variant: $selectedVariantName',
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Price row
@@ -329,7 +388,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '₹${product.displayPrice.toStringAsFixed(0)}',
+                  '₹${price.toStringAsFixed(price.truncateToDouble() == price ? 0 : 2)}',
                   style: TextStyle(
                     fontFamily: 'Outfit',
                     fontSize: 28,
@@ -351,7 +410,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                     ),
                   ),
                 ],
-                if (product.mrp != null && product.mrp! > product.sellingPrice) ...[
+                if (product.mrp != null && product.mrp! > price) ...[
                   const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -372,7 +431,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
-                          '${product.discountPercent!.toStringAsFixed(0)}% off',
+                          '${((product.mrp! - price) / product.mrp! * 100).toStringAsFixed(0)}% off',
                           style: TextStyle(
                             fontFamily: 'Outfit',
                             fontSize: 11,
@@ -395,7 +454,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: product.isInStock
+                    color: inStock
                         ? AppTheme.successGreen
                         : AppTheme.errorRed,
                     shape: BoxShape.circle,
@@ -403,13 +462,13 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  product.isInStock
-                      ? 'In Stock (${product.availableQty.toStringAsFixed(0)} ${product.unit ?? 'units'} available)'
+                  inStock
+                      ? 'In Stock (${stock.toStringAsFixed(0)} ${product.unit ?? 'units'} available)'
                       : 'Out of Stock',
                   style: TextStyle(
                     fontFamily: 'Outfit',
                     fontSize: 13,
-                    color: product.isInStock
+                    color: inStock
                         ? AppTheme.successGreen
                         : AppTheme.errorRed,
                     fontWeight: FontWeight.w600,
@@ -443,14 +502,27 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (product.variants.isNotEmpty) ...[
-              const Text(
-                'Available Options',
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Select Variant / Option',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    '${product.variants.length} options',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12,
+                      color: AppTheme.textTertiary,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
               Wrap(
@@ -459,27 +531,94 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                 children: product.variants.map((v) {
                   final id = v['id']?.toString();
                   final name = v['name']?.toString() ?? 'Option';
+                  final vPrice = ApiProduct.getVariantPrice(v);
+                  final vStock = ApiProduct.getVariantStock(v, haveTracking: product.haveTracking);
                   final isSelected = _selectedVariantId == id;
+                  final hasStock = !product.haveTracking || vStock > 0;
+
                   return GestureDetector(
                     onTap: () => setState(() => _selectedVariantId = id),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: isSelected ? AppTheme.primaryBlue : AppTheme.white,
-                        borderRadius: BorderRadius.circular(8),
+                        color: isSelected
+                            ? AppTheme.primaryBlue
+                            : (hasStock ? AppTheme.white : AppTheme.bgSecondary),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: isSelected ? AppTheme.primaryBlue : AppTheme.veryLightGray,
+                          color: isSelected
+                              ? AppTheme.primaryBlue
+                              : (hasStock ? AppTheme.veryLightGray : Colors.grey.shade300),
+                          width: isSelected ? 2 : 1,
                         ),
                       ),
-                      child: Text(
-                        name,
-                        style: TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? AppTheme.white : AppTheme.textSecondary,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected
+                                  ? AppTheme.white
+                                  : (hasStock ? AppTheme.textPrimary : AppTheme.textTertiary),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (vPrice > 0)
+                                Text(
+                                  '₹${vPrice.toStringAsFixed(vPrice.truncateToDouble() == vPrice ? 0 : 2)}',
+                                  style: TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isSelected
+                                        ? AppTheme.white.withOpacity(0.9)
+                                        : AppTheme.primaryBlue,
+                                  ),
+                                ),
+                              if (vPrice > 0 && !hasStock) ...[
+                                Text(
+                                  ' · ',
+                                  style: TextStyle(
+                                    color: isSelected ? AppTheme.white.withOpacity(0.7) : AppTheme.textTertiary,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                              if (!hasStock)
+                                Text(
+                                  'Out of stock',
+                                  style: TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: isSelected
+                                        ? AppTheme.white.withOpacity(0.8)
+                                        : AppTheme.errorRed,
+                                  ),
+                                ),
+                              if (hasStock && vPrice == 0)
+                                Text(
+                                  '${vStock.toStringAsFixed(0)} in stock',
+                                  style: TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 10,
+                                    color: isSelected
+                                        ? AppTheme.white.withOpacity(0.8)
+                                        : AppTheme.successGreen,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -716,7 +855,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                   // Add to Cart
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: (isAdding || !product.isInStock)
+                      onPressed: (isAdding || !_effectiveInStock)
                           ? null
                           : () async {
                               await cart.addItem(
@@ -724,7 +863,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                                 shopId: widget.shop.id,
                                 qty: _qty.toDouble(),
                                 variantId: _selectedVariantId,
-                                batchId: _selectedBatchId,
+                                batchId: _effectiveBatchId,
                               );
                               if (cart.error != null && mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -770,12 +909,14 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                                 Icon(
                                   inCart
                                       ? Icons.check_circle_rounded
-                                      : Icons.shopping_cart_rounded,
+                                      : (_effectiveInStock ? Icons.shopping_cart_rounded : Icons.do_not_disturb_rounded),
                                   size: 18,
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
-                                  inCart ? 'Added to Cart' : 'Add to Cart',
+                                  !_effectiveInStock
+                                      ? 'Out of Stock'
+                                      : (inCart ? 'Added to Cart' : 'Add to Cart'),
                                   style: const TextStyle(
                                     fontFamily: 'Outfit',
                                     fontSize: 15,

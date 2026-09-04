@@ -18,9 +18,16 @@ class CartService {
 
   /// Creates a new cart session in Redis. Returns the session_id.
   Future<String> initCart() async {
-    final body = await _client.post(ApiConfig.cartInit, requiresAuth: true);
+    final body = await _client.post(ApiConfig.dsCartInit, requiresAuth: true);
     
     if (body is Map<String, dynamic>) {
+      if (body.containsKey('detail')) {
+        final detail = body['detail'];
+        if (detail is String || (detail is Map && detail['success'] != true)) {
+          final msg = detail is Map ? detail['msg'] ?? detail.toString() : detail.toString();
+          throw ApiException(msg, statusCode: 400);
+        }
+      }
       final data = body['data'] ?? body;
       final sessionId = data['session_id']?.toString() ?? '';
       if (sessionId.isNotEmpty) {
@@ -51,7 +58,14 @@ class CartService {
       if (unit != null) 'unit': unit,
     };
 
-    await _client.post(ApiConfig.cartAdd, body: payload, requiresAuth: true);
+    final body = await _client.post(ApiConfig.dsCartAdd, body: payload, requiresAuth: true);
+    if (body is Map<String, dynamic> && body.containsKey('detail')) {
+      final detail = body['detail'];
+      if (detail is String || (detail is Map && detail['success'] != true)) {
+        final msg = detail is Map ? detail['msg'] ?? detail.toString() : detail.toString();
+        throw ApiException(msg, statusCode: 400);
+      }
+    }
   }
 
   // ── Remove Item from Cart ──────────────────────────────────────────
@@ -69,38 +83,55 @@ class CartService {
       if (batchId != null) 'batch_id': batchId,
     };
 
-    await _client.post(ApiConfig.cartRemove, body: payload, requiresAuth: true);
+    final body = await _client.post(ApiConfig.dsCartRemove, body: payload, requiresAuth: true);
+    if (body is Map<String, dynamic> && body.containsKey('detail')) {
+      final detail = body['detail'];
+      if (detail is String || (detail is Map && detail['success'] != true)) {
+        final msg = detail is Map ? detail['msg'] ?? detail.toString() : detail.toString();
+        throw ApiException(msg, statusCode: 400);
+      }
+    }
   }
 
   // ── Cancel Cart Session ────────────────────────────────────────────
 
   Future<void> cancelCart(String sessionId) async {
-    await _client.post(
-      ApiConfig.cartCancel,
+    final body = await _client.post(
+      ApiConfig.dsCartCancel,
       body: {'session_id': sessionId},
       requiresAuth: true,
     );
+    if (body is Map<String, dynamic> && body.containsKey('detail')) {
+      final detail = body['detail'];
+      if (detail is String || (detail is Map && detail['success'] != true)) {
+        final msg = detail is Map ? detail['msg'] ?? detail.toString() : detail.toString();
+        throw ApiException(msg, statusCode: 400);
+      }
+    }
   }
 
   // ── Get Cart ───────────────────────────────────────────────────────
 
   Future<List<CartSessionItem>> getCart(String sessionId) async {
-    try {
-      final body = await _client.get(ApiConfig.cartGet(sessionId), requiresAuth: true);
-      
-      if (body is Map<String, dynamic>) {
-        final data = body['data'] ?? body;
-        final itemsRaw = data['items'] ?? data;
-        if (itemsRaw is List) {
-          return itemsRaw
-              .whereType<Map<String, dynamic>>()
-              .map((e) => CartSessionItem.fromJson(e))
-              .toList();
+    final body = await _client.get(ApiConfig.dsCartGet(sessionId), requiresAuth: true);
+    
+    if (body is Map<String, dynamic>) {
+      if (body.containsKey('detail')) {
+        final detail = body['detail'];
+        if (detail is String || (detail is Map && detail['success'] != true)) {
+          final msg = detail is Map ? detail['msg'] ?? detail.toString() : detail.toString();
+          throw NotFoundException(msg);
         }
       }
-      return [];
-    } on NotFoundException {
-      return []; // Cart expired or not found — treat as empty
+      final data = body['data'] ?? body;
+      final itemsRaw = data['items'] ?? data;
+      if (itemsRaw is List) {
+        return itemsRaw
+            .whereType<Map<String, dynamic>>()
+            .map((e) => CartSessionItem.fromJson(e))
+            .toList();
+      }
     }
+    return [];
   }
 }

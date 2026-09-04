@@ -34,9 +34,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ShopProvider>().fetchAllShops();
-    });
   }
   final CarouselSliderController _carouselController = CarouselSliderController();
   int _currentCarouselIndex = 0;
@@ -76,47 +73,7 @@ class _HomePageState extends State<HomePage> {
     {"label": "Fashion", "icon": LucideIcons.shirt},
   ];
 
-  final List<Map<String, dynamic>> _stores = [
-    {
-      "id": "1",
-      "name": "Grace Super Market",
-      "image": "https://images.unsplash.com/photo-1534723452862-4c874018d66d?auto=format&fit=crop&q=80&w=1000",
-      "rating": 4.8,
-      "reviews": 1200,
-      "deliveryTime": 15,
-      "distance": 1.2,
-      "categories": ["Groceries", "Fresh Produce", "Bakery"],
-      "isOpen": true,
-      "isVerified": true,
-      "time": "15min",
-    },
-    {
-      "id": "2",
-      "name": "Fresh Choice Market",
-      "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&q=80&w=1000",
-      "rating": 4.5,
-      "reviews": 850,
-      "deliveryTime": 25,
-      "distance": 0.8,
-      "categories": ["Organic", "Vegetables", "Dairy"],
-      "isOpen": true,
-      "isVerified": true,
-      "time": "25min",
-    },
-    {
-      "id": "3",
-      "name": "Sweet Tooth Bakery",
-      "image": "https://images.unsplash.com/photo-1555507036-ab1e4006aaeb?auto=format&fit=crop&q=80&w=1000",
-      "rating": 4.9,
-      "reviews": 2100,
-      "deliveryTime": 10,
-      "distance": 0.5,
-      "categories": ["Cakes", "Pastries", "Snacks"],
-      "isOpen": true,
-      "isVerified": true,
-      "time": "10min",
-    },
-  ];
+
 
   Future<void> _onRefresh() async {
     await context.read<ShopProvider>().refresh();
@@ -486,6 +443,13 @@ class _HomePageState extends State<HomePage> {
           setState(() {
             _selectedLocationFilter = index;
           });
+          
+          String deliveryType = 'NATIONWIDE';
+          if (index == 0) deliveryType = 'INSTANT';
+          if (index == 1) deliveryType = 'STANDARD';
+          
+          final loc = context.read<LocationProvider>();
+          context.read<ShopProvider>().setDeliveryType(deliveryType, lat: loc.latitude, lng: loc.longitude);
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
@@ -1845,7 +1809,10 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(provider.error!, style: const TextStyle(color: Colors.red)),
                 TextButton(
-                  onPressed: () => provider.fetchAllShops(),
+                  onPressed: () {
+                    final loc = context.read<LocationProvider>();
+                    provider.fetchAllShops(lat: loc.latitude, lng: loc.longitude);
+                  },
                   child: const Text('Retry'),
                 ),
               ],
@@ -1878,7 +1845,11 @@ class _HomePageState extends State<HomePage> {
                 imageUrl: imageUrl,
                 shopId: shop.id,
                 time: '15-25 min',
-                distance: '1.2km', // Mock for now
+                distance: shop.distance != null 
+                    ? '${shop.distance!.toStringAsFixed(1)}km'
+                    : (shop.displayAddress.isNotEmpty
+                        ? shop.displayAddress.split(',').first
+                        : shop.city),
                 categories: categories,
                 isOpen: true,
                 isVerified: true,

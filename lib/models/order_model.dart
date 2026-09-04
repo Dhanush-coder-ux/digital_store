@@ -178,6 +178,8 @@ class CreateOrderPayload {
   final String? phone;
   final String? addressId;
   final String? fullAddress;
+  final double? latitude;
+  final double? longitude;
   final String? city;
   final String? pincode;
   final String? state;
@@ -197,6 +199,8 @@ class CreateOrderPayload {
     this.phone,
     this.addressId,
     this.fullAddress,
+    this.latitude,
+    this.longitude,
     this.city,
     this.pincode,
     this.state,
@@ -217,6 +221,8 @@ class CreateOrderPayload {
         if (phone != null) 'phone': phone,
         if (addressId != null) 'address_id': addressId,
         if (fullAddress != null) 'full_address': fullAddress,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
         if (city != null) 'city': city,
         if (pincode != null) 'pincode': pincode,
         if (state != null) 'state': state,

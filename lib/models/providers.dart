@@ -540,6 +540,12 @@ class LocationProvider with ChangeNotifier {
     await prefs.setString('saved_addresses', encoded);
   }
 
+  double? _latitude;
+  double? get latitude => _latitude;
+
+  double? _longitude;
+  double? get longitude => _longitude;
+
   Future<AddressModel?> requestLocationAndGeocode() async {
     _isLoading = true;
     notifyListeners();
@@ -549,6 +555,9 @@ class LocationProvider with ChangeNotifier {
       if (status.isGranted) {
         Position position = await Geolocator.getCurrentPosition(
             desiredAccuracy: LocationAccuracy.high);
+        
+        _latitude = position.latitude;
+        _longitude = position.longitude;
         
         List<Placemark> placemarks = await placemarkFromCoordinates(
             position.latitude, position.longitude);
