@@ -15,7 +15,7 @@ class ApiConfig {
   // ═══════════════════════════════════════════════════════════════════
 
   /// GET /api/auth/login-url?service=&version=
-  static String get authLoginUrl => '$gatewayBase/auth/login-url?entity_name=HYPERLOCAL&entity_type=app';
+  static String get authLoginUrl => '$gatewayBase/auth/login-url?entity_name=HYPERLOCAL&entity_type=app&service=HYPERLOCAL_APP';
 
   /// GET /api/auth/callback?token_id=&service=&version=
   static String get authCallback => '$gatewayBase/auth/callback';

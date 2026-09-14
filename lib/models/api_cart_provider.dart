@@ -256,7 +256,7 @@ class ApiCartProvider extends ChangeNotifier {
 
       if (attempts == 1) {
         // Instant local feedback only on first attempt
-        _updateLocalMirror(product, qty);
+        _updateLocalMirror(product, qty, variantId: effectiveVariantId, batchId: effectiveBatchId);
         _productCache[product.id] = product;
         _saveProductCache(); // fire and forget
         _state = CartState.adding;
@@ -322,8 +322,9 @@ class ApiCartProvider extends ChangeNotifier {
     if (_sessionId == null) return;
 
     // Instant local feedback
-    _localMirror.remove(productId);
-    _items.removeWhere((i) => i.productId == productId);
+    final key = '${productId}_${variantId ?? ''}_${batchId ?? ''}';
+    _localMirror.remove(key);
+    _items.removeWhere((i) => i.productId == productId && i.variantId == variantId && i.batchId == batchId);
     _state = CartState.removing;
     _error = null;
     notifyListeners();
@@ -356,7 +357,11 @@ class ApiCartProvider extends ChangeNotifier {
       
       if (_sessionId == null) return;
       if (newQty <= 0) {
-        await removeItem(productId: item.productId);
+        await removeItem(
+          productId: item.productId,
+          variantId: item.variantId,
+          batchId: item.batchId,
+        );
         return;
       }
       
@@ -370,6 +375,8 @@ class ApiCartProvider extends ChangeNotifier {
         await _cartService.removeItem(
           sessionId: _sessionId!,
           productId: item.productId,
+          variantId: item.variantId,
+          batchId: item.batchId,
         );
         await _cartService.addItem(
           sessionId: _sessionId!,
@@ -377,6 +384,8 @@ class ApiCartProvider extends ChangeNotifier {
           productId: item.productId,
           qty: newQty.toDouble(),
           unit: item.unit,
+          variantId: item.variantId,
+          batchId: item.batchId,
         );
         await _syncCart();
         
@@ -561,6 +570,22 @@ class ApiCartProvider extends ChangeNotifier {
         state: finalState,
       );
 
+      if (kDebugMode) {
+        print('\x1B[35m┌──────────────────────────────────────────────────────────────\x1B[0m');
+        print('\x1B[35m│ [CHECKOUT] Sending Exact Customer Info to Backend:\x1B[0m');
+        print('\x1B[35m│ User ID:      $userId\x1B[0m');
+        print('\x1B[35m│ Name:         $customerName\x1B[0m');
+        print('\x1B[35m│ Phone:        $customerPhone\x1B[0m');
+        print('\x1B[35m│ Address ID:   $finalAddressId\x1B[0m');
+        print('\x1B[35m│ Full Address: $finalFullAddress\x1B[0m');
+        print('\x1B[35m│ City:         $finalCity\x1B[0m');
+        print('\x1B[35m│ State:        $finalState\x1B[0m');
+        print('\x1B[35m│ Pincode:      $finalPincode\x1B[0m');
+        print('\x1B[35m│ Latitude:     $finalLat\x1B[0m');
+        print('\x1B[35m│ Longitude:    $finalLng\x1B[0m');
+        print('\x1B[35m└──────────────────────────────────────────────────────────────\x1B[0m');
+      }
+
       final orderItems = _items.map((cartItem) {
         return ApiOrderItem(
           productId: cartItem.productId,
@@ -642,27 +667,39 @@ class ApiCartProvider extends ChangeNotifier {
 
   // ── Local Mirror Helpers ──────────────────────────────────────────
 
-  void _updateLocalMirror(ApiProduct product, double additionalQty) {
-    if (_localMirror.containsKey(product.id)) {
-      _localMirror[product.id]!.qty += additionalQty.round();
+  void _updateLocalMirror(ApiProduct product, double additionalQty, {String? variantId, String? batchId}) {
+    final key = '${product.id}_${variantId ?? ''}_${batchId ?? ''}';
+    if (_localMirror.containsKey(key)) {
+      _localMirror[key]!.qty += additionalQty.round();
     } else {
-      _localMirror[product.id] = LocalCartEntry(
+      _localMirror[key] = LocalCartEntry(
         product: product,
         qty: additionalQty.round(),
+        variantId: variantId,
+        batchId: batchId,
       );
     }
   }
 
-  bool isInCart(String productId) {
-    if (_items.any((i) => i.productId == productId)) return true;
-    return _localMirror.containsKey(productId);
+  bool isVariantInCart(String productId, String? variantId, String? batchId) {
+    if (_items.any((i) => i.productId == productId && i.variantId == variantId && i.batchId == batchId)) return true;
+    final key = '${productId}_${variantId ?? ''}_${batchId ?? ''}';
+    return _localMirror.containsKey(key);
   }
 
-  int quantityOf(String productId) {
+  bool isInCart(String productId) {
+    if (_items.any((i) => i.productId == productId)) return true;
+    return _localMirror.values.any((e) => e.product.id == productId);
+  }
+
+  int quantityOf(String productId, {String? variantId, String? batchId}) {
     for (final item in _items) {
-      if (item.productId == productId) return item.qty.round();
+      if (item.productId == productId && item.variantId == variantId && item.batchId == batchId) {
+        return item.qty.round();
+      }
     }
-    return _localMirror[productId]?.qty ?? 0;
+    final key = '${productId}_${variantId ?? ''}_${batchId ?? ''}';
+    return _localMirror[key]?.qty ?? 0;
   }
 
   void clearError() {
@@ -716,6 +753,13 @@ class ApiCartProvider extends ChangeNotifier {
 class LocalCartEntry {
   final ApiProduct product;
   int qty;
+  final String? variantId;
+  final String? batchId;
 
-  LocalCartEntry({required this.product, required this.qty});
+  LocalCartEntry({
+    required this.product, 
+    required this.qty,
+    this.variantId,
+    this.batchId,
+  });
 }

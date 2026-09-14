@@ -75,102 +75,100 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
             border: Border.all(color: AppTheme.veryLightGray, width: 1),
             boxShadow: AppTheme.shadowMedium,
           ),
-          child: Column(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Image section
-              Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(
-                      top: Radius.circular(AppTheme.radiusXxl),
-                    ),
-                    child: widget.heroTag != null
-                        ? Hero(
-                            tag: widget.heroTag!,
-                            child: _buildImage(),
-                          )
-                        : _buildImage(),
-                  ),
-                  // Open/Closed badge
-                  Positioned(
-                    top: AppTheme.md,
-                    right: AppTheme.md,
-                    child: _buildStatusBadge(),
-                  ),
-                  // Verified badge
-                  if (widget.isVerified)
-                    Positioned(
-                      bottom: AppTheme.md,
-                      left: AppTheme.md,
-                      child: _buildVerifiedBadge(),
-                    ),
-                  // Gradient overlay at bottom
-                  Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 48,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [
-                            AppTheme.darkGray.withOpacity(0.3),
-                            Colors.transparent,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              // Info section
-              Padding(
-                padding: const EdgeInsets.all(AppTheme.lg),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              SizedBox(
+                width: 120,
+                height: 120,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    // Name + Rating row
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.name,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: AppTheme.sm),
-                        _buildRatingChip(context),
-                      ],
-                    ),
-                    const SizedBox(height: AppTheme.xs),
-                    // Categories
-                    Text(
-                      widget.categories.join(' • '),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppTheme.textTertiary,
+                    ClipRRect(
+                      borderRadius: const BorderRadius.horizontal(
+                        left: Radius.circular(AppTheme.radiusXxl),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      child: widget.heroTag != null
+                          ? Hero(
+                              tag: widget.heroTag!,
+                              child: _buildImage(),
+                            )
+                          : _buildImage(),
                     ),
-                    const SizedBox(height: AppTheme.md),
-                    // Info chips row
-                    Row(
-                      children: [
-                        _buildInfoChip(context, LucideIcons.clock, widget.time),
-                        const SizedBox(width: AppTheme.sm),
-                        _buildInfoChip(context, LucideIcons.mapPin, widget.distance),
-                        const Spacer(),
-                        _buildFreeDeliveryChip(context),
-                      ],
+                    // Open/Closed badge
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: _buildStatusBadge(),
                     ),
                   ],
+                ),
+              ),
+              // Info section
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(AppTheme.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Name row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.name,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 17,
+                                color: AppTheme.textPrimary,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (widget.isVerified)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 4),
+                              child: Icon(LucideIcons.checkCircle, color: AppTheme.primaryBlue, size: 16),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Rating & Categories
+                      Row(
+                        children: [
+                          _buildRatingChip(context),
+                          if (widget.categories.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.categories.join(' • '),
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textTertiary,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Info chips row
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _buildInfoChip(context, LucideIcons.clock, widget.time),
+                          _buildInfoChip(context, LucideIcons.mapPin, widget.distance),
+                          _buildFreeDeliveryChip(context),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -183,17 +181,14 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
   Widget _buildImage() {
     return Image.network(
       widget.imageUrl,
-      height: 160,
-      width: double.infinity,
       fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => Container(
-        height: 160,
         color: AppTheme.veryLightGray,
         child: const Center(
           child: Icon(
             LucideIcons.store,
             color: AppTheme.textTertiary,
-            size: 40,
+            size: 32,
           ),
         ),
       ),
@@ -203,73 +198,25 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
   Widget _buildStatusBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.md,
-        vertical: AppTheme.xs + 2,
+        horizontal: 6,
+        vertical: 3,
       ),
       decoration: BoxDecoration(
         color: widget.isOpen
-            ? AppTheme.successGreen.withOpacity(0.15)
-            : AppTheme.errorRed.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(
-          color: widget.isOpen
-              ? AppTheme.successGreen.withOpacity(0.3)
-              : AppTheme.errorRed.withOpacity(0.3),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: widget.isOpen ? AppTheme.successGreen : AppTheme.errorRed,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 5),
-          Text(
-            widget.isOpen ? 'OPEN' : 'CLOSED',
-            style: TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: widget.isOpen ? AppTheme.successGreen : AppTheme.errorRed,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVerifiedBadge() {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppTheme.sm,
-        vertical: AppTheme.xs,
-      ),
-      decoration: BoxDecoration(
-        color: AppTheme.white.withOpacity(0.92),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            ? AppTheme.successGreen.withOpacity(0.85)
+            : AppTheme.errorRed.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
         boxShadow: AppTheme.shadowSmall,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(LucideIcons.checkCircle, color: AppTheme.primaryBlue, size: 12),
-          const SizedBox(width: 4),
-          Text(
-            'Verified',
-            style: TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.primaryBlue,
-            ),
-          ),
-        ],
+      child: Text(
+        widget.isOpen ? 'OPEN' : 'CLOSED',
+        style: const TextStyle(
+          fontFamily: 'Outfit',
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: AppTheme.white,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }

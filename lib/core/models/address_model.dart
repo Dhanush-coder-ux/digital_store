@@ -12,6 +12,8 @@ class AddressModel {
   final String city;
   final String pincode;
   final String state;
+  final double? latitude;
+  final double? longitude;
   final bool isDefault;
 
   const AddressModel({
@@ -21,6 +23,8 @@ class AddressModel {
     required this.city,
     required this.pincode,
     required this.state,
+    this.latitude,
+    this.longitude,
     this.isDefault = false,
   });
 
@@ -32,6 +36,8 @@ class AddressModel {
       city: json['city']?.toString() ?? '',
       pincode: json['pincode']?.toString() ?? '',
       state: json['state']?.toString() ?? '',
+      latitude: json['latitude'] != null ? double.tryParse(json['latitude'].toString()) : null,
+      longitude: json['longitude'] != null ? double.tryParse(json['longitude'].toString()) : null,
       isDefault: json['is_default'] == true,
     );
   }
@@ -43,6 +49,8 @@ class AddressModel {
     'city': city,
     'pincode': pincode,
     'state': state,
+    if (latitude != null) 'latitude': latitude,
+    if (longitude != null) 'longitude': longitude,
     'is_default': isDefault,
   };
 
@@ -53,6 +61,8 @@ class AddressModel {
     String? city,
     String? pincode,
     String? state,
+    double? latitude,
+    double? longitude,
     bool? isDefault,
   }) => AddressModel(
     addressId: addressId ?? this.addressId,
@@ -61,6 +71,8 @@ class AddressModel {
     city: city ?? this.city,
     pincode: pincode ?? this.pincode,
     state: state ?? this.state,
+    latitude: latitude ?? this.latitude,
+    longitude: longitude ?? this.longitude,
     isDefault: isDefault ?? this.isDefault,
   );
 

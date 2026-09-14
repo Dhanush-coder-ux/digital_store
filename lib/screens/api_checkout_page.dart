@@ -15,6 +15,7 @@ import '../models/shop_model.dart';
 import '../models/api_cart_provider.dart';
 import '../models/cart_session_model.dart';
 import '../models/profile_provider.dart';
+import '../models/providers.dart';
 import '../core/auth/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
@@ -95,6 +96,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
 
     Map<String, dynamic>? deliveryAddress;
     final profileProvider = context.read<ProfileProvider>();
+    final locationProvider = context.read<LocationProvider>();
     final defaultAddress = profileProvider.defaultAddress;
     
     if (defaultAddress != null) {
@@ -106,10 +108,16 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
         'city': defaultAddress.city,
         'pincode': defaultAddress.pincode,
         'state': defaultAddress.state,
+        if (defaultAddress.latitude != null || locationProvider.latitude != null) 
+          'latitude': defaultAddress.latitude ?? locationProvider.latitude,
+        if (defaultAddress.longitude != null || locationProvider.longitude != null) 
+          'longitude': defaultAddress.longitude ?? locationProvider.longitude,
       };
     } else if (_addressController.text.trim().isNotEmpty) {
       deliveryAddress = {
         'full_address': _addressController.text.trim(),
+        if (locationProvider.latitude != null) 'latitude': locationProvider.latitude,
+        if (locationProvider.longitude != null) 'longitude': locationProvider.longitude,
       };
     }
 
@@ -813,7 +821,11 @@ class _CartItemRow extends StatelessWidget {
               ),
             ),
             GestureDetector(
-              onTap: () => cart.removeItem(productId: item.productId),
+              onTap: () => cart.removeItem(
+                productId: item.productId,
+                variantId: item.variantId,
+                batchId: item.batchId,
+              ),
               child: const Padding(
                 padding: EdgeInsets.only(top: 4),
                 child: Icon(LucideIcons.trash2, size: 14, color: AppTheme.errorRed),

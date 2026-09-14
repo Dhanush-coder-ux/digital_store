@@ -83,14 +83,14 @@ class AuthService {
   /// Fetches the OAuth login URL from the auth service.
   /// GET /api/auth/login-url?service=HYPERLOCAL-APP&version=1
   Future<LoginUrlResponse> getLoginUrl({
-    String service = 'HYPERLOCAL-APP',
+    String service = 'HYPERLOCAL_APP',
     String version = '1',
   }) async {
     final baseUri = Uri.parse(ApiConfig.authLoginUrl);
     final queryParams = Map<String, String>.from(baseUri.queryParameters);
     queryParams['service'] = service;
     queryParams['version'] = version;
-    queryParams['redirect_url'] = 'http://127.0.0.1:8000/api/auth/callback';
+    queryParams['redirect_url'] = 'hyperlocal-app://auth/callback';
     
     final uri = baseUri.replace(queryParameters: queryParams);
     print('DEBUG: Requesting login URL: $uri');
@@ -114,7 +114,7 @@ class AuthService {
   /// GET /api/auth/callback?token_id={tokenId}&service=HYPERLOCAL-APP&version=1
   Future<AuthTokenResponse> exchangeToken(
     String tokenId, {
-    String service = 'HYPERLOCAL-APP',
+    String service = 'HYPERLOCAL_APP',
     String version = '1',
   }) async {
     final uri = Uri.parse(ApiConfig.authCallback).replace(
@@ -122,6 +122,7 @@ class AuthService {
         'token_id': tokenId,
         'service': service,
         'version': version,
+        
       },
     );
 

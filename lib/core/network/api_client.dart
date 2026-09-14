@@ -53,9 +53,12 @@ class ApiClient {
     return _executeWithRetry(() async {
       final uri = _buildUri(url, queryParams);
       final headers = await _buildHeaders(requiresAuth: requiresAuth);
-      if (kDebugMode) print('[ApiClient] GET $uri');
+      _logRequest('GET', uri, headers, null);
+      final stopwatch = Stopwatch()..start();
       final response = await http.get(uri, headers: headers)
           .timeout(timeout ?? _defaultTimeout);
+      stopwatch.stop();
+      _logResponse(response, stopwatch.elapsed);
       return _handleResponse(response);
     }, url: url, requiresAuth: requiresAuth);
   }
@@ -70,12 +73,16 @@ class ApiClient {
     return _executeWithRetry(() async {
       final uri = _buildUri(url, queryParams);
       final headers = await _buildHeaders(requiresAuth: requiresAuth);
-      if (kDebugMode) print('[ApiClient] POST $uri');
+      final encodedBody = body != null ? jsonEncode(body) : null;
+      _logRequest('POST', uri, headers, encodedBody);
+      final stopwatch = Stopwatch()..start();
       final response = await http.post(
         uri,
         headers: headers,
-        body: body != null ? jsonEncode(body) : null,
+        body: encodedBody,
       ).timeout(timeout ?? _defaultTimeout);
+      stopwatch.stop();
+      _logResponse(response, stopwatch.elapsed);
       return _handleResponse(response);
     }, url: url, requiresAuth: requiresAuth);
   }
@@ -90,12 +97,16 @@ class ApiClient {
     return _executeWithRetry(() async {
       final uri = _buildUri(url, queryParams);
       final headers = await _buildHeaders(requiresAuth: requiresAuth);
-      if (kDebugMode) print('[ApiClient] PUT $uri');
+      final encodedBody = body != null ? jsonEncode(body) : null;
+      _logRequest('PUT', uri, headers, encodedBody);
+      final stopwatch = Stopwatch()..start();
       final response = await http.put(
         uri,
         headers: headers,
-        body: body != null ? jsonEncode(body) : null,
+        body: encodedBody,
       ).timeout(timeout ?? _defaultTimeout);
+      stopwatch.stop();
+      _logResponse(response, stopwatch.elapsed);
       return _handleResponse(response);
     }, url: url, requiresAuth: requiresAuth);
   }
@@ -109,9 +120,12 @@ class ApiClient {
     return _executeWithRetry(() async {
       final uri = _buildUri(url, queryParams);
       final headers = await _buildHeaders(requiresAuth: requiresAuth);
-      if (kDebugMode) print('[ApiClient] DELETE $uri');
+      _logRequest('DELETE', uri, headers, null);
+      final stopwatch = Stopwatch()..start();
       final response = await http.delete(uri, headers: headers)
           .timeout(timeout ?? _defaultTimeout);
+      stopwatch.stop();
+      _logResponse(response, stopwatch.elapsed);
       return _handleResponse(response);
     }, url: url, requiresAuth: requiresAuth);
   }
@@ -201,10 +215,6 @@ class ApiClient {
       body = response.body;
     }
 
-    if (kDebugMode && statusCode >= 400) {
-      print('[ApiClient] Error $statusCode: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
-    }
-
     if (statusCode >= 200 && statusCode < 300) {
       return body;
     }
@@ -271,5 +281,43 @@ class ApiClient {
       }
     }
     return [];
+  }
+
+  // ── Logging Helpers ───────────────────────────────────────────────
+
+  void _logRequest(String method, Uri uri, Map<String, String> headers, dynamic body) {
+    if (!kDebugMode) return;
+    final buffer = StringBuffer();
+    const color = '\x1B[36m'; // Cyan
+    const reset = '\x1B[0m';
+    buffer.writeln('$color┌──────────────────────────────────────────────────────────────$reset');
+    buffer.writeln('$color│ [REQUEST] $method $uri$reset');
+    buffer.writeln('$color│ Headers: $headers$reset');
+    if (body != null) {
+      buffer.writeln('$color│ Body: $body$reset');
+    }
+    buffer.writeln('$color└──────────────────────────────────────────────────────────────$reset');
+    print(buffer.toString());
+  }
+
+  void _logResponse(http.Response response, [Duration? duration]) {
+    if (!kDebugMode) return;
+    final statusCode = response.statusCode;
+    final isSuccess = statusCode >= 200 && statusCode < 300;
+    final color = isSuccess ? '\x1B[32m' : '\x1B[31m'; // Green if success, Red if error
+    const reset = '\x1B[0m';
+    final durString = duration != null ? ' (${duration.inMilliseconds}ms)' : '';
+    
+    final buffer = StringBuffer();
+    buffer.writeln('$color┌──────────────────────────────────────────────────────────────$reset');
+    buffer.writeln('$color│ [RESPONSE] ${response.request?.method} ${response.request?.url} - $statusCode$durString$reset');
+    
+    String bodyStr = response.body;
+    if (bodyStr.length > 5000) {
+      bodyStr = bodyStr.substring(0, 5000) + '... (truncated)';
+    }
+    buffer.writeln('$color│ Body: $bodyStr$reset');
+    buffer.writeln('$color└──────────────────────────────────────────────────────────────$reset');
+    print(buffer.toString());
   }
 }

@@ -25,6 +25,7 @@ class CartSessionItem {
   });
 
   factory CartSessionItem.fromJson(Map<String, dynamic> json) {
+    print('DEBUG CART JSON: $json');
     double parseDouble(dynamic val) {
       if (val == null) return 1.0;
       if (val is double) return val;
