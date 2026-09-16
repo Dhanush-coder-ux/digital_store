@@ -1643,8 +1643,8 @@ class _QuickAddButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<ApiCartProvider>(
       builder: (context, cart, _) {
-        final qty = cart.quantityOf(product.id);
-        final isAdding = cart.state == CartState.adding;
+        final qty = cart.totalQuantityOf(product.id);
+        final isAdding = cart.state == CartState.adding && cart.addingProductId == product.id;
 
         if (qty > 0) {
           return Container(
@@ -1666,9 +1666,18 @@ class _QuickAddButton extends StatelessWidget {
                       }
                     }
                     if (item != null) {
-                      await cart.updateQuantity(item, qty - 1);
+                      await cart.updateQuantity(item, item.qty.round() - 1);
                     } else {
-                      await cart.removeItem(productId: product.id);
+                      String? variantId;
+                      String? batchId;
+                      for (final entry in cart.localItems) {
+                        if (entry.product.id == product.id) {
+                          variantId = entry.variantId;
+                          batchId = entry.batchId;
+                          break;
+                        }
+                      }
+                      await cart.removeItem(productId: product.id, variantId: variantId, batchId: batchId);
                     }
                   },
                   child: const SizedBox(
@@ -1687,10 +1696,20 @@ class _QuickAddButton extends StatelessWidget {
                   ),
                 ),
                 GestureDetector(
-                  onTap: () => cart.addItem(
-                    product: product,
-                    shopId: shop.id,
-                  ),
+                  onTap: () async {
+                    CartSessionItem? item;
+                    for (final i in cart.items) {
+                      if (i.productId == product.id) {
+                        item = i;
+                        break;
+                      }
+                    }
+                    if (item != null) {
+                      await cart.updateQuantity(item, item.qty.round() + 1);
+                    } else {
+                      cart.addItem(product: product, shopId: shop.id);
+                    }
+                  },
                   child: const SizedBox(
                     width: 28,
                     height: 30,

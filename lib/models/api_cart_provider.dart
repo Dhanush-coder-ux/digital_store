@@ -41,6 +41,7 @@ class ApiCartProvider extends ChangeNotifier {
   String? _error;
   ApiOrder? _lastOrder;
   final List<ApiOrder> _myOrders = [];
+  String? _addingProductId;
 
   // Local quick-add mirror for instant UI feedback before backend sync
   // productId → LocalCartEntry
@@ -58,6 +59,7 @@ class ApiCartProvider extends ChangeNotifier {
   String? get error => _error;
   ApiOrder? get lastOrder => _lastOrder;
   List<ApiOrder> get myOrders => List.unmodifiable(_myOrders);
+  String? get addingProductId => _addingProductId;
 
   bool get isLoading =>
       _state == CartState.loading ||
@@ -260,6 +262,7 @@ class ApiCartProvider extends ChangeNotifier {
         _productCache[product.id] = product;
         _saveProductCache(); // fire and forget
         _state = CartState.adding;
+        _addingProductId = product.id;
         _error = null;
         notifyListeners();
       }
@@ -279,6 +282,7 @@ class ApiCartProvider extends ChangeNotifier {
         await _syncCart();
         
         _state = CartState.idle;
+        _addingProductId = null;
         notifyListeners();
         return; // Success!
         
@@ -299,13 +303,23 @@ class ApiCartProvider extends ChangeNotifier {
           
           if (attempts < 2) continue; // Retry with a fresh session!
         }
+        
+        // Handle intermittent server errors without clearing session
+        if (e.statusCode != null && e.statusCode! >= 500) {
+          if (attempts < 2) {
+            await Future.delayed(const Duration(milliseconds: 500));
+            continue; // Retry
+          }
+        }
         _error = e.message;
         _state = CartState.idle;
+        _addingProductId = null;
         notifyListeners();
         return;
       } catch (e) {
         _error = 'Failed to add item. Try again.';
         _state = CartState.idle;
+        _addingProductId = null;
         notifyListeners();
         return;
       }
@@ -348,6 +362,37 @@ class ApiCartProvider extends ChangeNotifier {
   }
 
   // ── Update Quantity ───────────────────────────────────────────────
+
+  Future<void> updateQuantityByProduct({
+    required ApiProduct product,
+    required String shopId,
+    required int newQty,
+    String? variantId,
+    String? batchId,
+  }) async {
+    CartSessionItem? item;
+    for (final i in _items) {
+      if (i.productId == product.id && i.variantId == variantId && i.batchId == batchId) {
+        item = i;
+        break;
+      }
+    }
+    
+    if (item != null) {
+      await updateQuantity(item, newQty);
+    } else if (newQty == 0) {
+      await removeItem(productId: product.id, variantId: variantId, batchId: batchId);
+    } else {
+      // If it's not in the backend items, maybe add it fresh (or it was just a local mirror)
+      await addItem(
+        product: product,
+        shopId: shopId,
+        qty: newQty.toDouble(),
+        variantId: variantId,
+        batchId: batchId,
+      );
+    }
+  }
 
   Future<void> updateQuantity(CartSessionItem item, int newQty) async {
     int attempts = 0;
@@ -700,6 +745,21 @@ class ApiCartProvider extends ChangeNotifier {
     }
     final key = '${productId}_${variantId ?? ''}_${batchId ?? ''}';
     return _localMirror[key]?.qty ?? 0;
+  }
+
+  int totalQuantityOf(String productId) {
+    int total = 0;
+    for (final item in _items) {
+      if (item.productId == productId) {
+        total += item.qty.round();
+      }
+    }
+    for (final entry in _localMirror.values) {
+      if (entry.product.id == productId && !_items.any((i) => i.productId == productId && i.variantId == entry.variantId && i.batchId == entry.batchId)) {
+        total += entry.qty;
+      }
+    }
+    return total;
   }
 
   void clearError() {

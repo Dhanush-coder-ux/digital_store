@@ -820,15 +820,54 @@ class _CartItemRow extends StatelessWidget {
                 color: AppTheme.textPrimary,
               ),
             ),
-            GestureDetector(
-              onTap: () => cart.removeItem(
-                productId: item.productId,
-                variantId: item.variantId,
-                batchId: item.batchId,
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: AppTheme.veryLightGray),
+                borderRadius: BorderRadius.circular(6),
               ),
-              child: const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Icon(LucideIcons.trash2, size: 14, color: AppTheme.errorRed),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () async {
+                      if (item.qty <= 1) {
+                        await cart.removeItem(
+                          productId: item.productId,
+                          variantId: item.variantId,
+                          batchId: item.batchId,
+                        );
+                      } else {
+                        await cart.updateQuantity(item, item.qty.round() - 1);
+                      }
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.remove_rounded, size: 16, color: AppTheme.textSecondary),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      '${item.qty.round()}',
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () async {
+                      await cart.updateQuantity(item, item.qty.round() + 1);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.add_rounded, size: 16, color: AppTheme.primaryBlue),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

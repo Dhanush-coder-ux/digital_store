@@ -42,7 +42,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 6,
+      length: 4,
       child: Scaffold(
         backgroundColor: AppTheme.bgPrimary,
         appBar: AppBar(
@@ -98,11 +98,9 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                 isScrollable: true,
                 tabs: const [
                   Tab(text: 'Pending'),
-                  Tab(text: 'Processing'),
-                  Tab(text: 'Completed'),
+                  Tab(text: 'Accepted'),
                   Tab(text: 'Canceled'),
-                  Tab(text: 'Refunded'),
-                  Tab(text: 'Exchanged'),
+                  Tab(text: 'Delivered'),
                 ],
               ),
             ),
@@ -111,11 +109,9 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
         body: TabBarView(
           children: [
             _buildOrderList(context, filter: 'PENDING'),
-            _buildOrderList(context, filter: 'PROCESSING'),
-            _buildOrderList(context, filter: 'COMPLETED'),
+            _buildOrderList(context, filter: 'ACCEPTED'),
             _buildOrderList(context, filter: 'CANCELED'),
-            _buildOrderList(context, filter: 'REFUNDED'),
-            _buildOrderList(context, filter: 'EXCHANGED'),
+            _buildOrderList(context, filter: 'DELIVERED'),
           ],
         ),
       ),
@@ -224,7 +220,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
 
   Widget _buildOrderCard(BuildContext context, Map<String, dynamic> order) {
     final bool isDelivered = order['status'] == 'DELIVERED';
-    final bool isCancelled = order['status'] == 'CANCELLED';
+    final bool isCancelled = order['status'] == 'CANCELLED' || order['status'] == 'CANCELED';
 
     Color statusColor;
     Color statusBg;

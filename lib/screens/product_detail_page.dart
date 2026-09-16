@@ -114,6 +114,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   if (_requiresPreOrder) const SizedBox(height: AppTheme.xl),
                   _buildProductDetails(context),
                   const SizedBox(height: AppTheme.xl),
+                  _buildAdditionalInfo(context),
                   _buildRetailerPromise(context),
                   const SizedBox(height: AppTheme.xxxl),
                 ],
@@ -666,6 +667,87 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 ],
               ),
             ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAdditionalInfo(BuildContext context) {
+    final fields = widget.product['custom_fields'];
+    if (fields == null || (fields is Map && fields.isEmpty)) {
+      return const SizedBox.shrink();
+    }
+    
+    Map<String, dynamic> customFields = {};
+    if (fields is Map<String, dynamic>) {
+      customFields = fields;
+    } else if (fields is Map) {
+      customFields = Map<String, dynamic>.from(fields);
+    }
+
+    final displayFields = customFields.entries
+        .where((e) {
+          final k = e.key.toLowerCase();
+          return k != 'varient_type' && k != 'variant_type' && k != 'variant_types' && k != 'varient_types';
+        })
+        .toList();
+
+    if (displayFields.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Additional Info',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+              ),
+        ),
+        const SizedBox(height: AppTheme.md),
+        Container(
+          padding: const EdgeInsets.all(AppTheme.lg),
+          decoration: BoxDecoration(
+            color: AppTheme.white,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+            border: Border.all(color: AppTheme.veryLightGray),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: displayFields.map((entry) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        entry.key,
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        entry.value?.toString() ?? '',
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],

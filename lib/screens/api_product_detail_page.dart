@@ -138,6 +138,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                 _buildSelectors(product),
                 _buildDeliveryInfo(),
                 _buildDescription(product),
+                _buildAdditionalInfo(product),
                 const SizedBox(height: 120), // Bottom CTA space
               ],
             ),
@@ -791,6 +792,86 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
     );
   }
 
+  // ── Additional Info ──────────────────────────────────────────────────
+
+  Widget _buildAdditionalInfo(ApiProduct product) {
+    if (product.customFields == null || product.customFields!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final displayFields = product.customFields!.entries
+        .where((e) {
+          final k = e.key.toLowerCase();
+          return k != 'varient_type' && k != 'variant_type' && k != 'variant_types' && k != 'varient_types';
+        })
+        .toList();
+
+    if (displayFields.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return FadeInUp(
+      delay: const Duration(milliseconds: 250),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Additional Info',
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...displayFields.map((entry) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        entry.key,
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        entry.value?.toString() ?? '',
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Bottom CTA ─────────────────────────────────────────────────────
 
   Widget _buildBottomCTA(ApiProduct product) {
@@ -823,54 +904,89 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Quantity selector
-                  if (!inCart) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Quantity: ',
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textSecondary,
-                          ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Quantity: ',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textSecondary,
                         ),
-                        _QtyButton(
-                          icon: Icons.remove_rounded,
-                          onTap: () {
+                      ),
+                      _QtyButton(
+                        icon: Icons.remove_rounded,
+                        onTap: () async {
+                          if (inCart) {
+                            final currentQty = cart.quantityOf(product.id, variantId: _selectedVariantId, batchId: _effectiveBatchId);
+                            if (currentQty > 0) {
+                              await cart.updateQuantityByProduct(
+                                product: product,
+                                shopId: widget.shop.id,
+                                newQty: currentQty - 1,
+                                variantId: _selectedVariantId,
+                                batchId: _effectiveBatchId,
+                              );
+                            }
+                          } else {
                             if (_qty > 1) setState(() => _qty--);
-                          },
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            '$_qty',
-                            style: const TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.textPrimary,
-                            ),
+                          }
+                        },
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          inCart 
+                            ? '${cart.quantityOf(product.id, variantId: _selectedVariantId, batchId: _effectiveBatchId)}' 
+                            : '$_qty',
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
-                        _QtyButton(
-                          icon: Icons.add_rounded,
-                          onTap: () => setState(() => _qty++),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                      ),
+                      _QtyButton(
+                        icon: Icons.add_rounded,
+                        onTap: () async {
+                          if (inCart) {
+                            final currentQty = cart.quantityOf(product.id, variantId: _selectedVariantId, batchId: _effectiveBatchId);
+                            await cart.updateQuantityByProduct(
+                              product: product,
+                              shopId: widget.shop.id,
+                              newQty: currentQty + 1,
+                              variantId: _selectedVariantId,
+                              batchId: _effectiveBatchId,
+                            );
+                          } else {
+                            setState(() => _qty++);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
 
                   Row(
                     children: [
                       // Add to Cart
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: (isAdding || !_effectiveInStock || inCart)
+                          onPressed: (isAdding || !_effectiveInStock)
                               ? null
                               : () async {
+                                  if (inCart) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => ApiCheckoutPage(shop: widget.shop),
+                                      ),
+                                    );
+                                    return;
+                                  }
                                   await cart.addItem(
                                     product: product,
                                     shopId: widget.shop.id,
@@ -919,7 +1035,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                                     Text(
                                       !_effectiveInStock
                                           ? 'Out of Stock'
-                                          : (inCart ? 'Added to Cart' : 'Add to Cart'),
+                                          : (inCart ? 'Go to Cart' : 'Add to Cart'),
                                       style: const TextStyle(
                                         fontFamily: 'Outfit',
                                         fontSize: 15,
