@@ -171,13 +171,13 @@ class _OrderSuccessPageState extends State<OrderSuccessPage>
         ),
         child: Column(
           children: [
-            _detailRow('Order ID', '#${order.id.split('-').first.toUpperCase()}'),
+            _detailRow('Order ID', '#${(order.uiId ?? order.id).toUpperCase()}'),
             const Divider(height: 20, color: AppTheme.veryLightGray),
             _detailRow('Status', order.status),
             const Divider(height: 20, color: AppTheme.veryLightGray),
             _detailRow(
               'Total',
-              '₹${order.totalAmount.toStringAsFixed(2)}',
+              '₹${order.totalAmount > 0 ? order.totalAmount.toStringAsFixed(2) : ((order.calculationInfos?['total'] ?? 0) > 0 ? (order.calculationInfos!['total'] as num).toStringAsFixed(2) : '0.00')}',
               valueStyle: TextStyle(
                 fontFamily: 'Outfit',
                 fontSize: 16,

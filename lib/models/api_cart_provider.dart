@@ -555,6 +555,7 @@ class ApiCartProvider extends ChangeNotifier {
     String? city,
     String? pincode,
     String? state,
+    double deliveryFee = 0.0,
   }) async {
     if (_sessionId == null) {
       _error = 'No active cart session.';
@@ -577,15 +578,24 @@ class ApiCartProvider extends ChangeNotifier {
       if (note != null && note.isNotEmpty) additionalInfos['note'] = note;
       if (deliveryAddress != null) additionalInfos['delivery_address'] = deliveryAddress;
 
+      final double finalTotal = currentTotal + deliveryFee;
+
       // Build payment_infos
       final Map<String, dynamic> paymentInfos = {};
       if (paymentMethod != null) {
         if (paymentMethod.toUpperCase() == 'CASH ON DELIVERY' || paymentMethod.toUpperCase() == 'COD') {
           paymentInfos[paymentMethod] = 0.0;
         } else {
-          paymentInfos[paymentMethod] = currentTotal;
+          paymentInfos[paymentMethod] = finalTotal;
         }
       }
+
+      final Map<String, dynamic> calculationInfos = {
+        'subtotal': currentTotal,
+        'delivery_fee': deliveryFee,
+        'total': finalTotal,
+        'grand_total': finalTotal,
+      };
 
       final String? finalAddressId = addressId ?? deliveryAddress?['address_id']?.toString() ?? deliveryAddress?['id']?.toString();
       final String? finalFullAddress = fullAddress ?? deliveryAddress?['full_address']?.toString() ?? deliveryAddress?['address']?.toString();
@@ -602,6 +612,7 @@ class ApiCartProvider extends ChangeNotifier {
         status: 'PENDING',
         origin: 'ONLINE',
         paymentInfos: paymentInfos,
+        calculationInfos: calculationInfos,
         additionalInfos: additionalInfos.isNotEmpty ? additionalInfos : null,
         userId: userId,
         name: customerName,
@@ -641,22 +652,59 @@ class ApiCartProvider extends ChangeNotifier {
           unitPrice: cartItem.sellingPrice,
           lineTotal: cartItem.lineTotal,
           productName: cartItem.productName,
+          imageUrl: cartItem.productImage,
         );
       }).toList();
 
       final createdOrder = await _orderService.placeOrder(payload);
       
+      List<ApiOrderItem> finalItems = createdOrder.items.isNotEmpty ? createdOrder.items : orderItems;
+      finalItems = finalItems.map((item) {
+        if (item.imageUrl == null) {
+          final matched = orderItems.where((c) => c.productId == item.productId).firstOrNull;
+          if (matched?.imageUrl != null) {
+            return ApiOrderItem(
+              productId: item.productId,
+              variantId: item.variantId,
+              batchId: item.batchId,
+              qty: item.qty,
+              unit: item.unit,
+              unitPrice: item.unitPrice,
+              lineTotal: item.lineTotal,
+              productName: item.productName,
+              imageUrl: matched!.imageUrl,
+            );
+          }
+        }
+        return item;
+      }).toList();
+
       if (createdOrder.id.isEmpty || createdOrder.id == 'N/A') {
         _lastOrder = ApiOrder(
            id: 'N/A',
            shopId: shopId,
            status: 'PROCESSING',
-           totalAmount: currentTotal,
-           items: orderItems,
+           totalAmount: finalTotal,
+           calculationInfos: calculationInfos,
+           items: finalItems,
            createdAt: DateTime.now().toIso8601String(),
         );
       } else {
-        _lastOrder = createdOrder;
+        _lastOrder = ApiOrder(
+           id: createdOrder.id,
+           uiId: createdOrder.uiId,
+           shopId: createdOrder.shopId,
+           customerId: createdOrder.customerId,
+           status: createdOrder.status,
+           description: createdOrder.description,
+           totalAmount: createdOrder.totalAmount > 0 ? createdOrder.totalAmount : finalTotal,
+           calculationInfos: createdOrder.calculationInfos ?? calculationInfos,
+           paymentInfos: createdOrder.paymentInfos,
+           items: finalItems,
+           createdAt: createdOrder.createdAt,
+           updatedAt: createdOrder.updatedAt,
+           otp: createdOrder.otp,
+        );
       }
       
       _myOrders.add(_lastOrder!);

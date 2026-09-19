@@ -130,6 +130,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
           : null,
       deliveryAddress: deliveryAddress,
       userId: auth.userId,
+      deliveryFee: widget.shop.minDeliveryCharge > 0 ? widget.shop.minDeliveryCharge : AppNumbers.deliveryFee,
     );
 
     if (success && mounted) {

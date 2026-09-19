@@ -110,6 +110,7 @@ class ApiOrderItem {
   final double unitPrice;
   final double lineTotal;
   final String? productName;
+  final String? imageUrl;
 
   const ApiOrderItem({
     required this.productId,
@@ -120,6 +121,7 @@ class ApiOrderItem {
     required this.unitPrice,
     required this.lineTotal,
     this.productName,
+    this.imageUrl,
   });
 
   factory ApiOrderItem.fromJson(Map<String, dynamic> json) {
@@ -128,6 +130,27 @@ class ApiOrderItem {
       if (val is double) return val;
       if (val is int) return val.toDouble();
       return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    String? extractImage() {
+      dynamic img = json['image_url'] ?? json['images'] ?? json['image'] ?? json['product_image'];
+      if (img == null && json['product'] is Map) {
+        img = json['product']['image_url'] ?? json['product']['images'] ?? json['product']['image'];
+      }
+      if (img == null && json['item_info'] is Map) {
+        img = json['item_info']['image_url'] ?? json['item_info']['images'] ?? json['item_info']['image'];
+        if (img == null && json['item_info']['product'] is Map) {
+          img = json['item_info']['product']['image_url'] ?? json['item_info']['product']['images'] ?? json['item_info']['product']['image'];
+        }
+      }
+      if (img is List && img.isNotEmpty) {
+        final str = img.first?.toString() ?? '';
+        return str.isNotEmpty ? str : null;
+      }
+      if (img is String && img.trim().isNotEmpty) {
+        return img;
+      }
+      return null;
     }
 
     return ApiOrderItem(
@@ -140,6 +163,7 @@ class ApiOrderItem {
       lineTotal: parseDouble(json['line_total'] ?? json['total_amount'] ?? 0),
       productName: json['product_name']?.toString() ??
           json['name']?.toString(),
+      imageUrl: extractImage(),
     );
   }
 

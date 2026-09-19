@@ -7,6 +7,13 @@ import '../models/providers.dart';
 import '../models/api_cart_provider.dart';
 import '../models/user_order_provider.dart';
 import '../core/auth/auth_provider.dart';
+import '../models/shop_model.dart';
+import '../models/product_model.dart';
+import '../models/shop_provider.dart';
+import '../models/order_model.dart';
+import '../models/product_provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'api_product_detail_page.dart';
 
 class MyOrdersPage extends StatefulWidget {
   const MyOrdersPage({super.key});
@@ -123,6 +130,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     final auth = context.watch<AuthProvider>();
     final cartProvider = context.watch<ApiCartProvider>();
     final userOrderProvider = context.watch<UserOrderProvider>();
+    final productProvider = context.watch<ProductProvider>();
     
     final sourceOrders = auth.userId != null 
         ? userOrderProvider.orders 
@@ -134,10 +142,17 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
 
     final dynamicOrders = sourceOrders.map((o) {
       return {
-        "id": o.uiId ?? o.id.split('-').first,
+        "id": o.uiId ?? o.id,
+        "shopId": o.shopId,
         "date": o.createdAt != null ? o.createdAt!.split('T').first : "Today",
         "status": o.status,
-        "images": o.items.isNotEmpty ? ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=100"] : [],
+        "images": o.items.isNotEmpty 
+            ? [
+                o.items.first.imageUrl ?? 
+                productProvider.allCachedProducts.where((p) => p.id == o.items.first.productId).firstOrNull?.primaryImage ?? 
+                "https://dummyimage.com/100x100/cccccc/000000.png&text=No+Image"
+              ] 
+            : ["https://dummyimage.com/100x100/cccccc/000000.png&text=No+Image"],
         "title": o.items.isNotEmpty ? (o.items.first.productName ?? "Unknown Product") : "Unknown",
         "subtitle": o.items.length > 1 ? "and ${o.items.length - 1} more items" : null,
         "total": o.totalAmount.toStringAsFixed(2),
@@ -248,15 +263,46 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       statusText = '● In Progress';
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppTheme.lg),
-      padding: const EdgeInsets.all(AppTheme.lg),
-      decoration: BoxDecoration(
-        color: AppTheme.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXxl),
-        border: Border.all(color: AppTheme.veryLightGray),
-        boxShadow: AppTheme.shadowSmall,
-      ),
+    return GestureDetector(
+      onTap: () {
+        if (order['items'] != null && (order['items'] as List).isNotEmpty) {
+          final firstItem = (order['items'] as List).first;
+          if (firstItem is ApiOrderItem) {
+            final shopId = order['shopId']?.toString() ?? '';
+            
+            if (shopId.isNotEmpty) {
+              final shop = context.read<ShopProvider>().shops.firstWhere(
+                (s) => s.id == shopId,
+                orElse: () => Shop(id: shopId, name: 'Shop', categories: []),
+              );
+              
+              final product = ApiProduct(
+                id: firstItem.productId,
+                shopId: shopId,
+                name: firstItem.productName ?? 'Product',
+                sellingPrice: firstItem.unitPrice,
+                imageUrls: firstItem.imageUrl != null ? [firstItem.imageUrl!] : [],
+              );
+              
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ApiProductDetailPage(product: product, shop: shop),
+                ),
+              );
+            }
+          }
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppTheme.lg),
+        padding: const EdgeInsets.all(AppTheme.lg),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXxl),
+          border: Border.all(color: AppTheme.veryLightGray),
+          boxShadow: AppTheme.shadowSmall,
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -459,7 +505,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildThumbnail(String url, bool isCancelled) {
@@ -469,14 +515,29 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         border: Border.all(color: AppTheme.white, width: 2),
-        image: DecorationImage(
-          image: NetworkImage(url),
-          fit: BoxFit.cover,
-          colorFilter: isCancelled
-              ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
-              : null,
-        ),
         boxShadow: AppTheme.shadowSmall,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ColorFiltered(
+        colorFilter: isCancelled
+            ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
+            : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          placeholder: (context, url) => Container(
+            color: AppTheme.bgSecondary,
+            child: const Center(
+              child: Icon(LucideIcons.image, size: 20, color: AppTheme.textTertiary),
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            color: AppTheme.bgSecondary,
+            child: const Center(
+              child: Icon(LucideIcons.package, size: 20, color: AppTheme.textTertiary),
+            ),
+          ),
+        ),
       ),
     );
   }
