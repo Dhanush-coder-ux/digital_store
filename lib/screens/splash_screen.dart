@@ -242,7 +242,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       duration: const Duration(milliseconds: 700),
                       from: 20,
                       child: Text(
-                        'Digital Store',
+                        'Shopper',
                         style: GoogleFonts.instrumentSerif(
                           fontSize: 58,
                           color: const Color(0xFFFFFBF4),

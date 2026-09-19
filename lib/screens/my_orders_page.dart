@@ -3,7 +3,6 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
-import 'live_tracking_page.dart';
 import '../models/providers.dart';
 import '../models/api_cart_provider.dart';
 import '../models/user_order_provider.dart';
@@ -42,7 +41,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         backgroundColor: AppTheme.bgPrimary,
         appBar: AppBar(
@@ -99,6 +98,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                 tabs: const [
                   Tab(text: 'Pending'),
                   Tab(text: 'Accepted'),
+                  Tab(text: 'Out for Delivery'),
                   Tab(text: 'Canceled'),
                   Tab(text: 'Delivered'),
                 ],
@@ -110,6 +110,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
           children: [
             _buildOrderList(context, filter: 'PENDING'),
             _buildOrderList(context, filter: 'ACCEPTED'),
+            _buildOrderList(context, filter: 'OUT_FOR_DELIVERY'),
             _buildOrderList(context, filter: 'CANCELED'),
             _buildOrderList(context, filter: 'DELIVERED'),
           ],
@@ -143,6 +144,7 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
         "actionText": "Track Order",
         "isPrimary": true,
         "items": o.items,
+        "otp": o.otp,
       };
     }).toList();
 
@@ -222,6 +224,8 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     final bool isDelivered = order['status'] == 'DELIVERED';
     final bool isCancelled = order['status'] == 'CANCELLED' || order['status'] == 'CANCELED';
 
+    final bool isOutForDelivery = order['status'] == 'OUT_FOR_DELIVERY';
+
     Color statusColor;
     Color statusBg;
     String statusText;
@@ -234,6 +238,10 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
       statusColor = AppTheme.textTertiary;
       statusBg = AppTheme.bgSecondary;
       statusText = 'Cancelled';
+    } else if (isOutForDelivery) {
+      statusColor = AppTheme.warningOrange;
+      statusBg = AppTheme.warningOrange.withOpacity(0.1);
+      statusText = '🚚 Out for Delivery';
     } else {
       statusColor = AppTheme.infoBlue;
       statusBg = AppTheme.infoBlue.withOpacity(0.1);
@@ -297,6 +305,37 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
               ),
             ],
           ),
+          if (isOutForDelivery && order['otp'] != null) ...[
+            const SizedBox(height: AppTheme.md),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.md, vertical: AppTheme.sm),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.1)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.key, size: 16, color: AppTheme.primaryBlue),
+                  const SizedBox(width: AppTheme.sm),
+                  Text(
+                    'Delivery OTP: ',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.textSecondary),
+                  ),
+                  Text(
+                    order['otp'],
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      color: AppTheme.primaryBlue,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: AppTheme.lg),
           // Images + title
           Row(
@@ -416,7 +455,6 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                   ),
                 ],
               ),
-              _buildActionButton(context, order),
             ],
           ),
         ],
@@ -443,71 +481,4 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
     );
   }
 
-  Widget _buildActionButton(BuildContext context, Map<String, dynamic> order) {
-    if (order['isText'] == true) {
-      return TextButton(
-        onPressed: () {},
-        style: TextButton.styleFrom(
-          padding: EdgeInsets.zero,
-          minimumSize: const Size(60, 32),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: Text(
-          order['actionText'],
-          style: const TextStyle(
-            fontFamily: 'Outfit',
-            color: AppTheme.primaryBlue,
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-          ),
-        ),
-      );
-    }
-
-    final isPrimary = order['isPrimary'] == true;
-
-    return GestureDetector(
-      onTap: () {
-        if (order['actionText'] == 'Track Order') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => LiveTrackingPage(order: order),
-            ),
-          );
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppTheme.lg,
-          vertical: AppTheme.sm,
-        ),
-        decoration: BoxDecoration(
-          color: isPrimary ? AppTheme.primaryBlue : AppTheme.white,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(
-            color: isPrimary ? AppTheme.primaryBlue : AppTheme.veryLightGray,
-          ),
-          boxShadow: isPrimary
-              ? [
-                  BoxShadow(
-                    color: AppTheme.primaryBlue.withOpacity(0.25),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  )
-                ]
-              : [],
-        ),
-        child: Text(
-          order['actionText'],
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            color: isPrimary ? AppTheme.white : AppTheme.textPrimary,
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-          ),
-        ),
-      ),
-    );
-  }
 }

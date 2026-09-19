@@ -723,7 +723,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                     Expanded(
                       flex: 2,
                       child: Text(
-                        entry.key,
+                        entry.key.split('_').map((word) => word.isNotEmpty ? word[0].toUpperCase() + word.substring(1).toLowerCase() : '').join(' '),
                         style: const TextStyle(
                           fontFamily: 'Outfit',
                           fontSize: 13,

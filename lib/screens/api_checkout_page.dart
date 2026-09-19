@@ -39,9 +39,6 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
 
   final List<String> _paymentMethods = [
     'Cash on Delivery',
-    'UPI',
-    'Card',
-    'Net Banking',
   ];
 
   @override

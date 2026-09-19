@@ -18,6 +18,7 @@ class ApiOrder {
   final Map<String, dynamic>? paymentInfos;
   final String? createdAt;
   final String? updatedAt;
+  final String? otp;
 
   const ApiOrder({
     required this.id,
@@ -32,6 +33,7 @@ class ApiOrder {
     this.paymentInfos,
     this.createdAt,
     this.updatedAt,
+    this.otp,
   });
 
   factory ApiOrder.fromJson(Map<String, dynamic> json) {
@@ -86,6 +88,7 @@ class ApiOrder {
           : null,
       createdAt: json['created_at']?.toString(),
       updatedAt: json['updated_at']?.toString(),
+      otp: json['otp']?.toString(),
     );
   }
 
