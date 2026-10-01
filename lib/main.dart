@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 // Theme
 import 'theme/app_theme.dart';
@@ -31,6 +32,7 @@ import 'models/favorites_api_provider.dart';
 import 'models/search_provider.dart';
 import 'models/review_provider.dart';
 import 'models/user_order_provider.dart';
+import 'models/language_provider.dart';
 
 // Screens
 import 'screens/splash_screen.dart';
@@ -138,15 +140,29 @@ class _MyAppState extends State<MyApp> {
             CustomerService(widget.apiClient),
           ),
         ),
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
       ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'DigiStore',
-        theme: AppTheme.lightTheme,
-        home: const SplashScreen(),
-        routes: {
-          '/home': (context) => const MainScreen(),
-          '/login': (context) => const LoginScreen(),
+      child: Consumer<LanguageProvider>(
+        builder: (context, language, child) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'DigiStore',
+            theme: AppTheme.lightTheme,
+            locale: language.currentLocale,
+            supportedLocales: LanguageProvider.supportedLanguages
+                .map((lang) => Locale(lang['code']!))
+                .toList(),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            home: const SplashScreen(),
+            routes: {
+              '/home': (context) => const MainScreen(),
+              '/login': (context) => const LoginScreen(),
+            },
+          );
         },
       ),
     );

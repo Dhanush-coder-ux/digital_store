@@ -488,35 +488,61 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      const Icon(Icons.verified, color: Colors.blue, size: 20),
                     ],
                   ),
                 ),
-                // Open Badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.green.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.circle, color: Colors.green, size: 8),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'Open',
-                        style: TextStyle(
-                          fontFamily: 'Outfit',
-                          color: Colors.green,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                // Timing Badge
+                if (widget.shop.operatingHours.isNotEmpty)
+                  Builder(
+                    builder: (context) {
+                      final hours = widget.shop.operatingHours.first;
+                      final openStr = (hours['open_at'] ?? hours['open_time'] ?? '').toString();
+                      final closeStr = (hours['close_at'] ?? hours['close_time'] ?? '').toString();
+                      
+                      String formatTime(String time) {
+                        if (time.isEmpty) return '';
+                        final parts = time.split(':');
+                        if (parts.length >= 2) {
+                          int h = int.tryParse(parts[0]) ?? 0;
+                          int m = int.tryParse(parts[1]) ?? 0;
+                          String period = h >= 12 ? 'PM' : 'AM';
+                          h = h > 12 ? h - 12 : (h == 0 ? 12 : h);
+                          return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $period';
+                        }
+                        return time;
+                      }
+
+                      final openFormatted = formatTime(openStr);
+                      final closeFormatted = formatTime(closeStr);
+                      final timeText = (openFormatted.isNotEmpty && closeFormatted.isNotEmpty) 
+                          ? '$openFormatted - $closeFormatted' 
+                          : 'Open Now';
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryBlue.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.2)),
                         ),
-                      ),
-                    ],
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.clock, color: AppTheme.primaryBlue, size: 14),
+                            const SizedBox(width: 6),
+                            Text(
+                              timeText,
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                color: AppTheme.primaryBlue,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 6),

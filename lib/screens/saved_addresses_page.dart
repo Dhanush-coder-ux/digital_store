@@ -16,6 +16,8 @@ import '../core/auth/auth_provider.dart';
 import '../core/models/address_model.dart';
 import '../theme/app_theme.dart';
 import '../models/providers.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class SavedAddressesPage extends StatefulWidget {
   const SavedAddressesPage({super.key});
@@ -400,6 +402,53 @@ class _AddAddressModalState extends State<_AddAddressModal> {
   final _phoneCtrl = TextEditingController();
   bool _isDefault = false;
   bool _isSaving = false;
+  bool _isGettingLocation = false;
+
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isGettingLocation = true);
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw Exception('Location services are disabled.');
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception('Location permissions are denied');
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception('Location permissions are permanently denied.');
+      }
+
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+      
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        setState(() {
+          String addressName = [place.street, place.subLocality, place.locality].where((e) => e != null && e.isNotEmpty).join(', ');
+          _fullAddressCtrl.text = addressName.isNotEmpty ? addressName : (place.name ?? '');
+          _cityCtrl.text = place.locality ?? place.subAdministrativeArea ?? '';
+          _stateCtrl.text = place.administrativeArea ?? '';
+          _pincodeCtrl.text = place.postalCode ?? '';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', ''), style: GoogleFonts.outfit()),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isGettingLocation = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -458,6 +507,23 @@ class _AddAddressModalState extends State<_AddAddressModal> {
                       onPressed: () => Navigator.pop(context),
                     ),
                   ],
+                ),
+                const SizedBox(height: AppTheme.md),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isGettingLocation ? null : _getCurrentLocation,
+                    icon: _isGettingLocation 
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
+                        : const Icon(LucideIcons.navigation, size: 18),
+                    label: Text(_isGettingLocation ? 'Getting location...' : 'Use Current Location', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryBlue,
+                      side: BorderSide(color: AppTheme.primaryBlue.withOpacity(0.5)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: AppTheme.xl),
                 _buildTextField(

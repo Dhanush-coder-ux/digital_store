@@ -6,6 +6,7 @@
 //
 
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import '../services/cart_service.dart';
 import '../services/order_service.dart';
 import '../services/customer_service.dart';
@@ -42,6 +43,8 @@ class ApiCartProvider extends ChangeNotifier {
   ApiOrder? _lastOrder;
   final List<ApiOrder> _myOrders = [];
   String? _addingProductId;
+
+  final Map<String, Timer> _debounceTimers = {};
 
   // Local quick-add mirror for instant UI feedback before backend sync
   // productId → LocalCartEntry
@@ -395,78 +398,106 @@ class ApiCartProvider extends ChangeNotifier {
   }
 
   Future<void> updateQuantity(CartSessionItem item, int newQty) async {
-    int attempts = 0;
+    if (_sessionId == null) return;
     
-    while (attempts < 2) {
-      attempts++;
-      
-      if (_sessionId == null) return;
-      if (newQty <= 0) {
-        await removeItem(
-          productId: item.productId,
-          variantId: item.variantId,
-          batchId: item.batchId,
-        );
-        return;
-      }
-      
-      if (attempts == 1) {
-        _state = CartState.adding;
-        _error = null;
+    // Optimistic UI Update
+    final index = _items.indexWhere((i) => i.productId == item.productId && i.variantId == item.variantId && i.batchId == item.batchId);
+    
+    if (newQty <= 0) {
+      if (index != -1) {
+        _items.removeAt(index);
         notifyListeners();
       }
-
-      try {
-        await _cartService.removeItem(
-          sessionId: _sessionId!,
-          productId: item.productId,
-          variantId: item.variantId,
-          batchId: item.batchId,
-        );
-        await _cartService.addItem(
-          sessionId: _sessionId!,
-          shopId: item.shopId,
-          productId: item.productId,
-          qty: newQty.toDouble(),
-          unit: item.unit,
-          variantId: item.variantId,
-          batchId: item.batchId,
-        );
-        await _syncCart();
-        
-        _state = CartState.idle;
-        notifyListeners();
-        return; // Success!
-      } on ApiException catch (e) {
-        final msg = e.message.toLowerCase();
-        if (e.statusCode == 400 || 
-            e.statusCode == 404 || 
-            msg.contains('invalid') || 
-            msg.contains('expired') || 
-            msg.contains('session') ||
-            msg.contains('not found')) {
-          _sessionId = null;
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.remove(_sessionKey);
-            await prefs.remove(_shopKey);
-          } catch (_) {}
-          
-          // Re-init session to avoid returning without one
-          await initCart(item.shopId);
-          if (attempts < 2) continue; // Retry!
-        }
-        _error = 'Failed to update quantity.';
-        _state = CartState.idle;
-        notifyListeners();
-        return;
-      } catch (e) {
-        _error = 'Failed to update quantity.';
-        _state = CartState.idle;
-        notifyListeners();
-        return;
-      }
+      _debouncedBackendUpdate(item.productId, item.variantId, item.batchId, item.shopId, 0, item.unit);
+      return;
     }
+
+    if (index != -1) {
+      _items[index] = CartSessionItem(
+        productId: item.productId,
+        shopId: item.shopId,
+        variantId: item.variantId,
+        batchId: item.batchId,
+        serialnoInfos: item.serialnoInfos,
+        qty: newQty.toDouble(),
+        unit: item.unit,
+        itemInfo: item.itemInfo,
+      );
+      notifyListeners();
+    }
+    
+    _debouncedBackendUpdate(item.productId, item.variantId, item.batchId, item.shopId, newQty.toDouble(), item.unit);
+  }
+
+  void _debouncedBackendUpdate(String productId, String? variantId, String? batchId, String shopId, double newQty, String? unit) {
+    final key = '${productId}_${variantId ?? ''}_${batchId ?? ''}';
+    
+    if (_debounceTimers.containsKey(key)) {
+      _debounceTimers[key]?.cancel();
+    }
+    
+    _debounceTimers[key] = Timer(const Duration(milliseconds: 500), () async {
+      _debounceTimers.remove(key);
+      int attempts = 0;
+      while (attempts < 2) {
+        attempts++;
+        try {
+          await _cartService.removeItem(
+            sessionId: _sessionId!,
+            productId: productId,
+            variantId: variantId,
+            batchId: batchId,
+          );
+          if (newQty > 0) {
+            await _cartService.addItem(
+              sessionId: _sessionId!,
+              shopId: shopId,
+              productId: productId,
+              qty: newQty,
+              unit: unit,
+              variantId: variantId,
+              batchId: batchId,
+            );
+          }
+          
+          // Background sync to ensure backend matches local
+          _syncCart().then((_) {
+            if (hasListeners) notifyListeners();
+          });
+          
+          return; // Success!
+        } on ApiException catch (e) {
+          final msg = e.message.toLowerCase();
+          if (e.statusCode == 400 || 
+              e.statusCode == 404 || 
+              msg.contains('invalid') || 
+              msg.contains('expired') || 
+              msg.contains('session') ||
+              msg.contains('not found')) {
+            _sessionId = null;
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove(_sessionKey);
+              await prefs.remove(_shopKey);
+            } catch (_) {}
+            
+            await initCart(shopId);
+            if (attempts < 2) continue; // Retry!
+          }
+          
+          // On permanent failure, revert cart by syncing
+          _error = 'Failed to update quantity.';
+          await _syncCart();
+          if (hasListeners) notifyListeners();
+          return;
+        } catch (e) {
+          _error = 'Failed to update quantity.';
+          await _syncCart();
+          if (hasListeners) notifyListeners();
+          return;
+        }
+      }
+    });
   }
 
   // ── Get/Sync Cart ─────────────────────────────────────────────────

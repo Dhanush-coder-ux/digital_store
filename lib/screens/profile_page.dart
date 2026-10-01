@@ -15,6 +15,8 @@ import 'package:provider/provider.dart';
 import '../models/profile_provider.dart';
 import '../models/favorites_api_provider.dart';
 import '../core/auth/auth_provider.dart';
+import '../models/language_provider.dart';
+import 'support_faq_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -523,15 +525,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 MaterialPageRoute(builder: (_) => const SavedAddressesPage()),
               ),
             ),
-            _buildDivider(),
-            _buildListTile(
-              context,
-              icon: LucideIcons.creditCard,
-              iconBg: AppTheme.successGreen.withOpacity(0.1),
-              iconColor: AppTheme.successGreen,
-              title: 'Payment Methods',
-              subtitle: 'Visa â€¢â€¢4242',
-            ),
           ],
         ),
       ),
@@ -585,6 +578,10 @@ class _ProfilePageState extends State<ProfilePage> {
               iconColor: AppTheme.mutedCyan,
               title: 'Support & FAQ',
               subtitle: 'Help center, chat',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SupportFaqPage()),
+              ),
             ),
           ],
         ),
@@ -602,28 +599,79 @@ class _ProfilePageState extends State<ProfilePage> {
           boxShadow: AppTheme.shadowSmall,
           border: Border.all(color: AppTheme.veryLightGray),
         ),
-        child: Column(
-          children: [
-            _buildListTile(
-              context,
-              icon: LucideIcons.globe,
-              iconBg: const Color(0xFFEEF2FF),
-              iconColor: const Color(0xFF6366F1),
-              title: 'Language',
-              subtitle: 'English (US)',
-            ),
-            _buildDivider(),
-            _buildListTile(
-              context,
-              icon: LucideIcons.shield,
-              iconBg: AppTheme.primaryBlue.withOpacity(0.08),
-              iconColor: AppTheme.primaryBlue,
-              title: 'Privacy & Security',
-              subtitle: 'Password, permissions',
-            ),
-          ],
+        child: Consumer<LanguageProvider>(
+          builder: (context, languageProvider, _) {
+            return Column(
+              children: [
+                _buildListTile(
+                  context,
+                  icon: LucideIcons.globe,
+                  iconBg: const Color(0xFFEEF2FF),
+                  iconColor: const Color(0xFF6366F1),
+                  title: 'Language',
+                  subtitle: languageProvider.currentLanguageName,
+                  onTap: () => _showLanguageSelector(context, languageProvider),
+                ),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  void _showLanguageSelector(BuildContext context, LanguageProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppTheme.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Select Language',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: AppTheme.md),
+                const Divider(color: AppTheme.veryLightGray),
+                ...LanguageProvider.supportedLanguages.map((lang) {
+                  final isSelected = provider.currentLocale.languageCode == lang['code'];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
+                    title: Text(
+                      lang['name']!,
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 16,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected ? AppTheme.primaryBlue : AppTheme.textPrimary,
+                      ),
+                    ),
+                    trailing: isSelected
+                        ? const Icon(LucideIcons.check, color: AppTheme.primaryBlue)
+                        : null,
+                    onTap: () {
+                      provider.setLanguage(lang['code']!);
+                      Navigator.pop(context);
+                    },
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

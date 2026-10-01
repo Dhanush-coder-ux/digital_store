@@ -60,6 +60,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _checkSessionInBackground() async {
     final authProvider = context.read<AuthProvider>();
     await authProvider.checkSession();
+    
+    if (mounted && authProvider.isAuthenticated) {
+      _enterApp(false);
+    }
   }
 
   void _startStatementRotation() {

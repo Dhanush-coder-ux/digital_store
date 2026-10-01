@@ -1834,9 +1834,11 @@ class _HomePageState extends State<HomePage> {
             // Provide reasonable defaults or calculate them for the UI mock parts
 
             final categories = shop.categories.isNotEmpty ? shop.categories : ['General'];
-            final imageUrl = (shop.bannerUrl != null && shop.bannerUrl!.isNotEmpty) 
-                             ? shop.bannerUrl! 
-                             : 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop';
+            final imageUrl = (shop.logoUrl != null && shop.logoUrl!.isNotEmpty)
+                             ? shop.logoUrl!
+                             : (shop.bannerUrl != null && shop.bannerUrl!.isNotEmpty) 
+                               ? shop.bannerUrl! 
+                               : 'https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop';
             
             return FadeInUp(
               delay: Duration(milliseconds: 80 * (index % 5)),
