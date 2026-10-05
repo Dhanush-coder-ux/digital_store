@@ -18,6 +18,11 @@ import '../theme/app_theme.dart';
 import '../models/providers.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+
 
 class SavedAddressesPage extends StatefulWidget {
   const SavedAddressesPage({super.key});
@@ -400,50 +405,109 @@ class _AddAddressModalState extends State<_AddAddressModal> {
   final _stateCtrl = TextEditingController();
   final _pincodeCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
+  final _searchLocationCtrl = TextEditingController();
+  final MapController _mapController = MapController();
+
   bool _isDefault = false;
   bool _isSaving = false;
+  bool _isSearching = false;
   bool _isGettingLocation = false;
+  
+  List<dynamic> _suggestions = [];
+  String _displayAddress = '';
+
+  double? _latitude;
+  double? _longitude;
+
+  Future<void> _searchLocation(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() => _suggestions = []);
+      return;
+    }
+    setState(() => _isSearching = true);
+    try {
+      final url = Uri.parse('https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(query)}&format=json&addressdetails=1&limit=5');
+      final response = await http.get(url, headers: {'User-Agent': 'digital_app'});
+      if (response.statusCode == 200) {
+        setState(() {
+          _suggestions = json.decode(response.body);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error searching location: $e');
+    } finally {
+      setState(() => _isSearching = false);
+    }
+  }
+
+  Future<void> _reverseGeocode(double lat, double lon) async {
+    try {
+      final url = Uri.parse('https://nominatim.openstreetmap.org/reverse?lat=$lat&lon=$lon&format=json&addressdetails=1');
+      final response = await http.get(url, headers: {'User-Agent': 'digital_app'});
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _handleSelection(data);
+      }
+    } catch (e) {
+      debugPrint('Error reverse geocoding: $e');
+    }
+  }
+
+  void _handleSelection(Map<String, dynamic> item) {
+    final lat = double.parse(item['lat'].toString());
+    final lon = double.parse(item['lon'].toString());
+    
+    final addr = item['address'] ?? {};
+    final city = addr['city'] ?? addr['town'] ?? addr['village'] ?? addr['county'] ?? '';
+    final state = addr['state'] ?? '';
+    final pincode = addr['postcode'] ?? '';
+    final road = addr['road'] ?? '';
+    final suburb = addr['suburb'] ?? addr['neighbourhood'] ?? '';
+    
+    final formattedAddress = [road, suburb, city].where((e) => e.toString().isNotEmpty).join(', ');
+    final dAddress = item['display_name'] ?? '';
+
+    setState(() {
+      _suggestions = [];
+      _searchLocationCtrl.clear();
+      _latitude = lat;
+      _longitude = lon;
+      _displayAddress = dAddress;
+      
+      _fullAddressCtrl.text = formattedAddress.isNotEmpty ? formattedAddress : dAddress.split(',').first;
+      _cityCtrl.text = city;
+      _stateCtrl.text = state;
+      _pincodeCtrl.text = pincode;
+    });
+    
+    try {
+      _mapController.move(LatLng(lat, lon), 16.0);
+    } catch (_) {}
+  }
 
   Future<void> _getCurrentLocation() async {
     setState(() => _isGettingLocation = true);
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw Exception('Location services are disabled.');
-      }
+      if (!serviceEnabled) throw Exception('Location services disabled.');
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          throw Exception('Location permissions are denied');
+          throw Exception('Location permissions denied');
         }
       }
-      
       if (permission == LocationPermission.deniedForever) {
-        throw Exception('Location permissions are permanently denied.');
+        throw Exception('Location permissions permanently denied.');
       }
 
       Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
-      
-      if (placemarks.isNotEmpty) {
-        Placemark place = placemarks[0];
-        setState(() {
-          String addressName = [place.street, place.subLocality, place.locality].where((e) => e != null && e.isNotEmpty).join(', ');
-          _fullAddressCtrl.text = addressName.isNotEmpty ? addressName : (place.name ?? '');
-          _cityCtrl.text = place.locality ?? place.subAdministrativeArea ?? '';
-          _stateCtrl.text = place.administrativeArea ?? '';
-          _pincodeCtrl.text = place.postalCode ?? '';
-        });
-      }
+      await _reverseGeocode(position.latitude, position.longitude);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', ''), style: GoogleFonts.outfit()),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))),
       );
     } finally {
       if (mounted) setState(() => _isGettingLocation = false);
@@ -452,6 +516,7 @@ class _AddAddressModalState extends State<_AddAddressModal> {
 
   @override
   void dispose() {
+    _searchLocationCtrl.dispose();
     _fullAddressCtrl.dispose();
     _cityCtrl.dispose();
     _stateCtrl.dispose();
@@ -508,6 +573,103 @@ class _AddAddressModalState extends State<_AddAddressModal> {
                     ),
                   ],
                 ),
+                const SizedBox(height: AppTheme.md),
+                // Search Location Field
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: TextField(
+                    controller: _searchLocationCtrl,
+                    onChanged: (val) {
+                      if (val.length > 2) _searchLocation(val);
+                      else setState(() => _suggestions = []);
+                    },
+                    style: GoogleFonts.outfit(),
+                    decoration: InputDecoration(
+                      hintText: "Search for area, street, or location",
+                      hintStyle: GoogleFonts.outfit(color: Colors.grey.shade500, fontSize: 13),
+                      prefixIcon: const Icon(LucideIcons.search, color: AppTheme.primaryBlue, size: 18),
+                      suffixIcon: _isSearching
+                          ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))
+                          : IconButton(
+                              icon: const Icon(LucideIcons.x, color: Colors.grey, size: 18),
+                              onPressed: () {
+                                _searchLocationCtrl.clear();
+                                setState(() => _suggestions = []);
+                              },
+                            ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    ),
+                  ),
+                ),
+                
+                if (_suggestions.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: _suggestions.length,
+                      separatorBuilder: (c, i) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final item = _suggestions[index];
+                        final parts = item['display_name'].toString().split(', ');
+                        return ListTile(
+                          leading: const Icon(LucideIcons.mapPin, color: AppTheme.primaryBlue, size: 18),
+                          title: Text(parts.isNotEmpty ? parts.first : '', style: GoogleFonts.outfit(fontWeight: FontWeight.w600, fontSize: 14)),
+                          subtitle: Text(parts.length > 1 ? parts.sublist(1).join(', ') : '', maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.outfit(fontSize: 12)),
+                          onTap: () => _handleSelection(item),
+                        );
+                      },
+                    ),
+                  ),
+                
+                if (_latitude != null && _longitude != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 16),
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: LatLng(_latitude!, _longitude!),
+                          initialZoom: 16.0,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.example.digital_app',
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: LatLng(_latitude!, _longitude!),
+                                width: 40,
+                                height: 40,
+                                child: const Icon(LucideIcons.mapPin, color: Colors.red, size: 30),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                
                 const SizedBox(height: AppTheme.md),
                 SizedBox(
                   width: double.infinity,
@@ -687,6 +849,8 @@ class _AddAddressModalState extends State<_AddAddressModal> {
         city: _cityCtrl.text.trim(),
         pincode: _pincodeCtrl.text.trim(),
         state: _stateCtrl.text.trim(),
+        latitude: _latitude,
+        longitude: _longitude,
         isDefault: _isDefault || isFirstAddress,
       );
 

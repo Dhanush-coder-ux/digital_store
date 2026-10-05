@@ -5,6 +5,7 @@
 //
 
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -138,6 +139,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                 _buildSelectors(product),
                 _buildDeliveryInfo(),
                 _buildDescription(product),
+                _buildReturnPolicy(product),
                 _buildAdditionalInfo(product),
                 const SizedBox(height: 120), // Bottom CTA space
               ],
@@ -792,6 +794,89 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
     );
   }
 
+  // ── Return Policy ──────────────────────────────────────────────────
+
+  Widget _buildReturnPolicy(ApiProduct product) {
+    if (product.returnPolicy == null || product.returnPolicy.toString().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
+    Map<String, dynamic>? policyData;
+    try {
+      final raw = product.returnPolicy;
+      if (raw is Map) {
+        policyData = Map<String, dynamic>.from(raw);
+      } else if (raw is String) {
+        final parsed = json.decode(raw);
+        if (parsed is Map) {
+          policyData = Map<String, dynamic>.from(parsed);
+        }
+      }
+    } catch (_) {}
+
+    return FadeInUp(
+      delay: const Duration(milliseconds: 250),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        decoration: BoxDecoration(
+          color: AppTheme.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            initiallyExpanded: true,
+            tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            collapsedIconColor: AppTheme.primaryBlue,
+            iconColor: AppTheme.primaryBlue,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: AppTheme.primaryBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(LucideIcons.refreshCcw, size: 16, color: AppTheme.primaryBlue),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Return Policy',
+                  style: TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                ),
+              ],
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16, left: 52, right: 16),
+                child: policyData != null
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (policyData['title'] != null)
+                            Text(policyData['title'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                          if (policyData['title'] != null) const SizedBox(height: 6),
+                          if (policyData['details'] != null)
+                            Text(policyData['details'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5)),
+                          if (policyData['subtitle'] != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(color: AppTheme.bgSecondary, borderRadius: BorderRadius.circular(6)),
+                              child: Text(policyData['subtitle'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 12, color: AppTheme.textTertiary)),
+                            ),
+                          ],
+                        ],
+                      )
+                    : Text(
+                        product.returnPolicy.toString(),
+                        style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Additional Info ──────────────────────────────────────────────────
 
   Widget _buildAdditionalInfo(ApiProduct product) {
@@ -802,7 +887,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
     final displayFields = product.customFields!.entries
         .where((e) {
           final k = e.key.toLowerCase();
-          return k != 'varient_type' && k != 'variant_type' && k != 'variant_types' && k != 'varient_types';
+          return k != 'varient_type' && k != 'variant_type' && k != 'variant_types' && k != 'varient_types' && k != 'return_policy';
         })
         .toList();
 
@@ -814,59 +899,79 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
       delay: const Duration(milliseconds: 250),
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: AppTheme.white,
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Additional Info',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...displayFields.map((entry) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        entry.key.split('_').map((word) => word.isNotEmpty ? word[0].toUpperCase() + word.substring(1).toLowerCase() : '').join(' '),
-                        style: const TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppTheme.textTertiary,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        entry.value?.toString() ?? '',
-                        style: const TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            initiallyExpanded: true,
+            tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            collapsedIconColor: AppTheme.primaryBlue,
+            iconColor: AppTheme.primaryBlue,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: AppTheme.primaryBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(LucideIcons.info, size: 16, color: AppTheme.primaryBlue),
                 ),
-              );
-            }).toList(),
-          ],
+                const SizedBox(width: 12),
+                const Text(
+                  'Additional Info',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16, left: 52, right: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: displayFields.map((entry) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              entry.key.split('_').map((word) => word.isNotEmpty ? word[0].toUpperCase() + word.substring(1).toLowerCase() : '').join(' '),
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppTheme.textTertiary,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              entry.value?.toString() ?? '',
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

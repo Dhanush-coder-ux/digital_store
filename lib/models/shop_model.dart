@@ -105,6 +105,18 @@ class Shop {
     return parts.join(', ');
   }
 
+  /// Convenience getter: Return Policy
+  dynamic get returnPolicy {
+    if (additionalInfos == null) return null;
+    return additionalInfos!['return_policy'];
+  }
+
+  /// Convenience getter: Delivery Info Message
+  String? get deliveryInfoMessage {
+    if (additionalInfos == null) return null;
+    return additionalInfos!['delivery_info_message']?.toString();
+  }
+
   /// Whether there's a delivery option configured
   bool get hasDelivery => deliveryOptions.isNotEmpty;
 

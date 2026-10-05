@@ -24,6 +24,7 @@ class ApiProduct {
   final String? barcode;
   final String? sku;
   final Map<String, dynamic>? customFields;
+  final Map<String, dynamic>? additionalInfos;
   final String? createdAt;
 
   const ApiProduct({
@@ -47,6 +48,7 @@ class ApiProduct {
     this.barcode,
     this.sku,
     this.customFields,
+    this.additionalInfos,
     this.createdAt,
   });
 
@@ -212,6 +214,9 @@ class ApiProduct {
       customFields: productData['custom_fields'] is Map
           ? Map<String, dynamic>.from(productData['custom_fields'] as Map)
           : null,
+      additionalInfos: productData['additional_infos'] is Map
+          ? Map<String, dynamic>.from(productData['additional_infos'] as Map)
+          : null,
       createdAt: productData['created_at']?.toString(),
     );
   }
@@ -240,6 +245,17 @@ class ApiProduct {
 
   /// Whether product is in stock
   bool get isInStock => !haveTracking || availableQty > 0;
+
+  /// Convenience getter: Return Policy
+  dynamic get returnPolicy {
+    if (additionalInfos != null && additionalInfos!['return_policy'] != null) {
+      return additionalInfos!['return_policy'];
+    }
+    if (customFields != null && customFields!['return_policy'] != null) {
+      return customFields!['return_policy'];
+    }
+    return null;
+  }
 
   /// Display price (selling price if available, else fallback to mrp)
   double get displayPrice => sellingPrice > 0 ? sellingPrice : (mrp ?? 0);

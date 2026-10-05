@@ -4,6 +4,7 @@
 // Products are loaded lazily when the page is first opened.
 //
 
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
@@ -214,6 +215,7 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
             _buildShopInfo(),
             if (widget.shop.deliveryOptions.isNotEmpty) _buildDeliveryInformationSection(),
             _buildAnnouncementsSection(),
+            _buildSearchAndCategoriesSection(),
             _buildProductsSection(),
             _buildReviewsSection(),
           ],
@@ -235,96 +237,7 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
         icon: const Icon(LucideIcons.arrowLeft, color: Colors.black, size: 24),
         onPressed: () => Navigator.pop(context),
       ),
-      title: Text(
-        widget.shop.name,
-        style: const TextStyle(
-          fontFamily: 'Outfit',
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          color: Colors.black,
-        ),
-      ),
       actions: [
-        Consumer2<FavoritesApiProvider, AuthProvider>(
-          builder: (context, favorites, auth, child) {
-            final isFav = favorites.isShopFavorited(widget.shop.id);
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4.0),
-                child: SizedBox(
-                  height: 32,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isFav ? Colors.grey[200] : AppTheme.primaryBlue,
-                      foregroundColor: isFav ? Colors.black87 : Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                    ),
-                    onPressed: () async {
-                      if (_isFollowLoading) return;
-                      if (auth.userId == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please log in to follow shops'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                        return;
-                      }
-                      
-                      setState(() => _isFollowLoading = true);
-                      
-                      await favorites.toggleShopFavorite(auth.userId!, widget.shop.id);
-                      
-                      if (mounted) {
-                        setState(() => _isFollowLoading = false);
-                        if (favorites.error != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(favorites.error!),
-                              backgroundColor: AppTheme.errorRed,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                          favorites.clearError();
-                        }
-                      }
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_isFollowLoading) ...[
-                          SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                isFav ? Colors.black54 : Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        Text(
-                          isFav ? 'Following' : 'Follow',
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
         IconButton(
           icon: const Icon(LucideIcons.share2, color: Colors.black, size: 20),
           onPressed: () {},
@@ -332,21 +245,24 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
         _CartBadgeButton(shop: widget.shop),
         const SizedBox(width: 8),
       ],
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(138),
-        child: Container(
-          color: AppTheme.white,
-          child: Consumer<ProductProvider>(
-            builder: (context, pp, _) {
-              final categories = pp.categoriesForShop(widget.shop.id);
-              return Column(
-                children: [
-                  _buildSearchBarInAppBar(),
-                  if (categories.isNotEmpty) _buildZeptoCategories(categories),
-                ],
-              );
-            },
-          ),
+    );
+  }
+
+  SliverToBoxAdapter _buildSearchAndCategoriesSection() {
+    return SliverToBoxAdapter(
+      child: Container(
+        color: AppTheme.white,
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Consumer<ProductProvider>(
+          builder: (context, pp, _) {
+            final categories = pp.categoriesForShop(widget.shop.id);
+            return Column(
+              children: [
+                _buildSearchBarInAppBar(),
+                if (categories.isNotEmpty) _buildZeptoCategories(categories),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -463,102 +379,184 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
   // ── Shop Info Card ─────────────────────────────────────────────────
 
   SliverToBoxAdapter _buildShopInfo() {
+    final hasBanner = widget.shop.bannerUrl != null && widget.shop.bannerUrl!.isNotEmpty;
+    final hasLogo = widget.shop.logoUrl != null && widget.shop.logoUrl!.isNotEmpty;
+
     return SliverToBoxAdapter(
       child: Container(
         color: AppTheme.white,
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Name and Verified
-            Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          widget.shop.name,
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: AppTheme.textPrimary,
+            // Banner & Logo Stack
+            if (hasBanner || hasLogo)
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  if (hasBanner)
+                    Container(
+                      height: 160,
+                      width: double.infinity,
+                      color: AppTheme.bgSecondary,
+                      child: CachedNetworkImage(
+                        imageUrl: widget.shop.bannerUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (context, url, error) => const SizedBox(),
+                      ),
+                    )
+                  else
+                    Container(
+                      height: 40,
+                      width: double.infinity,
+                      color: Colors.transparent,
+                    ),
+                  
+                  if (hasLogo)
+                    Positioned(
+                      left: 24,
+                      bottom: -28,
+                      child: Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: AppTheme.white,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: CachedNetworkImage(
+                            imageUrl: widget.shop.logoUrl!,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, url, error) => const Icon(LucideIcons.store, color: AppTheme.primaryBlue, size: 32),
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ],
+                    ),
+                ],
+              ),
+            
+            Padding(
+              padding: EdgeInsets.fromLTRB(24, (hasLogo ? 40.0 : 12.0), 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Name and Verified
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.shop.name,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                      height: 1.2,
+                    ),
                   ),
                 ),
-                // Timing Badge
-                if (widget.shop.operatingHours.isNotEmpty)
-                  Builder(
-                    builder: (context) {
-                      final hours = widget.shop.operatingHours.first;
-                      final openStr = (hours['open_at'] ?? hours['open_time'] ?? '').toString();
-                      final closeStr = (hours['close_at'] ?? hours['close_time'] ?? '').toString();
-                      
-                      String formatTime(String time) {
-                        if (time.isEmpty) return '';
-                        final parts = time.split(':');
-                        if (parts.length >= 2) {
-                          int h = int.tryParse(parts[0]) ?? 0;
-                          int m = int.tryParse(parts[1]) ?? 0;
-                          String period = h >= 12 ? 'PM' : 'AM';
-                          h = h > 12 ? h - 12 : (h == 0 ? 12 : h);
-                          return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $period';
-                        }
-                        return time;
-                      }
-
-                      final openFormatted = formatTime(openStr);
-                      final closeFormatted = formatTime(closeStr);
-                      final timeText = (openFormatted.isNotEmpty && closeFormatted.isNotEmpty) 
-                          ? '$openFormatted - $closeFormatted' 
-                          : 'Open Now';
-
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryBlue.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.2)),
+                const SizedBox(width: 12),
+                Consumer2<FavoritesApiProvider, AuthProvider>(
+                  builder: (context, favorites, auth, child) {
+                    final isFav = favorites.isShopFavorited(widget.shop.id);
+                    return SizedBox(
+                      height: 32,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isFav ? Colors.grey[200] : AppTheme.primaryBlue,
+                          foregroundColor: isFav ? Colors.black87 : Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
+                        onPressed: () async {
+                          if (_isFollowLoading) return;
+                          if (auth.userId == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Please log in to follow shops'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                            return;
+                          }
+                          
+                          setState(() => _isFollowLoading = true);
+                          
+                          await favorites.toggleShopFavorite(auth.userId!, widget.shop.id);
+                          
+                          if (mounted) {
+                            setState(() => _isFollowLoading = false);
+                            if (favorites.error != null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(favorites.error!),
+                                  backgroundColor: AppTheme.errorRed,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                              favorites.clearError();
+                            }
+                          }
+                        },
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(LucideIcons.clock, color: AppTheme.primaryBlue, size: 14),
-                            const SizedBox(width: 6),
+                            if (_isFollowLoading) ...[
+                              SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    isFav ? Colors.black54 : Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
                             Text(
-                              timeText,
+                              isFav ? 'Following' : 'Follow',
                               style: const TextStyle(
                                 fontFamily: 'Outfit',
-                                color: AppTheme.primaryBlue,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w600,
                                 fontSize: 13,
                               ),
                             ),
                           ],
                         ),
-                      );
-                    }
-                  ),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 6),
             // Tagline
-            Text(
-              widget.shop.tagline?.isNotEmpty == true
-                  ? widget.shop.tagline!
-                  : 'Baked fresh every morning, with love.',
-              style: const TextStyle(
-                fontFamily: 'Georgia',
-                fontStyle: FontStyle.italic,
-                color: Colors.black54,
-                fontSize: 15,
+            if (widget.shop.tagline?.isNotEmpty == true) ...[
+              Text(
+                widget.shop.tagline!,
+                style: const TextStyle(
+                  fontFamily: 'Georgia',
+                  fontStyle: FontStyle.italic,
+                  color: Colors.black54,
+                  fontSize: 15,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ] else ...[
+              const SizedBox(height: 16),
+            ],
             // Description
             Text(
               widget.shop.description?.isNotEmpty == true
@@ -603,6 +601,122 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                   ],
                 );
               },
+            ),
+            
+
+            // Return Policy
+            if (widget.shop.returnPolicy != null && widget.shop.returnPolicy.toString().isNotEmpty)
+              Builder(
+                builder: (context) {
+                  Map<String, dynamic>? policyData;
+                  try {
+                    final raw = widget.shop.returnPolicy;
+                    if (raw is Map) {
+                      policyData = Map<String, dynamic>.from(raw);
+                    } else if (raw is String) {
+                      final parsed = json.decode(raw);
+                      if (parsed is Map) {
+                        policyData = Map<String, dynamic>.from(parsed);
+                      }
+                    }
+                  } catch (_) {}
+
+                  return Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          initiallyExpanded: true,
+                          tilePadding: EdgeInsets.zero,
+                          collapsedIconColor: AppTheme.primaryBlue,
+                          iconColor: AppTheme.primaryBlue,
+                          title: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(color: AppTheme.primaryBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                                child: const Icon(LucideIcons.refreshCcw, size: 16, color: AppTheme.primaryBlue),
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Return Policy',
+                                style: TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                              ),
+                            ],
+                          ),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12, left: 38, right: 12),
+                              child: policyData != null
+                                  ? Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        if (policyData['title'] != null)
+                                          Text(policyData['title'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
+                                        if (policyData['title'] != null) const SizedBox(height: 6),
+                                        if (policyData['details'] != null)
+                                          Text(policyData['details'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5)),
+                                        if (policyData['subtitle'] != null) ...[
+                                          const SizedBox(height: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(color: AppTheme.bgSecondary, borderRadius: BorderRadius.circular(6)),
+                                            child: Text(policyData['subtitle'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 12, color: AppTheme.textTertiary)),
+                                          ),
+                                        ],
+                                      ],
+                                    )
+                                  : Text(
+                                      widget.shop.returnPolicy.toString(),
+                                      style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }
+              ),
+            
+            // Delivery Information
+            if (widget.shop.deliveryInfoMessage != null && widget.shop.deliveryInfoMessage!.isNotEmpty) ...[
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  initiallyExpanded: true,
+                  tilePadding: EdgeInsets.zero,
+                  collapsedIconColor: AppTheme.primaryBlue,
+                  iconColor: AppTheme.primaryBlue,
+                  title: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: AppTheme.primaryBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                        child: const Icon(LucideIcons.truck, size: 16, color: AppTheme.primaryBlue),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Delivery Information',
+                        style: TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      ),
+                    ],
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12, left: 38, right: 12),
+                      child: Text(
+                        widget.shop.deliveryInfoMessage!,
+                        style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+                ],
+              ),
             ),
           ],
         ),
