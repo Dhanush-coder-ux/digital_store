@@ -9,7 +9,7 @@ import '../models/providers.dart';
 import '../utils/snackbar_util.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
-import 'main_screen.dart';
+import '../widgets/product_bottom_sheet.dart';
 import 'product_detail_page.dart';
 
 class ShopDetailsPage extends StatefulWidget {
@@ -36,6 +36,10 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
   bool _showCartBar = false;
   Timer? _cartBarTimer;
   bool _hasSeenPopup = false; // false = first visit (show dialog), true = returning (show inline)
+
+  // ── Product Bottom Sheet ──────────────────────────────────────────────
+  final ProductSheetController _sheetController = ProductSheetController();
+  final GlobalKey _announcementsKey = GlobalKey();
 
   @override
   void initState() {
@@ -69,6 +73,23 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _allProducts => [
+    ..._productSections[0],
+    ..._productSections[1],
+  ];
+
+  List<Map<String, dynamic>> _filteredProducts(int categoryIndex) {
+    final query = _searchQuery.toLowerCase();
+    final categoryName = _categories[categoryIndex];
+    return _allProducts.where((p) {
+      final matchesQuery = query.isEmpty ||
+          (p['name'] as String).toLowerCase().contains(query);
+      final matchesCategory = categoryIndex == 0 ||
+          (p['category'] as String?) == categoryName;
+      return matchesQuery && matchesCategory;
+    }).toList();
   }
 
   final List<String> _categories = [
@@ -108,53 +129,329 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.bgPrimary,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
-          _buildSliverAppBar(context),
-          SliverAppBar(
-            pinned: true,
-            toolbarHeight: 160,
-            backgroundColor: AppTheme.bgPrimary,
-            elevation: 0,
-            automaticallyImplyLeading: false,
-            flexibleSpace: Padding(
-              padding: const EdgeInsets.all(AppTheme.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSearchBar(context),
-                  const SizedBox(height: AppTheme.xl),
-                  _buildCategoryChips(),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(AppTheme.xl),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_hasSeenPopup) ...[                  
-                    _buildInlineOffersSection(context),
-                    const SizedBox(height: AppTheme.xl),
-                  ],
-                  _buildShopTrendingSection(context),
-                  const SizedBox(height: AppTheme.xxl),
-                  _buildProductSection(context, 'Fresh Fruits', _productSections[0]),
-                  const SizedBox(height: AppTheme.xxl),
-                  _buildProductSection(context, 'Dairy & Eggs', _productSections[1]),
-                  const SizedBox(height: 120),
-                ],
-              ),
-            ),
-          ),
-        ],
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth >= 1024;
+
+    return PopScope(
+      // Intercept back button: collapse the sheet first if expanded.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final consumed = _sheetController.handleBackPress();
+        if (!consumed) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppTheme.bgPrimary,
+        body: isDesktop
+            ? _buildDesktopLayout(context)
+            : _buildMobileLayout(context),
+        bottomSheet: _buildFloatingCartBar(context),
       ),
-      bottomSheet: _buildFloatingCartBar(context),
+    );
+  }
+
+  // ── Mobile: shop info as background, sheet overlaid on top ──────────
+  Widget _buildMobileLayout(BuildContext context) {
+    return Stack(
+      children: [
+        // Background: shop header info (fully scrollable).
+        CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
+          slivers: [
+            _buildSliverAppBar(context),
+            _buildShopInfoSliver(context),
+            _buildBrowseProductsActionCard(context),
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
+        // Foreground: draggable product sheet docked at bottom of mobile.
+        ProductBottomSheet(
+          controller: _sheetController,
+          shopName: _storeName,
+          collapsedFraction: 0.11,
+          midFraction: 0.55,
+          expandedFraction: 0.93,
+          categoryFilterHeight: 48.0,
+          searchBarBuilder: (ctx, sheetState, onTap) =>
+              _buildSheetSearchBar(ctx, onTap),
+          categoryFilter: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: _buildCategoryChips(),
+          ),
+          contentBuilder: (ctx, scrollCtrl, sheetState) =>
+              _buildProductSliver(ctx),
+        ),
+      ],
+    );
+  }
+
+  SliverToBoxAdapter _buildBrowseProductsActionCard(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(AppTheme.xl, 0, AppTheme.xl, AppTheme.xl),
+        child: GestureDetector(
+          onTap: () => _sheetController.expandToHalf(),
+          child: Container(
+            padding: const EdgeInsets.all(AppTheme.lg),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.primaryBlue.withOpacity(0.08),
+                  AppTheme.bgSecondary,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              border: Border.all(
+                color: AppTheme.primaryBlue.withOpacity(0.2),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.primaryBlue,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    LucideIcons.shoppingBag,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: AppTheme.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Explore Products',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Swipe up or tap to browse all products',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    LucideIcons.chevronUp,
+                    color: AppTheme.primaryBlue,
+                    size: 18,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Desktop: traditional full-page layout ───────────────────────────
+  Widget _buildDesktopLayout(BuildContext context) {
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const BouncingScrollPhysics(),
+      slivers: [
+        _buildSliverAppBar(context),
+        _buildShopInfoSliver(context),
+        SliverAppBar(
+          pinned: true,
+          toolbarHeight: 160,
+          backgroundColor: AppTheme.bgPrimary,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          flexibleSpace: Padding(
+            padding: const EdgeInsets.all(AppTheme.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSearchBar(context),
+                const SizedBox(height: AppTheme.xl),
+                _buildCategoryChips(),
+              ],
+            ),
+          ),
+        ),
+        _buildProductSliver(context),
+        const SliverToBoxAdapter(child: SizedBox(height: 120)),
+      ],
+    );
+  }
+
+  // ── Shared shop info sliver (announcements, trending) ───────────────
+  SliverToBoxAdapter _buildShopInfoSliver(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.all(AppTheme.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              key: _announcementsKey,
+              child: _hasSeenPopup
+                  ? _buildInlineOffersSection(context)
+                  : _buildShopTrendingSection(context),
+            ),
+            if (_hasSeenPopup) ...[
+              const SizedBox(height: AppTheme.xl),
+              _buildShopTrendingSection(context),
+            ],
+            const SizedBox(height: AppTheme.xxl),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Product grid sliver used in both layouts ─────────────────────────
+  SliverToBoxAdapter _buildProductSliver(BuildContext context) {
+    final products = _filteredProducts(_selectedCategory);
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.all(AppTheme.xl),
+        child: products.isEmpty
+            ? _buildEmptyProductState()
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      childAspectRatio: 0.72,
+                      crossAxisSpacing: AppTheme.md,
+                      mainAxisSpacing: AppTheme.md,
+                    ),
+                    itemCount: products.length,
+                    itemBuilder: (context, index) {
+                      return FadeInUp(
+                        delay: Duration(milliseconds: 40 * index),
+                        child: _buildProductCard(context, products[index]),
+                      );
+                    },
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyProductState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppTheme.xxxl),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(LucideIcons.searchX,
+                size: 48, color: AppTheme.textTertiary),
+            const SizedBox(height: AppTheme.lg),
+            Text(
+              'No products found',
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: AppTheme.sm),
+            Text(
+              'Try a different search or category',
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 13,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Search bar used inside the bottom sheet.
+  Widget _buildSheetSearchBar(BuildContext context, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSecondary,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: AppTheme.veryLightGray),
+        ),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.search,
+                color: AppTheme.textTertiary, size: 18),
+            const SizedBox(width: AppTheme.sm),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                onTap: onTap,
+                onChanged: (val) {
+                  setState(() => _searchQuery = val.toLowerCase());
+                },
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 14,
+                  color: AppTheme.textPrimary,
+                ),
+                decoration: const InputDecoration(
+                  hintText: 'Search products...',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Outfit',
+                    color: AppTheme.textTertiary,
+                    fontSize: 14,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            if (_searchQuery.isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                },
+                child: const Icon(LucideIcons.x,
+                    size: 16, color: AppTheme.textTertiary),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

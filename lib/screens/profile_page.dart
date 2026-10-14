@@ -17,6 +17,7 @@ import '../models/favorites_api_provider.dart';
 import '../core/auth/auth_provider.dart';
 import '../models/language_provider.dart';
 import 'support_faq_page.dart';
+import 'terms_of_service_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -581,6 +582,19 @@ class _ProfilePageState extends State<ProfilePage> {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const SupportFaqPage()),
+              ),
+            ),
+            _buildDivider(),
+            _buildListTile(
+              context,
+              icon: LucideIcons.fileText,
+              iconBg: AppTheme.primaryBlue.withOpacity(0.1),
+              iconColor: AppTheme.primaryBlue,
+              title: 'Terms of Service',
+              subtitle: 'Legal documents',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TermsOfServicePage()),
               ),
             ),
           ],
