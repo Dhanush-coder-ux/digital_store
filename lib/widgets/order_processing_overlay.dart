@@ -78,7 +78,7 @@ class _OrderProcessingOverlayState extends State<OrderProcessingOverlay>
     final isDone = _step == 2;
 
     return Material(
-      color: AppTheme.darkGray.withOpacity(0.6),
+      color: AppTheme.textPrimary.withValues(alpha: 0.5),
       child: Center(
         child: Container(
           margin: const EdgeInsets.symmetric(horizontal: AppTheme.xxxl),
@@ -107,10 +107,10 @@ class _OrderProcessingOverlayState extends State<OrderProcessingOverlay>
                     height: 80,
                     decoration: BoxDecoration(
                       color: isDone
-                          ? AppTheme.successGreen.withOpacity(0.12)
+                          ? AppTheme.successGreen.withValues(alpha: 0.12)
                           : isSuccess
-                              ? AppTheme.successGreen.withOpacity(0.12)
-                              : AppTheme.primaryBlue.withOpacity(0.1),
+                              ? AppTheme.successGreen.withValues(alpha: 0.12)
+                              : AppTheme.primaryBlue.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(

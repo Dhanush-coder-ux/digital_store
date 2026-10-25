@@ -34,6 +34,8 @@ class ApiCartProvider extends ChangeNotifier {
 
   ApiCartProvider(this._cartService, this._orderService, this._customerService);
 
+  CustomerService get customerService => _customerService;
+
   String? _sessionId;
   String? _shopId;
   String? _lastCustomerId;
@@ -574,7 +576,7 @@ class ApiCartProvider extends ChangeNotifier {
   Future<bool> placeOrder({
     required String shopId,
     required String customerName,
-    required String customerPhone,
+    String? customerPhone,
     String? paymentMethod,
     String? note,
     Map<String, dynamic>? deliveryAddress,
@@ -587,6 +589,7 @@ class ApiCartProvider extends ChangeNotifier {
     String? pincode,
     String? state,
     double deliveryFee = 0.0,
+    Map<String, dynamic>? deliveryOptionInfo,
   }) async {
     if (_sessionId == null) {
       _error = 'No active cart session.';
@@ -604,10 +607,29 @@ class ApiCartProvider extends ChangeNotifier {
       // Build additional_infos with customer details, delivery + note (without calling /api/customers)
       final Map<String, dynamic> additionalInfos = {
         'customer_name': customerName,
-        'customer_phone': customerPhone,
+        if (customerPhone != null && customerPhone.trim().isNotEmpty)
+          'customer_phone': customerPhone.trim(),
       };
+      final String? finalAddressId = addressId ?? deliveryAddress?['address_id']?.toString() ?? deliveryAddress?['id']?.toString();
+      if (finalAddressId != null && finalAddressId.isNotEmpty) {
+        additionalInfos['address_id'] = finalAddressId;
+      }
       if (note != null && note.isNotEmpty) additionalInfos['note'] = note;
       if (deliveryAddress != null) additionalInfos['delivery_address'] = deliveryAddress;
+
+      if (deliveryOptionInfo != null) {
+        additionalInfos['delivery_option'] = deliveryOptionInfo;
+        if (deliveryOptionInfo['type'] != null) {
+          additionalInfos['delivery_type'] = deliveryOptionInfo['type'];
+        }
+        if (deliveryOptionInfo['title'] != null) {
+          additionalInfos['delivery_option_name'] = deliveryOptionInfo['title'];
+        }
+        if (deliveryOptionInfo['speed'] != null) {
+          additionalInfos['delivery_speed'] = deliveryOptionInfo['speed'];
+        }
+        additionalInfos['delivery_charge'] = deliveryFee;
+      }
 
       final double finalTotal = currentTotal + deliveryFee;
 
@@ -621,20 +643,25 @@ class ApiCartProvider extends ChangeNotifier {
         }
       }
 
-      final Map<String, dynamic> calculationInfos = {
-        'subtotal': currentTotal,
-        'delivery_fee': deliveryFee,
-        'total': finalTotal,
-        'grand_total': finalTotal,
-      };
-
-      final String? finalAddressId = addressId ?? deliveryAddress?['address_id']?.toString() ?? deliveryAddress?['id']?.toString();
       final String? finalFullAddress = fullAddress ?? deliveryAddress?['full_address']?.toString() ?? deliveryAddress?['address']?.toString();
       final double? finalLat = latitude ?? (deliveryAddress?['latitude'] != null ? double.tryParse(deliveryAddress!['latitude'].toString()) : (deliveryAddress?['lat'] != null ? double.tryParse(deliveryAddress!['lat'].toString()) : null));
       final double? finalLng = longitude ?? (deliveryAddress?['longitude'] != null ? double.tryParse(deliveryAddress!['longitude'].toString()) : (deliveryAddress?['lng'] != null ? double.tryParse(deliveryAddress!['lng'].toString()) : null));
       final String? finalCity = city ?? deliveryAddress?['city']?.toString();
       final String? finalPincode = pincode ?? deliveryAddress?['pincode']?.toString();
       final String? finalState = state ?? deliveryAddress?['state']?.toString();
+
+      final Map<String, dynamic> calculationInfos = {
+        'subtotal': currentTotal,
+        'delivery_fee': deliveryFee,
+        'total': finalTotal,
+        'grand_total': finalTotal,
+        if (finalFullAddress != null) 'full_address': finalFullAddress,
+        if (deliveryAddress != null) 'delivery_address': deliveryAddress,
+      };
+
+      final Map<String, dynamic> chargesInfos = {
+        if (deliveryFee > 0) 'delivery_charge': deliveryFee,
+      };
 
       final payload = CreateOrderPayload(
         shopId: shopId,
@@ -644,10 +671,11 @@ class ApiCartProvider extends ChangeNotifier {
         origin: 'ONLINE',
         paymentInfos: paymentInfos,
         calculationInfos: calculationInfos,
+        chargesInfos: chargesInfos,
         additionalInfos: additionalInfos.isNotEmpty ? additionalInfos : null,
         userId: userId,
         name: customerName,
-        phone: customerPhone,
+        phone: (customerPhone != null && customerPhone.trim().isNotEmpty) ? customerPhone.trim() : null,
         addressId: finalAddressId,
         fullAddress: finalFullAddress,
         latitude: finalLat,
@@ -717,6 +745,17 @@ class ApiCartProvider extends ChangeNotifier {
            status: 'PROCESSING',
            totalAmount: finalTotal,
            calculationInfos: calculationInfos,
+           chargesInfos: chargesInfos,
+           additionalInfos: additionalInfos,
+           deliveryAddress: deliveryAddress,
+           customerName: customerName,
+           customerPhone: customerPhone,
+           addressId: finalAddressId,
+           fullAddress: finalFullAddress,
+           city: finalCity,
+           pincode: finalPincode,
+           state: finalState,
+           note: note,
            items: finalItems,
            createdAt: DateTime.now().toIso8601String(),
         );
@@ -730,7 +769,18 @@ class ApiCartProvider extends ChangeNotifier {
            description: createdOrder.description,
            totalAmount: createdOrder.totalAmount > 0 ? createdOrder.totalAmount : finalTotal,
            calculationInfos: createdOrder.calculationInfos ?? calculationInfos,
+           chargesInfos: createdOrder.chargesInfos ?? chargesInfos,
            paymentInfos: createdOrder.paymentInfos,
+           additionalInfos: createdOrder.additionalInfos ?? additionalInfos,
+           deliveryAddress: createdOrder.deliveryAddress ?? deliveryAddress,
+           customerName: createdOrder.customerName ?? customerName,
+           customerPhone: createdOrder.customerPhone ?? customerPhone,
+           addressId: createdOrder.addressId ?? finalAddressId,
+           fullAddress: createdOrder.fullAddress ?? finalFullAddress,
+           city: createdOrder.city ?? finalCity,
+           pincode: createdOrder.pincode ?? finalPincode,
+           state: createdOrder.state ?? finalState,
+           note: createdOrder.note ?? note,
            items: finalItems,
            createdAt: createdOrder.createdAt,
            updatedAt: createdOrder.updatedAt,
@@ -739,6 +789,11 @@ class ApiCartProvider extends ChangeNotifier {
       }
       
       _myOrders.add(_lastOrder!);
+
+      if (userId != null && userId.isNotEmpty) {
+        _lastCustomerId = userId;
+        _savePersistedCustomerId(userId);
+      }
 
       // Clear cart after successful order
       try {

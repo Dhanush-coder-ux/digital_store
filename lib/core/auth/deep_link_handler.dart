@@ -13,6 +13,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:app_links/app_links.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../services/api_config.dart';
 
 class DeepLinkHandler {
   final AppLinks _appLinks = AppLinks();
@@ -67,7 +68,7 @@ class DeepLinkHandler {
     final isCustomScheme = (uri.scheme == 'hyperlocal' || uri.scheme == 'hyperlocal-app') && uri.host == 'auth' && uri.path.startsWith('/callback');
     final isWebScheme = (uri.scheme == 'http' || uri.scheme == 'https') && uri.path.startsWith('/auth/callback');
     // We also support intercepting the gateway URL if needed
-    final isGatewayCallback = (uri.host == '10.167.188.101' || uri.host == '127.0.0.1' || uri.host == 'localhost') && uri.path.startsWith('/api/auth/callback');
+    final isGatewayCallback = (uri.host == ApiConfig.baseIp || uri.host == '10.39.224.101' || uri.host == '127.0.0.1' || uri.host == 'localhost') && uri.path.startsWith('/api/auth/callback');
     
     return isCustomScheme || isWebScheme || isGatewayCallback;
   }

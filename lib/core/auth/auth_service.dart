@@ -46,6 +46,7 @@ class LoginUrlResponse {
   /// The Debugger Auth service typically returns a map with auth URLs.
   String? get loginUrl {
     // Try common keys
+    if (rawData.containsKey('signin_url')) return rawData['signin_url']?.toString();
     if (rawData.containsKey('url')) return rawData['url']?.toString();
     if (rawData.containsKey('login_url')) return rawData['login_url']?.toString();
     if (rawData.containsKey('auth_url')) return rawData['auth_url']?.toString();

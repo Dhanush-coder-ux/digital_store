@@ -12,6 +12,7 @@ import '../models/favorites_api_provider.dart';
 import '../core/auth/auth_provider.dart';
 import 'home_page.dart';
 import 'api_checkout_page.dart';
+import 'cart_page.dart';
 import 'categories_page.dart';
 import 'stores_page.dart';
 import 'search_page.dart';
@@ -33,6 +34,7 @@ class _MainScreenState extends State<MainScreen> {
     const HomePage(),
     const CategoriesPage(),
     const StoresPage(),
+    const CartPage(),
     const ProfilePage(),
   ];
 
@@ -112,6 +114,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Widget _buildFloatingCartBar(BuildContext context) {
+    if (_currentIndex == 3) return const SizedBox.shrink();
     return Consumer<ApiCartProvider>(
       builder: (context, cart, child) {
         if (cart.isEmpty) return const SizedBox.shrink();
@@ -135,36 +138,18 @@ class _MainScreenState extends State<MainScreen> {
             duration: const Duration(milliseconds: 300),
             child: GestureDetector(
               onTap: () {
-                final shopId = cart.shopId;
-                if (shopId != null) {
-                  final shopProvider = context.read<ShopProvider>();
-                  final shop = shopProvider.shops.where((s) => s.id == shopId).firstOrNull;
-                  if (shop != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => ApiCheckoutPage(shop: shop)),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Could not find shop details for checkout.')),
-                    );
-                  }
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Cart is missing shop information.')),
-                  );
-                }
+                MainScreen.pageIndexNotifier.value = 3;
               },
               child: Container(
                 height: 60,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue,
+                  gradient: AppTheme.primaryGradient,
                   borderRadius: BorderRadius.circular(30),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.primaryBlue.withOpacity(0.3),
-                      blurRadius: 10,
+                      color: AppTheme.primary.withValues(alpha: 0.35),
+                      blurRadius: 14,
                       offset: const Offset(0, 4),
                     ),
                   ],
@@ -185,7 +170,7 @@ class _MainScreenState extends State<MainScreen> {
                             : null,
                       ),
                       child: imageUrl == null || imageUrl.isEmpty
-                          ? const Icon(LucideIcons.shoppingBag, color: AppTheme.primaryBlue, size: 20)
+                          ? const Icon(LucideIcons.shoppingBag, color: AppTheme.primary, size: 20)
                           : null,
                     ),
                     const SizedBox(width: 12),
@@ -207,7 +192,7 @@ class _MainScreenState extends State<MainScreen> {
                             '₹${totalAmount.toStringAsFixed(2)}',
                             style: TextStyle(
                               fontFamily: 'Outfit',
-                              color: AppTheme.white.withOpacity(0.9),
+                              color: AppTheme.white.withValues(alpha: 0.9),
                               fontWeight: FontWeight.w500,
                               fontSize: 12,
                             ),

@@ -26,23 +26,27 @@ class SeeAllPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.bgPrimary,
       appBar: AppBar(
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppTheme.primaryBlue, AppTheme.softRoyalBlue],
-            ),
-          ),
-        ),
+        backgroundColor: AppTheme.white,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.white),
+          icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           title,
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.white),
+          style: const TextStyle(
+            fontFamily: 'Outfit',
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.textPrimary,
+          ),
         ),
         centerTitle: true,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: AppTheme.veryLightGray, height: 1),
+        ),
       ),
       body: isGrid ? _buildGrid() : _buildList(),
     );

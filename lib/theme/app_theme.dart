@@ -1,486 +1,243 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Modern Production-Ready Design System
-/// Blue-muted gradient SaaS theme with glassmorphism
+/// Premium Local Commerce Design System — Warm Tangerine Theme
 class AppTheme {
   // ═══════════════════════════════════════════════════════════════════
-  // COLORS - Modern Blue-Muted Gradient Palette
+  // CENTRALIZED COLOR TOKENS — Warm Tangerine Palette
   // ═══════════════════════════════════════════════════════════════════
 
-  // Primary Colors (Renamed to yellow values but keeping var names for safety)
-  static const Color deepBlue = Color(0xFF2A1708); // Espresso
-  static const Color primaryBlue = Color(0xFFE0922F); // Caramel Yellow
-  static const Color softRoyalBlue = Color(0xFFD4842B); // Deep Yellow
-  static const Color lightBlue = Color(0xFFFFD88C); // Light Yellow
-  static const Color skyBlue = Color(0xFFFFE8B0); // Sky Yellow
-  
-  // Accent Colors (Renamed to brown values but keeping var names for safety)
-  static const Color mutedCyan = Color(0xFF5C3A21); // Medium brown
-  static const Color softCyan = Color(0xFF7B4F2D); // Soft brown
-  static const Color paleCyan = Color(0xFFA06A3E); // Pale brown
-  
-  // Neutral Colors (Muted Grays -> Browns)
-  static const Color darkGray = Color(0xFF2A1708); // Espresso
-  static const Color mediumGray = Color(0xFF5C3A21); // Medium brown
-  static const Color lightGray = Color(0xFF8C6549); // Light brown
-  static const Color veryLightGray = Color(0xFFF4EBE1); // Warm very light gray
-  static const Color ultraLightGray = Color(0xFFFFFBF4); // Cream
-  static const Color white = Color(0xFFFFFFFF); // White
-  
-  // Status Colors
-  static const Color successGreen = Color(0xFF22C55E); // Success
-  static const Color warningOrange = Color(0xFFEA580C); // Warning
-  static const Color errorRed = Color(0xFFEF4444); // Error
-  static const Color infoBlue = Color(0xFF3B82F6); // Info
-  
-  // Semantic Colors
-  static const Color textPrimary = Color(0xFF2A1708); // Espresso
-  static const Color textSecondary = Color(0xFF5C3A21); // Medium brown
-  static const Color textTertiary = Color(0xFF8C6549); // Light brown
-  static const Color textInverse = Color(0xFFFFFFFF); // White
-  
-  // Background Colors
-  static const Color bgPrimary = Color(0xFFFFFBF4); // Cream
-  static const Color bgSecondary = Color(0xFFF4EBE1); // Warm very light gray
-  static const Color bgTertiary = Color(0xFFEADCCB); // Warm tinted
-  
-  // Glass Colors (Glassmorphism)
-  static const Color glassLight = Color(0xFFFFFFFF); // White with opacity
-  static const Color glassDark = Color(0xFF2A1708); // Espresso with opacity
-  
+  // Primary brand
+  static const Color primary              = Color(0xFFF28C28); // Warm Tangerine
+  static const Color primaryDark          = Color(0xFFD96B16); // Primary pressed/dark
+  static const Color softPeach            = Color(0xFFFFF3E3); // Soft peach
+  static const Color background           = Color(0xFFFCFAF6); // App background
+  static const Color surface              = Color(0xFFFFFFFF); // Surface
+  static const Color primaryText          = Color(0xFF493629); // Primary text
+  static const Color secondaryText        = Color(0xFF8A7664); // Secondary text
+  static const Color border               = Color(0xFFE9E2D8); // Border
+  static const Color success              = Color(0xFF258A68); // Success
+  static const Color successBackground    = Color(0xFFE9F7EF); // Soft success green bg
+  static const Color error                = Color(0xFFDC2626); // Accessible red
+  static const Color errorBackground      = Color(0xFFFEF2F2); // Pale red background
+  static const Color information          = Color(0xFF2563EB); // Accessible blue
+  static const Color informationBackground= Color(0xFFEFF6FF); // Pale blue background
+
+  // Compatibility aliases
+  static const Color bgPrimary    = background;
+  static const Color bgSecondary  = Color(0xFFF7F1E7); // Warm cream
+  static const Color bgTertiary   = border;
+  static const Color white        = surface;
+
+  // Tangerine Identity (retained as primaryBlue for backward compat)
+  static const Color primaryBlue   = primary;     // 0xFFF28C28
+  static const Color softRoyalBlue = primaryDark; // 0xFFD96B16
+  static const Color lightBlue     = softPeach;   // 0xFFFFF3E3
+  static const Color skyBlue       = softPeach;   // 0xFFFFF3E3
+
+  // Legacy color names kept for compatibility
+  static const Color deepBlue  = primaryText;
+  static const Color mutedCyan = secondaryText;
+  static const Color softCyan  = secondaryText;
+  static const Color paleCyan  = softPeach;
+
+  // Typography
+  static const Color textPrimary   = primaryText;
+  static const Color textSecondary = secondaryText;
+  static const Color textTertiary  = Color(0xFFAFA293);
+  static const Color textInverse   = surface;
+
+  // Neutrals
+  static const Color darkGray       = primaryText;
+  static const Color mediumGray     = secondaryText;
+  static const Color lightGray      = Color(0xFFAFA293);
+  static const Color veryLightGray  = border;
+  static const Color ultraLightGray = background;
+
+  // Status
+  static const Color successGreen  = success;
+  static const Color successBg     = successBackground;
+  static const Color warningOrange = primary;
+  static const Color errorRed      = error;
+  static const Color errorBg       = errorBackground;
+  static const Color infoBlue      = information;
+  static const Color infoBg        = informationBackground;
+
+  // Glass (kept for compat)
+  static const Color glassLight = surface;
+  static const Color glassDark  = primaryText;
+
   // Gradients
-  static LinearGradient get primaryGradient => LinearGradient(
+  static LinearGradient get primaryGradient => const LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      softRoyalBlue.withOpacity(0.8),
-      primaryBlue.withOpacity(0.9),
-    ],
+    colors: [Color(0xFFF28C28), Color(0xFFD96B16)],
   );
-  
-  static LinearGradient get accentGradient => LinearGradient(
-    begin: Alignment.topRight,
-    end: Alignment.bottomLeft,
-    colors: [
-      softCyan.withOpacity(0.7),
-      mutedCyan.withOpacity(0.8),
-    ],
-  );
-  
-  static LinearGradient get backgroundGradient => LinearGradient(
+  static LinearGradient get backgroundGradient => const LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [
-      ultraLightGray,
-      bgSecondary,
-    ],
+    colors: [Color(0xFFFCFAF6), Color(0xFFF7F1E7)],
+  );
+  static LinearGradient get accentGradient => const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFFFFF3E3), Color(0xFFE9E2D8)],
   );
 
   // ═══════════════════════════════════════════════════════════════════
-  // SPACING SYSTEM
+  // SPACING — 8-point system
   // ═══════════════════════════════════════════════════════════════════
-  
-  static const double xs = 4.0;
-  static const double sm = 8.0;
-  static const double md = 12.0;
-  static const double lg = 16.0;
-  static const double xl = 20.0;
-  static const double xxl = 24.0;
+  static const double xs   = 4.0;
+  static const double sm   = 8.0;
+  static const double md   = 12.0;
+  static const double lg   = 16.0;
+  static const double xl   = 20.0;
+  static const double xxl  = 24.0;
   static const double xxxl = 32.0;
   static const double huge = 40.0;
-  
+
   // ═══════════════════════════════════════════════════════════════════
   // BORDER RADIUS
   // ═══════════════════════════════════════════════════════════════════
-  
-  static const double radiusSm = 8.0;
-  static const double radiusMd = 12.0;
-  static const double radiusLg = 16.0;
-  static const double radiusXl = 20.0;
-  static const double radiusXxl = 24.0;
-  
+  static const double radiusSm  = 8.0;
+  static const double radiusMd  = 10.0;
+  static const double radiusLg  = 12.0;
+  static const double radiusXl  = 16.0;
+  static const double radiusXxl = 20.0;
+
+  // Semantic aliases for cohesive access
+  static const Color primaryTangerine     = primary;
+  static const Color primaryTangerineDark = primaryDark;
+  static const Color softCream            = bgSecondary;
+  static const Color sageGreen            = success;
+  static const Color sageGreenBg          = successBackground;
+  static const Color primaryAmber         = primary;
+
   // ═══════════════════════════════════════════════════════════════════
-  // SHADOWS - Soft & Elegant
+  // SHADOWS — Restrained Warm Elevation
   // ═══════════════════════════════════════════════════════════════════
-  
   static final List<BoxShadow> shadowSmall = [
-    BoxShadow(
-      color: darkGray.withOpacity(0.04),
-      blurRadius: 2,
-      offset: const Offset(0, 1),
-    ),
+    BoxShadow(color: const Color(0xFF493629).withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 1)),
   ];
-  
   static final List<BoxShadow> shadowMedium = [
-    BoxShadow(
-      color: darkGray.withOpacity(0.06),
-      blurRadius: 8,
-      offset: const Offset(0, 2),
-    ),
+    BoxShadow(color: const Color(0xFF493629).withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 2)),
   ];
-  
   static final List<BoxShadow> shadowLarge = [
-    BoxShadow(
-      color: darkGray.withOpacity(0.08),
-      blurRadius: 16,
-      offset: const Offset(0, 4),
-    ),
+    BoxShadow(color: const Color(0xFF493629).withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 4)),
   ];
-  
   static final List<BoxShadow> shadowXlarge = [
-    BoxShadow(
-      color: darkGray.withOpacity(0.10),
-      blurRadius: 24,
-      offset: const Offset(0, 8),
-    ),
+    BoxShadow(color: const Color(0xFF493629).withValues(alpha: 0.10), blurRadius: 28, offset: const Offset(0, 6)),
   ];
-  
-  // Glass effect shadow
-  static final List<BoxShadow> glassBoxShadow = [
-    BoxShadow(
-      color: darkGray.withOpacity(0.08),
-      blurRadius: 12,
-      offset: const Offset(0, 4),
-    ),
-  ];
-  
+  static final List<BoxShadow> glassBoxShadow = shadowMedium;
+
   // ═══════════════════════════════════════════════════════════════════
   // THEME DATA
   // ═══════════════════════════════════════════════════════════════════
-  
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: primaryBlue,
-        primary: primaryBlue,
-        secondary: mutedCyan,
-        tertiary: skyBlue,
-        surface: white,
-        background: bgPrimary,
-        error: errorRed,
+        seedColor: primary,
+        primary: primary,
+        secondary: secondaryText,
+        tertiary: softPeach,
+        surface: surface,
+        error: error,
         brightness: Brightness.light,
       ),
-      scaffoldBackgroundColor: bgPrimary,
-      
-      // ─────────────────────────────────────────────────────────────────
-      // TEXT THEME - Premium Typography
-      // ─────────────────────────────────────────────────────────────────
+      scaffoldBackgroundColor: background,
       textTheme: GoogleFonts.outfitTextTheme().copyWith(
-        // Display
-        displayLarge: GoogleFonts.outfit(
-          fontSize: 40,
-          fontWeight: FontWeight.w800,
-          color: textPrimary,
-          letterSpacing: -1.5,
-        ),
-        displayMedium: GoogleFonts.outfit(
-          fontSize: 36,
-          fontWeight: FontWeight.w800,
-          color: textPrimary,
-          letterSpacing: -1,
-        ),
-        displaySmall: GoogleFonts.outfit(
-          fontSize: 32,
-          fontWeight: FontWeight.w700,
-          color: textPrimary,
-          letterSpacing: -0.5,
-        ),
-        
-        // Headline
-        headlineLarge: GoogleFonts.outfit(
-          fontSize: 28,
-          fontWeight: FontWeight.w700,
-          color: textPrimary,
-        ),
-        headlineMedium: GoogleFonts.outfit(
-          fontSize: 24,
-          fontWeight: FontWeight.w700,
-          color: textPrimary,
-        ),
-        headlineSmall: GoogleFonts.outfit(
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: textPrimary,
-        ),
-        
-        // Title
-        titleLarge: GoogleFonts.outfit(
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-          color: textPrimary,
-        ),
-        titleMedium: GoogleFonts.outfit(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: textPrimary,
-        ),
-        titleSmall: GoogleFonts.outfit(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: textPrimary,
-        ),
-        
-        // Body
-        bodyLarge: GoogleFonts.outfit(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          color: textPrimary,
-        ),
-        bodyMedium: GoogleFonts.outfit(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: textSecondary,
-        ),
-        bodySmall: GoogleFonts.outfit(
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-          color: textTertiary,
-        ),
-        
-        // Label
-        labelLarge: GoogleFonts.outfit(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: textPrimary,
-          letterSpacing: 0.1,
-        ),
-        labelMedium: GoogleFonts.outfit(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: textSecondary,
-          letterSpacing: 0.5,
-        ),
-        labelSmall: GoogleFonts.outfit(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: textTertiary,
-          letterSpacing: 0.5,
-        ),
+        displayLarge:  GoogleFonts.outfit(fontSize: 40, fontWeight: FontWeight.w700, color: primaryText, letterSpacing: -1),
+        displayMedium: GoogleFonts.outfit(fontSize: 34, fontWeight: FontWeight.w700, color: primaryText),
+        displaySmall:  GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.w700, color: primaryText),
+        headlineLarge:  GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w700, color: primaryText),
+        headlineMedium: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: primaryText),
+        headlineSmall:  GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w700, color: primaryText),
+        titleLarge:  GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w600, color: primaryText),
+        titleMedium: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600, color: primaryText),
+        titleSmall:  GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: primaryText),
+        bodyLarge:  GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w400, color: primaryText),
+        bodyMedium: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w400, color: secondaryText),
+        bodySmall:  GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w400, color: textTertiary),
+        labelLarge:  GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600, color: primaryText),
+        labelMedium: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600, color: secondaryText, letterSpacing: 0.4),
+        labelSmall:  GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w600, color: textTertiary, letterSpacing: 0.5),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // CARD THEME - Glass Morphism
-      // ─────────────────────────────────────────────────────────────────
       cardTheme: CardThemeData(
-        color: white,
+        color: surface,
         elevation: 0,
-        shadowColor: darkGray.withOpacity(0.08),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusXl),
-          side: BorderSide(
-            color: veryLightGray.withOpacity(0.5),
-            width: 1,
-          ),
+          side: const BorderSide(color: border, width: 1),
         ),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // INPUT DECORATION THEME
-      // ─────────────────────────────────────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: white,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: lg,
-          vertical: md,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusLg),
-          borderSide: BorderSide(
-            color: veryLightGray.withOpacity(0.7),
-            width: 1,
-          ),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusLg),
-          borderSide: BorderSide(
-            color: veryLightGray.withOpacity(0.5),
-            width: 1,
-          ),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusLg),
-          borderSide: const BorderSide(
-            color: primaryBlue,
-            width: 1.5,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusLg),
-          borderSide: const BorderSide(
-            color: errorRed,
-            width: 1,
-          ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(radiusLg),
-          borderSide: const BorderSide(
-            color: errorRed,
-            width: 1.5,
-          ),
-        ),
-        prefixIconColor: WidgetStateColor.resolveWith((states) {
-          if (states.contains(WidgetState.focused)) {
-            return primaryBlue;
-          }
-          return lightGray;
-        }),
-        suffixIconColor: WidgetStateColor.resolveWith((states) {
-          if (states.contains(WidgetState.focused)) {
-            return primaryBlue;
-          }
-          return lightGray;
-        }),
-        hintStyle: GoogleFonts.outfit(
-          color: textTertiary,
-          fontSize: 14,
-        ),
-        labelStyle: GoogleFonts.outfit(
-          color: textSecondary,
-          fontSize: 14,
-        ),
+        fillColor: surface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: lg, vertical: md),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(radiusLg), borderSide: const BorderSide(color: border)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(radiusLg), borderSide: const BorderSide(color: border)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(radiusLg), borderSide: const BorderSide(color: primary, width: 1.5)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(radiusLg), borderSide: const BorderSide(color: error)),
+        focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(radiusLg), borderSide: const BorderSide(color: error, width: 1.5)),
+        hintStyle: GoogleFonts.outfit(color: textTertiary, fontSize: 14),
+        labelStyle: GoogleFonts.outfit(color: secondaryText, fontSize: 14),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // ELEVATED BUTTON THEME
-      // ─────────────────────────────────────────────────────────────────
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: primaryBlue,
+          backgroundColor: primary,
           foregroundColor: white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(
-            horizontal: lg,
-            vertical: md,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusLg),
-          ),
-          textStyle: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: lg, vertical: md),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusLg)),
+          textStyle: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // OUTLINED BUTTON THEME
-      // ─────────────────────────────────────────────────────────────────
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: primaryBlue,
-          side: const BorderSide(
-            color: primaryBlue,
-            width: 1,
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: lg,
-            vertical: md,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusLg),
-          ),
-          textStyle: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          foregroundColor: primary,
+          side: const BorderSide(color: primary),
+          padding: const EdgeInsets.symmetric(horizontal: lg, vertical: md),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusLg)),
+          textStyle: GoogleFonts.outfit(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // TEXT BUTTON THEME
-      // ─────────────────────────────────────────────────────────────────
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: primaryBlue,
-          padding: const EdgeInsets.symmetric(
-            horizontal: lg,
-            vertical: md,
-          ),
-          textStyle: GoogleFonts.outfit(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          foregroundColor: primary,
+          padding: const EdgeInsets.symmetric(horizontal: md, vertical: xs),
+          textStyle: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // APP BAR THEME
-      // ─────────────────────────────────────────────────────────────────
-      appBarTheme: AppBarTheme(
-        backgroundColor: white,
-        foregroundColor: textPrimary,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: surface,
+        foregroundColor: primaryText,
         elevation: 0,
-        scrolledUnderElevation: 0,
+        scrolledUnderElevation: 0.5,
         centerTitle: false,
-        toolbarHeight: 64,
-        titleTextStyle: GoogleFonts.outfit(
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: textPrimary,
-        ),
-        iconTheme: const IconThemeData(
-          color: textPrimary,
-          size: 24,
-        ),
+        toolbarHeight: 56,
+        titleTextStyle: TextStyle(fontFamily: 'Outfit', fontSize: 18, fontWeight: FontWeight.w700, color: primaryText),
+        iconTheme: IconThemeData(color: primaryText, size: 22),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // BOTTOM SHEET THEME
-      // ─────────────────────────────────────────────────────────────────
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: white,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(
-            top: Radius.circular(radiusXxl),
-          ),
-        ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(radiusXxl))),
         elevation: 0,
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // DIALOG THEME
-      // ─────────────────────────────────────────────────────────────────
       dialogTheme: DialogThemeData(
-        backgroundColor: white,
+        backgroundColor: surface,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusXl),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusXl)),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // CHIP THEME
-      // ─────────────────────────────────────────────────────────────────
       chipTheme: ChipThemeData(
-        backgroundColor: veryLightGray,
-        labelStyle: GoogleFonts.outfit(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: textPrimary,
-        ),
-        side: BorderSide(
-          color: veryLightGray.withOpacity(0.5),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusMd),
-        ),
-        padding: const EdgeInsets.symmetric(
-          horizontal: md,
-          vertical: xs,
-        ),
+        backgroundColor: bgSecondary,
+        selectedColor: softPeach,
+        labelStyle: GoogleFonts.outfit(fontSize: 13, fontWeight: FontWeight.w500, color: primaryText),
+        side: const BorderSide(color: border),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+        padding: const EdgeInsets.symmetric(horizontal: md, vertical: xs),
       ),
-      
-      // ─────────────────────────────────────────────────────────────────
-      // DIVIDER THEME
-      // ─────────────────────────────────────────────────────────────────
-      dividerTheme: DividerThemeData(
-        color: veryLightGray.withOpacity(0.7),
-        thickness: 1,
-        space: xl,
-      ),
+      dividerTheme: const DividerThemeData(color: border, thickness: 1, space: lg),
     );
   }
 }

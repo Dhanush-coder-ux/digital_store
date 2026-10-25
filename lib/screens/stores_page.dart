@@ -1,339 +1,253 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../widgets/store_card.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_constants.dart';
 import '../models/shop_model.dart';
 import '../models/shop_provider.dart';
 import '../models/providers.dart';
+import '../models/category_model.dart';
+import '../widgets/category_widget.dart';
 import 'api_shop_details_page.dart';
-import 'notifications_page.dart';
 import 'search_page.dart';
+import 'main_screen.dart';
 
 class StoresPage extends StatefulWidget {
   const StoresPage({super.key});
+
+  /// Pending category selection triggered from external screens (like CategoriesPage)
+  static String? pendingCategory;
+
+  /// Programmatically switch to Stores page and filter by category
+  static void selectCategory(String categoryName) {
+    pendingCategory = categoryName;
+    MainScreen.pageIndexNotifier.value = 2;
+  }
 
   @override
   State<StoresPage> createState() => _StoresPageState();
 }
 
 class _StoresPageState extends State<StoresPage> {
-  int _selectedIndex = 0;
-  final TextEditingController _searchController = TextEditingController();
+  int _selectedCategoryIndex = 0;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadShops();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadShops());
   }
 
   void _loadShops({bool force = false}) {
     final loc = context.read<LocationProvider>();
     context.read<ShopProvider>().fetchAllShops(
-      force: force,
-      lat: loc.latitude,
-      lng: loc.longitude,
+      force: force, lat: loc.latitude, lng: loc.longitude,
     );
   }
 
   List<String> _buildCategories(List<Shop> shops) {
-    final cats = shops
-        .expand((s) => s.categories)
-        .toSet()
-        .toList()
-      ..sort();
+    final cats = shops.expand((s) => s.categories).toSet().toList()..sort();
     return ['All', ...cats];
   }
 
   List<Shop> _filteredShops(List<Shop> shops, List<String> categories) {
     return shops.where((shop) {
-      final matchCategory = _selectedIndex == 0 ||
-          (categories.length > _selectedIndex &&
-              shop.categories.contains(categories[_selectedIndex]));
+      final matchCat = _selectedCategoryIndex == 0 ||
+          (categories.length > _selectedCategoryIndex &&
+              shop.categories.contains(categories[_selectedCategoryIndex]));
       final matchSearch = _searchQuery.isEmpty ||
-          shop.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          shop.displayAddress.toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchCategory && matchSearch;
+          shop.name.toLowerCase().contains(_searchQuery.toLowerCase());
+      return matchCat && matchSearch;
     }).toList();
   }
 
   @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    // Check if an external navigation requested a specific category selection
+    final pending = StoresPage.pendingCategory;
+    if (pending != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (StoresPage.pendingCategory != null && mounted) {
+          final sp = context.read<ShopProvider>();
+          final categories = _buildCategories(sp.shops);
+          final target = StoresPage.pendingCategory!.toLowerCase().trim();
+          final idx = categories.indexWhere(
+            (c) => c.toLowerCase() == target || c.toLowerCase().contains(target) || target.contains(c.toLowerCase()),
+          );
+          if (idx != -1) {
+            setState(() => _selectedCategoryIndex = idx);
+          }
+          StoresPage.pendingCategory = null;
+        }
+      });
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.bgPrimary,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWhiteHeader(),
-          _buildResultsRow(),
-          Expanded(child: _buildStoresList()),
+          _buildHeader(),
+          const Divider(height: 1, color: AppTheme.border),
+          Expanded(child: _buildBody()),
         ],
       ),
     );
   }
 
-  Widget _buildWhiteHeader() {
+  Widget _buildHeader() {
     return Container(
       color: AppTheme.white,
       child: SafeArea(
         bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(AppTheme.xl, AppTheme.md, AppTheme.xl, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, 0),
+            child: Row(children: [
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Explore Shops',
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              color: AppTheme.textPrimary,
-                              fontWeight: FontWeight.w800,
-                            ),
-                      ),
-                      Consumer<ShopProvider>(
-                        builder: (_, sp, __) => Text(
-                          sp.hasShops
-                              ? '${sp.shops.length} shop${sp.shops.length != 1 ? 's' : ''} connected'
-                              : 'Manage your shops',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.textSecondary,
-                              ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsPage()));
-                        },
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppTheme.bgSecondary,
-                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                          ),
-                          child: const Icon(LucideIcons.bell, color: AppTheme.textPrimary, size: 20),
-                        ),
-                      ),
-                    ],
+                  Text('Explore Stores', style: Theme.of(context).textTheme.headlineSmall),
+                  Consumer<ShopProvider>(
+                    builder: (_, sp, __) => Text(
+                      sp.hasShops ? '${sp.shops.length} stores available' : 'Find stores near you',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
                   ),
                 ],
-              ),
-            ),
-            _buildZeptoSearchBar(),
-            Consumer<ShopProvider>(
-              builder: (_, sp, __) {
-                final categories = _buildCategories(sp.shops);
-                if (categories.length <= 1) return const SizedBox(height: AppTheme.md);
-                return _buildZeptoCategories(categories);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildZeptoSearchBar() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const SearchPage()),
-        );
-      },
-      child: Container(
-        height: 48,
-        margin: const EdgeInsets.symmetric(horizontal: AppTheme.xl, vertical: AppTheme.md),
-        decoration: BoxDecoration(
-          color: AppTheme.bgSecondary,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.veryLightGray.withOpacity(0.5)),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 14),
-            const Icon(LucideIcons.search, size: 18, color: AppTheme.textTertiary),
-            const SizedBox(width: 10),
-            Text(
-              'Search for products...',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 14,
-                color: AppTheme.textTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _getIconForCategory(String cat) {
-    switch (cat.toLowerCase()) {
-      case 'all': return LucideIcons.layoutGrid;
-      case 'fresh': return LucideIcons.leaf;
-      case 'electronics': return LucideIcons.cpu;
-      case 'fashion': return LucideIcons.shirt;
-      case 'bakery': return LucideIcons.cake;
-      case 'grocery': return LucideIcons.shoppingBag;
-      case 'pharmacy': return LucideIcons.cross;
-      default: return LucideIcons.box;
-    }
-  }
-
-  Widget _buildZeptoCategories(List<String> categories) {
-    return SizedBox(
-      height: 74,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
-        itemCount: categories.length,
-        itemBuilder: (ctx, i) {
-          final cat = categories[i];
-          final isSelected = i == _selectedIndex;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedIndex = i),
+              )),
+            ]),
+          ),
+          const SizedBox(height: AppTheme.md),
+          // Search bar
+          GestureDetector(
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage())),
             child: Container(
-              margin: const EdgeInsets.only(right: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppTheme.primaryBlue.withOpacity(0.1) : AppTheme.bgSecondary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _getIconForCategory(cat),
-                      size: 20,
-                      color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    cat,
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                      color: isSelected ? AppTheme.textPrimary : AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    height: 3,
-                    width: 24,
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
+              height: 44,
+              margin: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBF8F4),
+                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                border: Border.all(color: AppTheme.border),
               ),
+              child: Row(children: [
+                const SizedBox(width: AppTheme.lg),
+                const Icon(LucideIcons.search, size: 16, color: AppTheme.textTertiary),
+                const SizedBox(width: AppTheme.sm),
+                const Text('Search stores or products',
+                  style: TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textTertiary)),
+              ]),
             ),
-          );
-        },
+          ),
+          const SizedBox(height: AppTheme.md),
+          // Horizontally scrollable realistic image-category row
+          Consumer<ShopProvider>(
+            builder: (_, sp, __) {
+              final categories = _buildCategories(sp.shops);
+              if (categories.length <= 1) return const SizedBox(height: AppTheme.sm);
+              return SizedBox(
+                height: 94,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
+                  itemCount: categories.length,
+                  itemBuilder: (_, i) {
+                    final cat = categories[i];
+                    final sel = i == _selectedCategoryIndex;
+                    final item = CategoryCatalog.find(cat);
+                    return CategoryRowItem(
+                      item: item,
+                      isSelected: sel,
+                      containerSize: 56.0,
+                      onTap: () => setState(() => _selectedCategoryIndex = i),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AppTheme.sm),
+        ]),
       ),
     );
   }
 
-  Widget _buildResultsRow() {
-    return Consumer<ShopProvider>(
-      builder: (_, sp, __) {
-        final categories = _buildCategories(sp.shops);
-        final count = _filteredShops(sp.shops, categories).length;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppTheme.xl, AppTheme.md, AppTheme.xl, 0,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                sp.isLoading
-                    ? 'Loading shops...'
-                    : '$count shop${count != 1 ? 's' : ''} found',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-              ),
-              if (sp.hasShops)
-                Row(
-                  children: [
-                    const Icon(LucideIcons.listFilter,
-                        size: 14, color: AppTheme.primaryBlue),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Live Data',
-                      style:
-                          Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppTheme.primaryBlue,
-                                fontWeight: FontWeight.w600,
-                              ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStoresList() {
+  Widget _buildBody() {
     return Consumer<ShopProvider>(
       builder: (context, sp, _) {
-        if (sp.isLoading) return _buildShimmer();
-        if (sp.error != null) return _buildError(sp);
+        if (sp.isLoading && sp.shops.isEmpty) return _buildShimmer();
+        if (sp.error != null && sp.shops.isEmpty) return _buildError(sp);
 
         final categories = _buildCategories(sp.shops);
         final shops = _filteredShops(sp.shops, categories);
 
         if (shops.isEmpty) return _buildEmpty(sp);
-        return _buildList(shops);
+
+        return RefreshIndicator(
+          color: AppTheme.primary,
+          backgroundColor: AppTheme.white,
+          onRefresh: () async => _loadShops(force: true),
+          child: Column(children: [
+            // Results count row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, 0),
+              child: Row(children: [
+                Text('${shops.length} store${shops.length != 1 ? "s" : ""} found',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500)),
+              ]),
+            ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.md, AppTheme.lg, AppTheme.xl),
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                itemCount: shops.length,
+                itemBuilder: (context, index) {
+                  final shop = shops[index];
+                  return StoreCard(
+                    name: shop.name,
+                    imageUrl: shop.bannerUrl ?? shop.logoUrl ?? '',
+                    shopId: shop.id,
+                    time: shop.hasDelivery ? 'Delivery' : 'Pickup',
+                    distance: shop.distance != null
+                        ? '${shop.distance!.toStringAsFixed(1)} km'
+                        : (shop.displayAddress.isNotEmpty
+                            ? shop.displayAddress.split(',').first.trim()
+                            : shop.city),
+                    categories: shop.categories.isNotEmpty ? shop.categories : ['General'],
+                    isOpen: shop.visibleOnline,
+                    isVerified: false,
+                    heroTag: 'stores-shop-${shop.id}',
+                    onTap: () => Navigator.push(
+                      context,
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => ApiShopDetailsPage(shop: shop),
+                        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+                        transitionDuration: const Duration(milliseconds: 250),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ]),
+        );
       },
     );
   }
 
   Widget _buildShimmer() {
     return Shimmer.fromColors(
-      baseColor: Colors.grey[200]!,
-      highlightColor: Colors.grey[100]!,
+      baseColor: AppTheme.bgSecondary,
+      highlightColor: AppTheme.white,
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(
-            AppTheme.xl, AppTheme.md, AppTheme.xl, AppTheme.xl),
-        itemCount: 3,
+        padding: const EdgeInsets.all(AppTheme.lg),
+        itemCount: 4,
         itemBuilder: (_, __) => Container(
-          margin: const EdgeInsets.only(bottom: 16),
+          margin: const EdgeInsets.only(bottom: AppTheme.lg),
           height: 120,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          decoration: BoxDecoration(color: AppTheme.white, borderRadius: BorderRadius.circular(AppTheme.radiusXl)),
         ),
       ),
     );
@@ -345,62 +259,31 @@ class _StoresPageState extends State<StoresPage> {
       color: AppTheme.primaryBlue,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        child: Container(
-          height: MediaQuery.of(context).size.height * 0.6,
-          alignment: Alignment.center,
-          child: FadeIn(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppTheme.errorRed.withOpacity(0.1),
-                shape: BoxShape.circle,
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.55,
+          child: Center(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Container(
+                width: 64, height: 64,
+                decoration: const BoxDecoration(color: AppTheme.errorBg, shape: BoxShape.circle),
+                child: const Icon(Icons.wifi_off_rounded, color: AppTheme.errorRed, size: 28),
               ),
-              child: Icon(Icons.wifi_off_rounded,
-                  color: AppTheme.errorRed, size: 32),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Failed to load shops',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
+              const SizedBox(height: AppTheme.lg),
+              Text('Failed to load stores', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppTheme.sm),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(sp.error ?? '', textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall),
               ),
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                sp.error ?? 'Unknown error',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                ),
+              const SizedBox(height: AppTheme.xl),
+              ElevatedButton.icon(
+                onPressed: () => _loadShops(force: true),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Retry'),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => _loadShops(force: true),
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryBlue,
-                foregroundColor: AppTheme.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+            ]),
+          ),
         ),
       ),
     );
@@ -412,109 +295,26 @@ class _StoresPageState extends State<StoresPage> {
       color: AppTheme.primaryBlue,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        child: Container(
-          height: MediaQuery.of(context).size.height * 0.6,
-          alignment: Alignment.center,
-          child: FadeIn(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryBlue.withOpacity(0.08),
-                shape: BoxShape.circle,
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.55,
+          child: Center(
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(color: AppTheme.lightBlue, shape: BoxShape.circle),
+                child: const Icon(LucideIcons.store, size: 28, color: AppTheme.primaryBlue),
               ),
-              child: const Icon(
-                LucideIcons.store,
-                size: 36,
-                color: AppTheme.primaryBlue,
+              const SizedBox(height: AppTheme.lg),
+              Text(_searchQuery.isNotEmpty ? 'No stores match your search' : 'No stores found',
+                style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppTheme.xs),
+              Text(
+                _searchQuery.isNotEmpty ? 'Try different keywords' : 'Pull down to refresh',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
-            ),
-            const SizedBox(height: AppTheme.lg),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'No shops match your search'
-                  : 'No shops found',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: AppTheme.xs),
-            Text(
-              _searchQuery.isNotEmpty
-                  ? 'Try a different search term'
-                  : 'Create a shop to get started',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            if (!sp.hasFetched) ...[
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () => _loadShops(force: true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primaryBlue,
-                  foregroundColor: AppTheme.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text('Load Shops'),
-              ),
-            ],
-          ],
+            ]),
+          ),
         ),
-      ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildList(List<Shop> shops) {
-    return RefreshIndicator(
-      color: AppTheme.primaryBlue,
-      onRefresh: () async => _loadShops(force: true),
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(
-            AppTheme.xl, AppTheme.md, AppTheme.xl, AppTheme.xl),
-        physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics()),
-        itemCount: shops.length,
-        itemBuilder: (context, index) {
-          final shop = shops[index];
-          return FadeInUp(
-            delay: Duration(milliseconds: 80 * index),
-            child: StoreCard(
-              name: shop.name,
-              imageUrl: shop.bannerUrl ??
-                  shop.logoUrl ??
-                  'https://placehold.co/400x200/1D4ED8/FFFFFF?text=${Uri.encodeComponent(shop.name)}',
-              shopId: shop.id,
-              time: shop.hasDelivery ? 'Delivery' : 'Pickup',
-              distance: shop.distance != null 
-                  ? '${shop.distance!.toStringAsFixed(1)} km'
-                  : (shop.displayAddress.isNotEmpty
-                      ? shop.displayAddress.split(',').first
-                      : shop.city),
-              categories: shop.categories.isNotEmpty
-                  ? shop.categories
-                  : ['General'],
-              isOpen: shop.visibleOnline,
-              isVerified: true,
-              heroTag: 'shop-${shop.id}',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  PageRouteBuilder(
-                    pageBuilder: (_, animation, __) =>
-                        ApiShopDetailsPage(shop: shop),
-                    transitionsBuilder: (_, animation, __, child) =>
-                        FadeTransition(opacity: animation, child: child),
-                    transitionDuration: AppDurations.normal,
-                  ),
-                );
-              },
-            ),
-          );
-        },
       ),
     );
   }

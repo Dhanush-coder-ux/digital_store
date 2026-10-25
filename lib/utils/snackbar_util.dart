@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import '../theme/app_theme.dart';
 
 class SnackbarUtil {
   static void showSuccess(BuildContext context, String message, {String? imageUrl}) {
@@ -11,13 +12,13 @@ class SnackbarUtil {
       content: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E3A8A), // Matching app theme blue
-          borderRadius: BorderRadius.circular(16),
+          color: AppTheme.textPrimary,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1E3A8A).withOpacity(0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: AppTheme.textPrimary.withValues(alpha: 0.25),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -26,17 +27,17 @@ class SnackbarUtil {
             if (imageUrl != null) ...[
               Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white24, width: 2),
+                  border: Border.all(color: Colors.white24, width: 1.5),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: Image.network(
                     imageUrl,
-                    width: 32,
-                    height: 32,
+                    width: 34,
+                    height: 34,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(LucideIcons.image, color: Colors.white54, size: 24),
+                    errorBuilder: (_, __, ___) => const Icon(LucideIcons.image, color: Colors.white54, size: 22),
                   ),
                 ),
               ),
@@ -44,11 +45,11 @@ class SnackbarUtil {
             ] else ...[
               Container(
                 padding: const EdgeInsets.all(6),
-                decoration: const BoxDecoration(
-                  color: Colors.white24,
+                decoration: BoxDecoration(
+                  color: AppTheme.successGreen.withValues(alpha: 0.25),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(LucideIcons.check, color: Colors.white, size: 16),
+                child: const Icon(LucideIcons.check, color: Color(0xFF68D391), size: 16),
               ),
               const SizedBox(width: 12),
             ],
@@ -60,7 +61,7 @@ class SnackbarUtil {
                   Text(
                     "Added to Cart",
                     style: GoogleFonts.outfit(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.75),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -69,8 +70,8 @@ class SnackbarUtil {
                     message,
                     style: GoogleFonts.outfit(
                       color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -81,19 +82,69 @@ class SnackbarUtil {
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                color: Colors.white24,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(LucideIcons.check, color: Colors.white, size: 16),
+              child: const Icon(LucideIcons.shoppingBag, color: AppTheme.primaryBlue, size: 16),
             ),
           ],
         ),
       ),
       duration: const Duration(seconds: 2),
-      margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
+      margin: const EdgeInsets.only(bottom: 24, left: 20, right: 20),
     );
-    
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
+  }
+
+  static void showError(BuildContext context, String message) {
+    final snackBar = SnackBar(
+      elevation: 0,
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: Colors.transparent,
+      content: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.textPrimary,
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.textPrimary.withValues(alpha: 0.25),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.errorRed.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.alertCircle, color: Color(0xFFF87171), size: 16),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      duration: const Duration(seconds: 3),
+      margin: const EdgeInsets.only(bottom: 24, left: 20, right: 20),
+    );
+
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }

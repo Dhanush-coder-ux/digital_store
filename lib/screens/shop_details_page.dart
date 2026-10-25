@@ -10,6 +10,8 @@ import '../utils/snackbar_util.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
 import '../widgets/product_bottom_sheet.dart';
+import '../models/category_model.dart';
+import '../widgets/category_widget.dart';
 import 'product_detail_page.dart';
 
 class ShopDetailsPage extends StatefulWidget {
@@ -178,7 +180,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
           expandedFraction: 0.93,
           categoryFilterHeight: 48.0,
           searchBarBuilder: (ctx, sheetState, onTap) =>
-              _buildSheetSearchBar(ctx, onTap),
+              _buildSheetSearchBar(ctx, onTap, sheetState: sheetState),
           categoryFilter: Padding(
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: _buildCategoryChips(),
@@ -399,59 +401,17 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
   }
 
   /// Search bar used inside the bottom sheet.
-  Widget _buildSheetSearchBar(BuildContext context, VoidCallback onTap) {
-    return GestureDetector(
+  Widget _buildSheetSearchBar(BuildContext context, VoidCallback onTap,
+      {ProductSheetState sheetState = ProductSheetState.half}) {
+    return ProductSheetSearchBar(
+      controller: _searchController,
+      sheetState: sheetState,
       onTap: onTap,
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg),
-        decoration: BoxDecoration(
-          color: AppTheme.bgSecondary,
-          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-          border: Border.all(color: AppTheme.veryLightGray),
-        ),
-        child: Row(
-          children: [
-            const Icon(LucideIcons.search,
-                color: AppTheme.textTertiary, size: 18),
-            const SizedBox(width: AppTheme.sm),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                onTap: onTap,
-                onChanged: (val) {
-                  setState(() => _searchQuery = val.toLowerCase());
-                },
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 14,
-                  color: AppTheme.textPrimary,
-                ),
-                decoration: const InputDecoration(
-                  hintText: 'Search products...',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Outfit',
-                    color: AppTheme.textTertiary,
-                    fontSize: 14,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-            if (_searchQuery.isNotEmpty)
-              GestureDetector(
-                onTap: () {
-                  _searchController.clear();
-                  setState(() => _searchQuery = '');
-                },
-                child: const Icon(LucideIcons.x,
-                    size: 16, color: AppTheme.textTertiary),
-              ),
-          ],
-        ),
-      ),
+      shopName: _storeName,
+      hintText: 'Search in $_storeName...',
+      onChanged: (val) {
+        setState(() => _searchQuery = val.toLowerCase());
+      },
     );
   }
 
@@ -1309,38 +1269,20 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
 
   Widget _buildCategoryChips() {
     return SizedBox(
-      height: 40,
-      child: ListView.builder(
+      height: 36,
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
+        clipBehavior: Clip.none,
         itemCount: _categories.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final isSelected = _selectedCategory == index;
-          return GestureDetector(
+          final cat = _categories[index];
+          final item = CategoryCatalog.find(cat);
+          return CategoryPillItem(
+            item: item,
+            isSelected: isSelected,
             onTap: () => setState(() => _selectedCategory = index),
-            child: AnimatedContainer(
-              duration: AppDurations.normal,
-              margin: const EdgeInsets.only(right: AppTheme.sm),
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppTheme.lg,
-                vertical: AppTheme.sm,
-              ),
-              decoration: BoxDecoration(
-                color: isSelected ? AppTheme.primaryBlue : AppTheme.white,
-                borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                border: Border.all(
-                  color: isSelected ? AppTheme.primaryBlue : AppTheme.veryLightGray,
-                ),
-              ),
-              child: Text(
-                _categories[index],
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected ? AppTheme.white : AppTheme.textSecondary,
-                ),
-              ),
-            ),
           );
         },
       ),

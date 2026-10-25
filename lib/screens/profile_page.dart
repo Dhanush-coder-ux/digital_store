@@ -180,234 +180,95 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  SliverAppBar _buildSliverHeader(BuildContext context) {
+  Widget _buildSliverHeader(BuildContext context) {
     final profileImage = _profileImageProvider();
 
-    return SliverAppBar(
-      expandedHeight: 220,
-      pinned: true,
-      backgroundColor: AppTheme.primaryBlue,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      automaticallyImplyLeading: false,
-      flexibleSpace: FlexibleSpaceBar(
-        collapseMode: CollapseMode.pin,
-        background: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppTheme.primaryBlue, AppTheme.softRoyalBlue],
-            ),
-          ),
-          child: SafeArea(
-            child: Stack(
-              children: [
-                Positioned(
-                  right: -40,
-                  top: -40,
-                  child: Container(
-                    width: 180,
-                    height: 180,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppTheme.white.withOpacity(0.04),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 40,
-                  bottom: -20,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppTheme.white.withOpacity(0.06),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(AppTheme.xl),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Profile',
-                            style: TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.white,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.white.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(
-                                AppTheme.radiusMd,
-                              ),
-                            ),
-                            child: const Icon(
-                              LucideIcons.settings,
-                              color: AppTheme.white,
-                              size: 18,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppTheme.xl),
-                      FadeInLeft(
-                        duration: AppDurations.normal,
-                        child: Row(
-                          children: [
-                            GestureDetector(
-                              onTap: _pickProfileImage,
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    width: 76,
-                                    height: 76,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: AppTheme.white.withOpacity(0.5),
-                                        width: 3,
-                                      ),
-                                      boxShadow: AppTheme.shadowLarge,
-                                      image: DecorationImage(
-                                        image: profileImage,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  ),
-                                  if (_isPickingImage)
-                                    Positioned.fill(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: Colors.black.withOpacity(0.28),
-                                        ),
-                                        child: const Center(
-                                          child: SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              valueColor:
-                                                  AlwaysStoppedAnimation<Color>(
-                                                    AppTheme.white,
-                                                  ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  Positioned(
-                                    bottom: 2,
-                                    right: 2,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.mutedCyan,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: AppTheme.white,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      child: const Icon(
-                                        LucideIcons.pencil,
-                                        color: AppTheme.white,
-                                        size: 10,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: AppTheme.lg),
-                            Expanded(
-                              child: Consumer<ProfileProvider>(
-                                builder: (context, profile, child) {
-                                   return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        profile.userName.isNotEmpty 
-                                            ? profile.userName 
-                                            : (context.watch<AuthProvider>().email?.split('@').first ?? 'Guest'),
-                                        style: const TextStyle(
-                                          fontFamily: 'Outfit',
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppTheme.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        context.watch<AuthProvider>().email ?? context.watch<AuthProvider>().mobile ?? '',
-                                        style: TextStyle(
-                                          fontFamily: 'Outfit',
-                                          fontSize: 13,
-                                          color: AppTheme.white.withOpacity(0.7),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: AppTheme.sm),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: AppTheme.sm,
-                                          vertical: 3,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(
-                                            AppTheme.radiusSm,
-                                          ),
-                                          border: Border.all(
-                                            color: AppTheme.white.withOpacity(0.3),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: const [
-                                            Icon(
-                                              LucideIcons.diamond,
-                                              color: AppTheme.paleCyan,
-                                              size: 11,
-                                            ),
-                                            SizedBox(width: 4),
-                                            Text(
-                                              'Member',
-                                              style: TextStyle(
-                                                fontFamily: 'Outfit',
-                                                color: AppTheme.white,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
+    return SliverToBoxAdapter(
+      child: Container(
+        color: AppTheme.white,
+        child: SafeArea(
+          bottom: false,
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppTheme.lg, AppTheme.lg, AppTheme.lg, AppTheme.lg),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Avatar
+                  GestureDetector(
+                    onTap: _pickProfileImage,
+                    child: Stack(children: [
+                      Container(
+                        width: 64, height: 64,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.veryLightGray, width: 2),
+                          image: DecorationImage(image: profileImage, fit: BoxFit.cover),
+                          boxShadow: AppTheme.shadowSmall,
                         ),
                       ),
-                    ],
+                      if (_isPickingImage)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
+                            child: const Center(child: SizedBox(width: 18, height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.white))),
+                          ),
+                        ),
+                      Positioned(
+                        bottom: 0, right: 0,
+                        child: Container(
+                          width: 22, height: 22,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryBlue, shape: BoxShape.circle,
+                            border: Border.all(color: AppTheme.white, width: 1.5),
+                          ),
+                          child: const Icon(LucideIcons.pencil, color: AppTheme.white, size: 10),
+                        ),
+                      ),
+                    ]),
                   ),
-                ),
-              ],
+                  const SizedBox(width: AppTheme.md),
+                  // Name + email
+                  Expanded(
+                    child: Consumer<ProfileProvider>(
+                      builder: (context, profile, _) {
+                        final auth = context.watch<AuthProvider>();
+                        final name = profile.userName.isNotEmpty
+                            ? profile.userName
+                            : (auth.email?.split('@').first ?? 'Guest');
+                        final contact = auth.email ?? auth.mobile ?? '';
+                        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(name,
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                          if (contact.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(contact,
+                              style: Theme.of(context).textTheme.bodySmall,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                          const SizedBox(height: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.lightBlue,
+                              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                              border: Border.all(color: AppTheme.primaryBlue.withOpacity(0.3)),
+                            ),
+                            child: const Text('Member',
+                              style: TextStyle(fontFamily: 'Outfit', fontSize: 11,
+                                fontWeight: FontWeight.w700, color: AppTheme.primaryBlue)),
+                          ),
+                        ]);
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+            const Divider(height: 1, color: AppTheme.veryLightGray),
+          ]),
         ),
       ),
     );
@@ -504,8 +365,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildListTile(
               context,
               icon: LucideIcons.receipt,
-              iconBg: AppTheme.infoBlue.withOpacity(0.1),
-              iconColor: AppTheme.infoBlue,
+              iconBg: AppTheme.lightBlue,
+              iconColor: AppTheme.primaryBlue,
               title: 'My Orders',
               subtitle: 'Track & reorder',
               onTap: () => Navigator.push(
@@ -517,8 +378,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildListTile(
               context,
               icon: LucideIcons.mapPin,
-              iconBg: const Color(0xFFF3E8FF),
-              iconColor: const Color(0xFF9333EA),
+              iconBg: AppTheme.lightBlue,
+              iconColor: AppTheme.primaryBlue,
               title: 'Saved Addresses',
               subtitle: 'Home, Office, Parents',
               onTap: () => Navigator.push(
@@ -547,8 +408,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildListTile(
               context,
               icon: LucideIcons.bell,
-              iconBg: const Color(0xFFFFF7ED),
-              iconColor: const Color(0xFFF97316),
+              iconBg: AppTheme.bgSecondary,
+              iconColor: AppTheme.textPrimary,
               title: 'Notifications',
               subtitle: 'Deals, order updates',
               trailing: Switch(
@@ -562,8 +423,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildListTile(
               context,
               icon: LucideIcons.heart,
-              iconBg: const Color(0xFFFFF1F2),
-              iconColor: const Color(0xFFE11D48),
+              iconBg: AppTheme.lightBlue,
+              iconColor: AppTheme.primaryBlue,
               title: 'Favorites',
               subtitle: 'Liked stores & items',
               onTap: () => Navigator.push(
@@ -575,8 +436,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildListTile(
               context,
               icon: LucideIcons.headphones,
-              iconBg: AppTheme.mutedCyan.withOpacity(0.1),
-              iconColor: AppTheme.mutedCyan,
+              iconBg: AppTheme.bgSecondary,
+              iconColor: AppTheme.textPrimary,
               title: 'Support & FAQ',
               subtitle: 'Help center, chat',
               onTap: () => Navigator.push(
@@ -588,10 +449,10 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildListTile(
               context,
               icon: LucideIcons.fileText,
-              iconBg: AppTheme.primaryBlue.withOpacity(0.1),
-              iconColor: AppTheme.primaryBlue,
+              iconBg: AppTheme.bgSecondary,
+              iconColor: AppTheme.textPrimary,
               title: 'Terms of Service',
-              subtitle: 'Legal documents',
+              subtitle: 'Shopper terms & privacy policy',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const TermsOfServicePage()),
@@ -620,8 +481,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 _buildListTile(
                   context,
                   icon: LucideIcons.globe,
-                  iconBg: const Color(0xFFEEF2FF),
-                  iconColor: const Color(0xFF6366F1),
+                  iconBg: AppTheme.bgSecondary,
+                  iconColor: AppTheme.textPrimary,
                   title: 'Language',
                   subtitle: languageProvider.currentLanguageName,
                   onTap: () => _showLanguageSelector(context, languageProvider),

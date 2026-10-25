@@ -5,6 +5,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../core/auth/auth_provider.dart';
+import '../theme/app_theme.dart';
 import 'main_screen.dart';
 import 'login_screen.dart';
 
@@ -17,13 +18,14 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
   late Timer _statementTimer;
+  Timer? _autoNavTimer;
   int _currentStatementIndex = 0;
   bool _isLoading = false;
 
   final List<String> _statements = [
     'Your neighbourhood\'s trusted stores, in one place.',
-    'Regional specialities, delivered across India.',
-    'Local shops you\'ll love—discover and follow.',
+    'Discover local shops, browse products, and order with ease.',
+    'Regional specialities, delivered right to your door.',
   ];
 
   late AnimationController _haloController;
@@ -37,21 +39,17 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
     _haloController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    );
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
 
-    _haloScale = Tween<double>(begin: 1.0, end: 1.85).animate(
+    _haloScale = Tween<double>(begin: 1.0, end: 1.5).animate(
       CurvedAnimation(parent: _haloController, curve: Curves.easeOut),
     );
-    _haloOpacity = Tween<double>(begin: 0.8, end: 0.0).animate(
+    _haloOpacity = Tween<double>(begin: 0.5, end: 0.0).animate(
       CurvedAnimation(parent: _haloController, curve: Curves.easeOut),
     );
 
-    Future.delayed(const Duration(milliseconds: 550), () {
-      if (mounted) _haloController.forward();
-    });
-    
-    // We check session in background after first frame but don't auto-navigate
+    // Check session in background after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _checkSessionInBackground();
     });
@@ -60,10 +58,15 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _checkSessionInBackground() async {
     final authProvider = context.read<AuthProvider>();
     await authProvider.checkSession();
-    
-    if (mounted && authProvider.isAuthenticated) {
-      _enterApp(false);
-    }
+
+    if (!mounted) return;
+
+    // Smooth auto-transition after 3.2 seconds
+    _autoNavTimer = Timer(const Duration(milliseconds: 3200), () {
+      if (mounted && !_isLoading) {
+        _enterApp(authProvider.isAuthenticated ? false : true);
+      }
+    });
   }
 
   void _startStatementRotation() {
@@ -79,24 +82,26 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   @override
   void dispose() {
     _statementTimer.cancel();
+    _autoNavTimer?.cancel();
     _haloController.dispose();
     super.dispose();
   }
 
   void _enterApp(bool toLogin) async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
-    
-    // Add a slight delay for a smooth transition out effect
-    await Future.delayed(const Duration(milliseconds: 500));
-    
+
+    await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
-    
+
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => toLogin ? const LoginScreen() : const MainScreen(),
-        transitionDuration: const Duration(milliseconds: 600),
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            toLogin ? const LoginScreen() : const MainScreen(),
+        transitionDuration: const Duration(milliseconds: 500),
+        transitionsBuilder: (context, anim, secondaryAnimation, child) =>
+            FadeTransition(opacity: anim, child: child),
       ),
     );
   }
@@ -104,79 +109,84 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: AnimatedOpacity(
-        duration: const Duration(milliseconds: 400),
-        opacity: _isLoading ? 0.0 : 1.0,
-        child: Container(
-          width: double.infinity,
-          height: double.infinity,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              stops: [0.0, 0.52, 1.0],
-              colors: [
-                Color(0xFFE0922F),
-                Color(0xFFD4842B),
-                Color(0xFFC27726),
-              ],
-            ),
-          ),
+      backgroundColor: AppTheme.bgPrimary,
+      body: GestureDetector(
+        onTap: () {
+          final auth = context.read<AuthProvider>();
+          _enterApp(auth.isAuthenticated ? false : true);
+        },
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 400),
+          opacity: _isLoading ? 0.0 : 1.0,
           child: Stack(
             alignment: Alignment.center,
             children: [
-              // Glow Effect
+              // ── Top-Left Ambient Warm Glow ────────────────────────────
               Positioned(
-                top: MediaQuery.of(context).size.height * 0.25,
-                child: FadeIn(
-                  delay: const Duration(milliseconds: 100),
-                  duration: const Duration(milliseconds: 1600),
-                  child: Container(
-                    width: 520,
-                    height: 520,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          const Color(0xFFFFE8B0).withOpacity(0.42),
-                          const Color(0xFFFFD88C).withOpacity(0.14),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.4, 0.66],
-                      ),
+                top: -90,
+                left: -90,
+                child: Container(
+                  width: 280,
+                  height: 280,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        AppTheme.lightBlue.withValues(alpha: 0.5),
+                        AppTheme.bgPrimary.withValues(alpha: 0.0),
+                      ],
                     ),
                   ),
                 ),
               ),
 
-              // Main Content
+              // ── Bottom-Right Ambient Warm Glow ───────────────────────
+              Positioned(
+                bottom: -80,
+                right: -80,
+                child: Container(
+                  width: 300,
+                  height: 300,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        AppTheme.bgSecondary.withValues(alpha: 0.8),
+                        AppTheme.bgPrimary.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Main Content Column ──────────────────────────────────
               SafeArea(
                 child: Column(
                   children: [
                     const Spacer(flex: 3),
-                    
-                    // Logo Section
+
+                    // ── App Logo with Pulsing Halo ─────────────────────
                     SizedBox(
                       width: 140,
                       height: 140,
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          // Halo
+                          // Gentle Halo Animation
                           AnimatedBuilder(
                             animation: _haloController,
-                            builder: (context, child) {
+                            builder: (context, _) {
                               return Transform.scale(
                                 scale: _haloScale.value,
                                 child: Opacity(
                                   opacity: _haloOpacity.value,
                                   child: Container(
-                                    width: 94,
-                                    height: 94,
+                                    width: 106,
+                                    height: 106,
                                     decoration: BoxDecoration(
                                       borderRadius: BorderRadius.circular(30),
                                       border: Border.all(
-                                        color: const Color(0xFFFFFBF4).withOpacity(0.6),
+                                        color: AppTheme.primaryBlue.withValues(alpha: 0.35),
                                         width: 1.5,
                                       ),
                                     ),
@@ -185,155 +195,121 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                               );
                             },
                           ),
-                          // Logo Mark
+
+                          // Hero App Logo Card
                           FadeInUp(
                             delay: const Duration(milliseconds: 150),
-                            duration: const Duration(milliseconds: 900),
+                            duration: const Duration(milliseconds: 700),
                             from: 20,
                             child: Container(
-                              width: 94,
-                              height: 94,
+                              width: 100,
+                              height: 100,
+                              padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
+                                color: AppTheme.white,
                                 borderRadius: BorderRadius.circular(28),
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [Color(0xFF3D2310), Color(0xFF2A1708)],
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x733C1E08),
-                                    blurRadius: 44,
-                                    offset: Offset(0, 18),
-                                  ),
-                                ],
-                                border: Border.all(
-                                  color: const Color(0xFFFFDCA0).withOpacity(0.22),
-                                  width: 1,
-                                ),
+                                border: Border.all(color: AppTheme.veryLightGray, width: 1.2),
+                                boxShadow: AppTheme.shadowLarge,
                               ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  const Icon(LucideIcons.shoppingBag, color: Color(0xFFE0A33E), size: 42),
-                                  FadeIn(
-                                    delay: const Duration(milliseconds: 750),
-                                    duration: const Duration(milliseconds: 500),
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(top: 14),
-                                      child: Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFFFFE6B0),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              child: Image.asset(
+                                'assets/Vivid S-Cart Shopping Icon.png',
+                                fit: BoxFit.contain,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
 
-                    // App Name
+                    const SizedBox(height: 24),
+
+                    // ── App Name ───────────────────────────────────────
                     FadeInUp(
-                      delay: const Duration(milliseconds: 500),
-                      duration: const Duration(milliseconds: 700),
-                      from: 20,
+                      delay: const Duration(milliseconds: 350),
+                      duration: const Duration(milliseconds: 600),
+                      from: 16,
                       child: Text(
                         'Shopper',
-                        style: GoogleFonts.instrumentSerif(
-                          fontSize: 58,
-                          color: const Color(0xFFFFFBF4),
-                          fontWeight: FontWeight.w400,
-                          shadows: const [
-                            Shadow(
-                              color: Color(0x403C1E08),
-                              blurRadius: 16,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
+                        style: GoogleFonts.outfit(
+                          fontSize: 44,
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.6,
                         ),
                       ),
                     ),
-                    
-                    // Underline
+
+                    // ── Amber Accent Pill ──────────────────────────────
                     FadeIn(
-                      delay: const Duration(milliseconds: 1100),
-                      duration: const Duration(milliseconds: 900),
+                      delay: const Duration(milliseconds: 550),
+                      duration: const Duration(milliseconds: 600),
                       child: Container(
-                        margin: const EdgeInsets.only(bottom: 30, top: 4),
-                        height: 2,
-                        width: 80,
+                        margin: const EdgeInsets.only(bottom: 24, top: 8),
+                        height: 3,
+                        width: 48,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(2),
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.transparent,
-                              const Color(0xFFFFFBF4).withOpacity(0.85),
-                              Colors.transparent,
-                            ],
-                          ),
+                          color: AppTheme.primaryBlue,
                         ),
                       ),
                     ),
 
-                    // Rotating Statements
-                    SizedBox(
-                      height: 60,
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 600),
-                        switchInCurve: Curves.easeOut,
-                        switchOutCurve: Curves.easeIn,
-                        transitionBuilder: (child, animation) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0, 0.5),
-                                end: Offset.zero,
-                              ).animate(animation),
-                              child: child,
+                    // ── Rotating Statements ────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 36),
+                      child: SizedBox(
+                        height: 56,
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 450),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          transitionBuilder: (child, animation) {
+                            return FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0, 0.3),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: Text(
+                            _statements[_currentStatementIndex],
+                            key: ValueKey<int>(_currentStatementIndex),
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.outfit(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                              color: AppTheme.textSecondary,
+                              height: 1.45,
                             ),
-                          );
-                        },
-                        child: Text(
-                          _statements[_currentStatementIndex],
-                          key: ValueKey<int>(_currentStatementIndex),
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.geist(
-                            fontSize: 17.5,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFFFFFBF4).withOpacity(0.82),
-                            height: 1.45,
                           ),
                         ),
                       ),
                     ),
 
-                    // Progress Dots
+                    const SizedBox(height: 16),
+
+                    // ── Progress Dots ──────────────────────────────────
                     FadeIn(
-                      delay: const Duration(milliseconds: 1900),
-                      duration: const Duration(milliseconds: 600),
+                      delay: const Duration(milliseconds: 800),
+                      duration: const Duration(milliseconds: 500),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(_statements.length, (index) {
                           bool isActive = index == _currentStatementIndex;
                           return AnimatedContainer(
-                            duration: const Duration(milliseconds: 450),
+                            duration: const Duration(milliseconds: 350),
                             curve: Curves.easeOut,
                             margin: const EdgeInsets.symmetric(horizontal: 4),
-                            height: 7,
-                            width: isActive ? 22 : 7,
+                            height: 6,
+                            width: isActive ? 20 : 6,
                             decoration: BoxDecoration(
                               color: isActive
-                                  ? const Color(0xFFFFFBF4)
-                                  : const Color(0xFFFFFBF4).withOpacity(0.3),
+                                  ? AppTheme.primaryBlue
+                                  : AppTheme.veryLightGray,
                               borderRadius: BorderRadius.circular(999),
                             ),
                           );
@@ -342,96 +318,86 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                     ),
 
                     const Spacer(flex: 4),
-                    
-                    // Bottom CTA
+
+                    // ── Bottom Action Button ───────────────────────────
                     FadeInUp(
-                      delay: const Duration(milliseconds: 2500),
-                      duration: const Duration(milliseconds: 700),
-                      from: 20,
+                      delay: const Duration(milliseconds: 1000),
+                      duration: const Duration(milliseconds: 600),
+                      from: 16,
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 28),
-                        child: ElevatedButton(
-                          onPressed: () => _enterApp(false),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            backgroundColor: const Color(0xFF3D2310), // espresso-2 roughly
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 10,
-                            shadowColor: const Color(0x663C1E08),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Explore stores near you',
-                                style: GoogleFonts.geist(
-                                  color: const Color(0xFFFFFBF4),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              final auth = context.read<AuthProvider>();
+                              _enterApp(auth.isAuthenticated ? false : false);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryBlue,
+                              foregroundColor: AppTheme.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                              const SizedBox(width: 8),
-                              const Icon(LucideIcons.arrowRight, size: 18, color: Color(0xFFFFFBF4)),
-                            ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Explore stores near you',
+                                  style: GoogleFonts.outfit(
+                                    color: AppTheme.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  LucideIcons.arrowRight,
+                                  size: 18,
+                                  color: AppTheme.white,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
+
                     const SizedBox(height: 16),
 
-                    // Trust text
+                    // ── Sign In Navigation Link ────────────────────────
                     FadeIn(
-                      delay: const Duration(milliseconds: 2900),
-                      duration: const Duration(milliseconds: 600),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(LucideIcons.check, size: 14, color: Color(0xFFFFFBF4)),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Supporting local businesses near you',
-                            style: GoogleFonts.geist(
-                              fontSize: 12,
-                              color: const Color(0xFFFFFBF4).withOpacity(0.82),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Signin Line
-                    FadeIn(
-                      delay: const Duration(milliseconds: 2700),
-                      duration: const Duration(milliseconds: 600),
+                      delay: const Duration(milliseconds: 1200),
+                      duration: const Duration(milliseconds: 500),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             'Already have an account? ',
-                            style: GoogleFonts.geist(
-                              fontSize: 13.5,
-                              color: const Color(0xFFFFFBF4).withOpacity(0.6),
+                            style: GoogleFonts.outfit(
+                              fontSize: 14,
+                              color: AppTheme.textSecondary,
                             ),
                           ),
                           GestureDetector(
                             onTap: () => _enterApp(true),
                             child: Text(
                               'Sign in',
-                              style: GoogleFonts.geist(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFFFFFBF4),
-                                decoration: TextDecoration.underline,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.primaryBlue,
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 34),
+
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),

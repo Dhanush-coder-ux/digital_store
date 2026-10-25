@@ -15,6 +15,7 @@ import '../core/widgets/empty_state.dart';
 import '../theme/app_theme.dart';
 import 'api_shop_details_page.dart';
 import 'api_product_detail_page.dart';
+import 'notifications_page.dart';
 import '../models/shop_provider.dart';
 import '../models/shop_model.dart';
 
@@ -120,10 +121,10 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: AppTheme.darkGray,
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(LucideIcons.mapPin, color: AppTheme.white, size: 18),
+                child: const Icon(LucideIcons.mapPin, color: AppTheme.primaryBlue, size: 18),
               ),
               const SizedBox(width: 12),
               Column(
@@ -154,38 +155,30 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                         },
                       ),
                       const SizedBox(width: 4),
-                      Icon(LucideIcons.chevronDown, size: 16, color: AppTheme.textPrimary.withOpacity(0.6)),
+                      const Icon(LucideIcons.chevronDown, size: 16, color: AppTheme.textSecondary),
                     ],
                   ),
                 ],
               ),
             ],
           ),
-          Stack(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppTheme.white,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppTheme.veryLightGray),
-                ),
-                child: const Icon(LucideIcons.bell, color: AppTheme.textPrimary, size: 18),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NotificationsPage()),
+              );
+            },
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppTheme.bgSecondary,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.veryLightGray),
               ),
-              Positioned(
-                top: 10,
-                right: 12,
-                child: Container(
-                  width: 6,
-                  height: 6,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.errorRed,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ],
+              child: const Icon(LucideIcons.bell, color: AppTheme.textSecondary, size: 18),
+            ),
           ),
         ],
       ),
@@ -203,7 +196,8 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
               decoration: BoxDecoration(
                 color: AppTheme.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.textTertiary.withOpacity(0.5)),
+                border: Border.all(color: AppTheme.veryLightGray),
+                boxShadow: AppTheme.shadowSmall,
               ),
               child: TextField(
                 controller: _searchController,
@@ -295,18 +289,12 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
           color: AppTheme.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppTheme.veryLightGray),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.01),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: AppTheme.shadowSmall,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.trendingUp, size: 14, color: AppTheme.textSecondary.withOpacity(0.6)),
+            const Icon(LucideIcons.trendingUp, size: 14, color: AppTheme.textSecondary),
             const SizedBox(width: 6),
             Text(
               text,
@@ -389,7 +377,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withOpacity(0.08),
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: shop.logoUrl != null && shop.logoUrl!.isNotEmpty

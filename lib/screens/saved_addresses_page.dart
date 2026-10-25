@@ -68,12 +68,13 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.bgPrimary,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppTheme.bgPrimary,
         elevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(LucideIcons.arrowLeft, color: Color(0xFF0F172A)),
+          icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
@@ -81,7 +82,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
           style: GoogleFonts.outfit(
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            color: const Color(0xFF0F172A),
+            color: AppTheme.textPrimary,
           ),
         ),
       ),
@@ -187,24 +188,18 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
     return GestureDetector(
       onTap: () {
         context.read<LocationProvider>().selectAddressModel(address);
-        Navigator.pop(context);
+        Navigator.pop(context, address);
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDefault ? AppTheme.primaryBlue.withOpacity(0.4) : Colors.grey.shade200,
+            color: isDefault ? AppTheme.primaryBlue.withOpacity(0.4) : AppTheme.veryLightGray,
             width: isDefault ? 1.5 : 1,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.shade100,
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: AppTheme.shadowSmall,
         ),
         child: Column(
         children: [
@@ -214,7 +209,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                color: AppTheme.primaryBlue.withOpacity(0.05),
+                color: AppTheme.primaryBlue.withOpacity(0.08),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
               ),
               child: Row(
@@ -240,7 +235,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withOpacity(0.1),
+                    color: AppTheme.primaryBlue.withOpacity(0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(LucideIcons.mapPin, color: AppTheme.primaryBlue, size: 20),
@@ -255,14 +250,14 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
                         style: GoogleFonts.outfit(
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
-                          color: const Color(0xFF0F172A),
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         '${address.city}, ${address.state} — ${address.pincode}',
                         style: GoogleFonts.outfit(
-                          color: const Color(0xFF475569),
+                          color: AppTheme.textSecondary,
                           fontSize: 13,
                           height: 1.4,
                         ),
@@ -270,12 +265,12 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Icon(LucideIcons.phone, size: 12, color: Colors.grey.shade500),
+                          Icon(LucideIcons.phone, size: 12, color: AppTheme.textTertiary),
                           const SizedBox(width: 4),
                           Text(
                             address.phone,
                             style: GoogleFonts.outfit(
-                              color: Colors.grey.shade500,
+                              color: AppTheme.textTertiary,
                               fontSize: 12,
                             ),
                           ),
@@ -362,13 +357,13 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: Colors.transparent,
+          color: AppTheme.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: AppTheme.primaryBlue.withOpacity(0.4),
-            width: 1,
-            style: BorderStyle.solid,
+            color: AppTheme.primaryBlue.withOpacity(0.5),
+            width: 1.2,
           ),
+          boxShadow: AppTheme.shadowSmall,
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,

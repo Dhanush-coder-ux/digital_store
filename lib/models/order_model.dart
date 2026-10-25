@@ -16,6 +16,17 @@ class ApiOrder {
   final List<ApiOrderItem> items;
   final Map<String, dynamic>? calculationInfos;
   final Map<String, dynamic>? paymentInfos;
+  final Map<String, dynamic>? additionalInfos;
+  final Map<String, dynamic>? chargesInfos;
+  final Map<String, dynamic>? deliveryAddress;
+  final String? customerName;
+  final String? customerPhone;
+  final String? addressId;
+  final String? fullAddress;
+  final String? city;
+  final String? pincode;
+  final String? state;
+  final String? note;
   final String? createdAt;
   final String? updatedAt;
   final String? otp;
@@ -31,6 +42,17 @@ class ApiOrder {
     this.items = const [],
     this.calculationInfos,
     this.paymentInfos,
+    this.additionalInfos,
+    this.chargesInfos,
+    this.deliveryAddress,
+    this.customerName,
+    this.customerPhone,
+    this.addressId,
+    this.fullAddress,
+    this.city,
+    this.pincode,
+    this.state,
+    this.note,
     this.createdAt,
     this.updatedAt,
     this.otp,
@@ -71,6 +93,71 @@ class ApiOrder {
       total = parseDouble(json['total_amount'] ?? json['total'] ?? 0);
     }
 
+    final additionalInfos = json['additional_infos'] is Map<String, dynamic>
+        ? json['additional_infos'] as Map<String, dynamic>
+        : null;
+
+    final chargesInfos = json['charges_infos'] is Map<String, dynamic>
+        ? json['charges_infos'] as Map<String, dynamic>
+        : null;
+
+    // Delivery address map can be in additional_infos, calculation_infos, or top-level
+    Map<String, dynamic>? deliveryAddressMap;
+    if (json['delivery_address'] is Map<String, dynamic>) {
+      deliveryAddressMap = json['delivery_address'] as Map<String, dynamic>;
+    } else if (additionalInfos?['delivery_address'] is Map<String, dynamic>) {
+      deliveryAddressMap = additionalInfos!['delivery_address'] as Map<String, dynamic>;
+    } else if (json['calculation_infos'] is Map &&
+        json['calculation_infos']['delivery_address'] is Map<String, dynamic>) {
+      deliveryAddressMap = json['calculation_infos']['delivery_address'] as Map<String, dynamic>;
+    }
+
+    final String? addressId = json['address_id']?.toString() ??
+        deliveryAddressMap?['address_id']?.toString() ??
+        deliveryAddressMap?['id']?.toString() ??
+        additionalInfos?['address_id']?.toString();
+
+    final String? fullAddress = json['full_address']?.toString() ??
+        json['address']?.toString() ??
+        deliveryAddressMap?['full_address']?.toString() ??
+        deliveryAddressMap?['address']?.toString() ??
+        additionalInfos?['full_address']?.toString() ??
+        (json['delivery_address'] is String ? json['delivery_address'].toString() : null) ??
+        (additionalInfos?['delivery_address'] is String ? additionalInfos!['delivery_address'].toString() : null);
+
+    final String? city = json['city']?.toString() ??
+        deliveryAddressMap?['city']?.toString() ??
+        additionalInfos?['city']?.toString();
+
+    final String? pincode = json['pincode']?.toString() ??
+        deliveryAddressMap?['pincode']?.toString() ??
+        additionalInfos?['pincode']?.toString();
+
+    final String? state = json['state']?.toString() ??
+        deliveryAddressMap?['state']?.toString() ??
+        additionalInfos?['state']?.toString();
+
+    final customerMap = json['customer'] is Map<String, dynamic>
+        ? json['customer'] as Map<String, dynamic>
+        : null;
+
+    final String? customerName = json['customer_name']?.toString() ??
+        json['name']?.toString() ??
+        additionalInfos?['customer_name']?.toString() ??
+        additionalInfos?['name']?.toString() ??
+        deliveryAddressMap?['name']?.toString() ??
+        customerMap?['name']?.toString();
+
+    final String? customerPhone = json['customer_phone']?.toString() ??
+        json['phone']?.toString() ??
+        additionalInfos?['customer_phone']?.toString() ??
+        additionalInfos?['phone']?.toString() ??
+        deliveryAddressMap?['phone']?.toString() ??
+        customerMap?['phone']?.toString();
+
+    final String? note = json['note']?.toString() ??
+        additionalInfos?['note']?.toString();
+
     return ApiOrder(
       id: json['id']?.toString() ?? '',
       uiId: json['ui_id']?.toString(),
@@ -86,6 +173,17 @@ class ApiOrder {
       paymentInfos: json['payment_infos'] is Map<String, dynamic>
           ? json['payment_infos'] as Map<String, dynamic>
           : null,
+      additionalInfos: additionalInfos,
+      chargesInfos: chargesInfos,
+      deliveryAddress: deliveryAddressMap,
+      customerName: customerName,
+      customerPhone: customerPhone,
+      addressId: addressId,
+      fullAddress: fullAddress,
+      city: city,
+      pincode: pincode,
+      state: state,
+      note: note,
       createdAt: json['created_at']?.toString(),
       updatedAt: json['updated_at']?.toString(),
       otp: json['otp']?.toString(),
@@ -98,6 +196,17 @@ class ApiOrder {
         'status': status,
         'total_amount': totalAmount,
         'items': items.map((e) => e.toJson()).toList(),
+        if (additionalInfos != null) 'additional_infos': additionalInfos,
+        if (chargesInfos != null) 'charges_infos': chargesInfos,
+        if (deliveryAddress != null) 'delivery_address': deliveryAddress,
+        if (customerName != null) 'customer_name': customerName,
+        if (customerPhone != null) 'customer_phone': customerPhone,
+        if (addressId != null) 'address_id': addressId,
+        if (fullAddress != null) 'full_address': fullAddress,
+        if (city != null) 'city': city,
+        if (pincode != null) 'pincode': pincode,
+        if (state != null) 'state': state,
+        if (note != null) 'note': note,
       };
 }
 

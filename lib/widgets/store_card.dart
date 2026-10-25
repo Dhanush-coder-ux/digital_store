@@ -203,8 +203,8 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
       ),
       decoration: BoxDecoration(
         color: widget.isOpen
-            ? AppTheme.successGreen.withOpacity(0.85)
-            : AppTheme.errorRed.withOpacity(0.85),
+            ? AppTheme.successGreen.withValues(alpha: 0.9)
+            : AppTheme.errorRed.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
         boxShadow: AppTheme.shadowSmall,
       ),
@@ -235,14 +235,14 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
             vertical: AppTheme.xs,
           ),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFFBEB),
+            color: AppTheme.softPeach,
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(color: const Color(0xFFFDE68A)),
+            border: Border.all(color: AppTheme.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+              const Icon(Icons.star_rounded, color: AppTheme.primary, size: 14),
               const SizedBox(width: 3),
               Text(
                 rating.toStringAsFixed(1),
@@ -250,7 +250,7 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
                   fontFamily: 'Outfit',
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF92400E),
+                  color: AppTheme.primaryText,
                 ),
               ),
               const SizedBox(width: 3),
@@ -260,7 +260,7 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
                   fontFamily: 'Outfit',
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
-                  color: Color(0xFF92400E),
+                  color: AppTheme.secondaryText,
                 ),
               ),
             ],
@@ -307,7 +307,7 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
         vertical: AppTheme.xs,
       ),
       decoration: BoxDecoration(
-        color: AppTheme.successGreen.withOpacity(0.1),
+        color: AppTheme.successGreen.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       ),
       child: Row(

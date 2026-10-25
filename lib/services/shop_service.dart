@@ -44,6 +44,34 @@ class ShopService {
     return _parseSingleShop(body);
   }
 
+  // ── Delivery Options ───────────────────────────────────────────────
+
+  Future<List<ShopDeliveryOption>> fetchShopDeliveryOptions(String shopId) async {
+    try {
+      final body = await _client.get(
+        ApiConfig.shopDeliveryOptions(shopId),
+        requiresAuth: true,
+      );
+      if (body is Map<String, dynamic>) {
+        final data = body['data'];
+        if (data is List) {
+          return data
+              .whereType<Map<String, dynamic>>()
+              .map((e) => ShopDeliveryOption.fromJson(e))
+              .toList();
+        }
+      } else if (body is List) {
+        return body
+            .whereType<Map<String, dynamic>>()
+            .map((e) => ShopDeliveryOption.fromJson(e))
+            .toList();
+      }
+    } catch (e) {
+      print('ShopService: fetchShopDeliveryOptions error: $e');
+    }
+    return [];
+  }
+
   // ── Announcements ──────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getShopAnnouncements(String shopId) async {

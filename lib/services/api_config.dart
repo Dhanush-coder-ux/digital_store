@@ -5,7 +5,7 @@
 //
 
 class ApiConfig {
-  static String get baseIp => '10.167.188.101';
+  static String get baseIp => '10.39.224.101';
 
 //   static String get gatewayBase => 'http://$baseIp:8000/api';
   static String get gatewayBase => 'https://marketplace.debuggers.co.in/api';

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_constants.dart';
 
 class SupportFaqPage extends StatefulWidget {
   const SupportFaqPage({super.key});
@@ -100,10 +99,10 @@ class _SupportFaqPageState extends State<SupportFaqPage> {
                     hintText: 'Search for answers...',
                     prefixIcon: const Icon(LucideIcons.search, color: AppTheme.textSecondary),
                     filled: true,
-                    fillColor: AppTheme.veryLightGray,
+                    fillColor: AppTheme.bgSecondary,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-                      borderSide: BorderSide.none,
+                      borderSide: const BorderSide(color: AppTheme.veryLightGray),
                     ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 0),
                   ),

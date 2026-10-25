@@ -6,7 +6,6 @@
 
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
-import 'package:lucide_icons/lucide_icons.dart';
 import '../models/order_model.dart';
 import '../theme/app_theme.dart';
 import 'main_screen.dart';
@@ -174,6 +173,23 @@ class _OrderSuccessPageState extends State<OrderSuccessPage>
             _detailRow('Order ID', '#${(order.uiId ?? order.id).toUpperCase()}'),
             const Divider(height: 20, color: AppTheme.veryLightGray),
             _detailRow('Status', order.status),
+            if (order.calculationInfos?['delivery_fee'] != null) ...[
+              const Divider(height: 20, color: AppTheme.veryLightGray),
+              _detailRow(
+                'Delivery Fee',
+                (double.tryParse(order.calculationInfos!['delivery_fee'].toString()) ?? 0.0) <= 0
+                    ? 'FREE'
+                    : '₹${(double.tryParse(order.calculationInfos!['delivery_fee'].toString()) ?? 0.0).toStringAsFixed(2)}',
+                valueStyle: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: (double.tryParse(order.calculationInfos!['delivery_fee'].toString()) ?? 0.0) <= 0
+                      ? AppTheme.successGreen
+                      : AppTheme.textPrimary,
+                ),
+              ),
+            ],
             const Divider(height: 20, color: AppTheme.veryLightGray),
             _detailRow(
               'Total',

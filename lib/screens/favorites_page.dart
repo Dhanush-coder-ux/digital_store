@@ -57,21 +57,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
       child: Scaffold(
         backgroundColor: AppTheme.bgPrimary,
         appBar: AppBar(
-          flexibleSpace: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.primaryBlue, AppTheme.softRoyalBlue],
-              ),
-            ),
-          ),
+          backgroundColor: AppTheme.white,
+          surfaceTintColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.white),
+            icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
             onPressed: () => Navigator.pop(context),
           ),
-          title: Text(
+          title: const Text(
             'Favorites',
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(color: AppTheme.white),
+            style: TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+            ),
           ),
           centerTitle: true,
           bottom: PreferredSize(

@@ -1,17 +1,23 @@
 // lib/screens/api_shop_details_page.dart
 //
-// Shop detail page showing real products from the Inventory Service.
-// Products are loaded lazily when the page is first opened.
-// Uses an Instagram-style draggable bottom sheet for product browsing.
-//
+// Redesigned Digital Storefront — Premium, Production-Ready Mobile Shopping UX
+// Follows modern retail commerce design principles:
+// 1. Clear shop identity & verified information in compact header.
+// 2. Compact, elegant service summary (delivery & pickup) without cluttering front page.
+// 3. Return policy available on demand via detail modal instead of dominating front page.
+// 4. Products front and center with sticky category/search filter & responsive 2-column grid.
+// 5. Variant selection bottom sheet, real-time cart synchronization, and smooth shopping.
 
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/shop_model.dart';
 import '../models/product_model.dart';
 import '../models/product_provider.dart';
@@ -19,15 +25,15 @@ import '../models/api_cart_provider.dart';
 import '../models/cart_session_model.dart';
 import '../models/favorites_api_provider.dart';
 import '../models/shop_provider.dart';
-import '../core/auth/auth_provider.dart';
-import '../theme/app_theme.dart';
-import '../widgets/product_bottom_sheet.dart';
-import 'api_product_detail_page.dart';
-import 'api_checkout_page.dart';
-import 'search_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/review_provider.dart';
 import '../core/models/review_model.dart';
+import '../core/auth/auth_provider.dart';
+import '../theme/app_theme.dart';
+import '../models/category_model.dart';
+import '../widgets/category_widget.dart';
+import 'api_product_detail_page.dart';
+import 'api_checkout_page.dart';
+
 class ApiShopDetailsPage extends StatefulWidget {
   final Shop shop;
 
@@ -39,18 +45,27 @@ class ApiShopDetailsPage extends StatefulWidget {
 
 class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
   String _searchQuery = '';
   String _selectedCategory = 'All';
   bool _isFollowLoading = false;
 
   List<Map<String, dynamic>> _announcements = [];
-  bool _isAnnouncementsLoading = true;
-  String? _announcementsError;
+  List<ShopDeliveryOption> _deliveryOptions = [];
 
-  // ── Product Bottom Sheet ──────────────────────────────────────────────
-  final ProductSheetController _sheetController = ProductSheetController();
-  final ScrollController _bgScrollController = ScrollController();
-  final GlobalKey _announcementsKey = GlobalKey();
+  // ── Design Tokens (Mapped to AppTheme) ──────────────────────────────
+  static const Color _bgWarm = AppTheme.bgPrimary;               // 0xFFFFFBF4 Cream page bg
+  static const Color _surfaceWhite = AppTheme.white;             // 0xFFFFFFFF
+  static const Color _accent = AppTheme.primaryBlue;             // 0xFFE0922F Caramel / Primary
+  static const Color _accentLight = Color(0xFFFFF6EB);           // Soft warm caramel cream tint
+  static const Color _accentMid = AppTheme.softRoyalBlue;         // 0xFFD4842B Deep amber
+  static const Color _textPrimary = AppTheme.textPrimary;         // 0xFF2A1708 Espresso
+  static const Color _textSecondary = AppTheme.textSecondary;     // 0xFF5C3A21 Medium brown
+  static const Color _textTertiary = AppTheme.textTertiary;       // 0xFF8C6549 Light brown
+  static const Color _borderSubtle = AppTheme.veryLightGray;     // 0xFFF4EBE1 Warm subtle border
+  static const Color _accentGold = AppTheme.primaryBlue;         // 0xFFE0922F
+  static const Color _successGreen = AppTheme.successGreen;       // 0xFF22C55E Emerald green
 
   @override
   void initState() {
@@ -59,34 +74,72 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
       context.read<ProductProvider>().fetchProductsByShop(widget.shop.id);
       context.read<ReviewProvider>().fetchShopReviews(widget.shop.id);
       _fetchAnnouncements();
+      _fetchDeliveryOptions();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchAnnouncements() async {
     if (!mounted) return;
-    setState(() {
-      _isAnnouncementsLoading = true;
-      _announcementsError = null;
-    });
-
     try {
       final service = context.read<ShopProvider>().service;
       final data = await service.getShopAnnouncements(widget.shop.id);
       if (mounted) {
         setState(() {
-          _announcements = data;
-          _isAnnouncementsLoading = false;
+          _announcements = data.isNotEmpty ? data : widget.shop.announcements;
         });
         _checkAndShowNewAnnouncementPopup();
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _announcementsError = 'Failed to load announcements';
-          _isAnnouncementsLoading = false;
+          _announcements = widget.shop.announcements;
         });
       }
     }
+  }
+
+  Future<void> _fetchDeliveryOptions() async {
+    if (!mounted) return;
+    try {
+      final service = context.read<ShopProvider>().service;
+      final data = await service.fetchShopDeliveryOptions(widget.shop.id);
+      if (mounted) {
+        setState(() {
+          _deliveryOptions = _deduplicateDeliveryOptions(data);
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _deliveryOptions = _deduplicateDeliveryOptions(widget.shop.parsedDeliveryOptions);
+        });
+      }
+    }
+  }
+
+  List<ShopDeliveryOption> _deduplicateDeliveryOptions(List<ShopDeliveryOption> options) {
+    final Map<String, ShopDeliveryOption> uniqueMap = {};
+    for (final opt in options) {
+      if (!opt.enabled) continue;
+      final key = opt.type;
+      if (!uniqueMap.containsKey(key)) {
+        uniqueMap[key] = opt;
+      } else {
+        final existing = uniqueMap[key]!;
+        if (opt.deliveryCharge < existing.deliveryCharge ||
+            (opt.deliveryCharge == existing.deliveryCharge && (opt.id ?? 0) > (existing.id ?? 0))) {
+          uniqueMap[key] = opt;
+        }
+      }
+    }
+    return uniqueMap.values.toList();
   }
 
   Future<void> _checkAndShowNewAnnouncementPopup() async {
@@ -94,8 +147,7 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
 
     final prefs = await SharedPreferences.getInstance();
     final seenIds = prefs.getStringList('seen_announcements') ?? [];
-    
-    // Find first unseen announcement
+
     Map<String, dynamic>? newAnn;
     for (var ann in _announcements) {
       final annId = ann['id']?.toString() ?? ann.hashCode.toString();
@@ -109,7 +161,8 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
       final annId = newAnn['id']?.toString() ?? newAnn.hashCode.toString();
       seenIds.add(annId);
       await prefs.setStringList('seen_announcements', seenIds);
-      
+      if (!mounted) return;
+
       final msg = newAnn['message']?.toString() ?? '';
       final type = newAnn['type']?.toString() ?? 'OFFER';
       final cta = newAnn['call_to_action']?.toString();
@@ -131,58 +184,58 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.15),
+                      color: _accentGold.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(LucideIcons.megaphone, color: Colors.deepOrange, size: 32),
+                    child: const Icon(LucideIcons.megaphone, color: _accentGold, size: 28),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'New Shop $type',
+                    'Store $type',
                     style: const TextStyle(
                       fontFamily: 'Outfit',
-                      fontSize: 20,
+                      fontSize: 19,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                      color: _textPrimary,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Text(
                     msg,
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontFamily: 'Outfit',
-                      fontSize: 15,
-                      color: AppTheme.textSecondary,
-                      height: 1.4,
+                      fontSize: 14.5,
+                      color: _textSecondary,
+                      height: 1.45,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 22),
                   if (cta != null && cta.isNotEmpty) ...[
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: () => Navigator.pop(context),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepOrange,
+                          backgroundColor: _accent,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 0,
                         ),
                         child: Text(
                           cta,
-                          style: const TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w600),
+                          style: const TextStyle(fontFamily: 'Outfit', fontSize: 14.5, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                   ],
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: const Text(
                       'Dismiss',
-                      style: TextStyle(fontFamily: 'Outfit', color: Colors.black54),
+                      style: TextStyle(fontFamily: 'Outfit', color: _textSecondary),
                     ),
                   ),
                 ],
@@ -194,891 +247,408 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _bgScrollController.dispose();
-    super.dispose();
-  }
-
   Future<void> _onRefresh() async {
     await Future.wait([
       context.read<ProductProvider>().fetchProductsByShop(widget.shop.id, force: true),
       context.read<ReviewProvider>().fetchShopReviews(widget.shop.id, force: true),
       _fetchAnnouncements(),
+      _fetchDeliveryOptions(),
     ]);
   }
 
+  // ── Main Build ─────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth >= 1024;
-
-    return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        final consumed = _sheetController.handleBackPress();
-        if (!consumed) Navigator.pop(context);
-      },
-      child: Scaffold(
-        backgroundColor: AppTheme.white,
-        body: isDesktop
-            ? _buildDesktopLayout()
-            : _buildMobileLayout(),
-      ),
-    );
-  }
-
-  // ── Mobile: background shop info + foreground product sheet ─────────
-  Widget _buildMobileLayout() {
-    return Stack(
-      children: [
-        // Background: shop info, announcements, reviews.
-        RefreshIndicator(
-          onRefresh: _onRefresh,
-          color: AppTheme.primaryBlue,
-          child: CustomScrollView(
-            controller: _bgScrollController,
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
-            ),
-            slivers: [
-              _buildAppBar(),
-              _buildShopInfo(),
-              if (widget.shop.deliveryOptions.isNotEmpty)
-                _buildDeliveryInformationSection(),
-              _buildAnnouncementsSection(),
-              _buildReviewsSection(),
-              _buildBrowseProductsActionCard(),
-              const SliverToBoxAdapter(child: SizedBox(height: 100)),
-            ],
-          ),
-        ),
-        // Foreground: draggable product bottom sheet docked at bottom of mobile.
-        Consumer<ProductProvider>(
-          builder: (ctx, pp, _) {
-            final cats = pp.categoriesForShop(widget.shop.id);
-            final hasCats = cats.isNotEmpty;
-            return ProductBottomSheet(
-              controller: _sheetController,
-              shopName: widget.shop.name,
-              collapsedFraction: 0.11,
-              midFraction: 0.55,
-              expandedFraction: 0.93,
-              categoryFilterHeight: 74.0,
-              searchBarBuilder: (ctx, sheetState, onTap) =>
-                  _buildSheetSearchBar(ctx, onTap),
-              categoryFilter: hasCats ? _buildZeptoCategories(cats) : null,
-              contentBuilder: (ctx, scrollCtrl, sheetState) =>
-                  _buildProductsSectionSliver(),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  SliverToBoxAdapter _buildBrowseProductsActionCard() {
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: GestureDetector(
-          onTap: () => _sheetController.expandToHalf(),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.primaryBlue.withOpacity(0.08),
-                  AppTheme.bgSecondary,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+    return Scaffold(
+      backgroundColor: _bgWarm,
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _onRefresh,
+            color: _textPrimary,
+            backgroundColor: _surfaceWhite,
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
               ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: AppTheme.primaryBlue.withOpacity(0.2),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.primaryBlue,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    LucideIcons.shoppingBag,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Explore Products',
-                        style: TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Swipe up or tap to browse all products',
-                        style: TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 13,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue.withOpacity(0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    LucideIcons.chevronUp,
-                    color: AppTheme.primaryBlue,
-                    size: 18,
-                  ),
-                ),
+              slivers: [
+                _buildAppBar(),
+                _buildShopIdentitySection(),
+                _buildCompactServiceSummary(),
+                if (_announcements.isNotEmpty) _buildAnnouncementsSection(),
+                _buildProductsHeaderAndFilter(),
+                _buildProductsGrid(),
+                _buildReviewsSection(),
+                const SliverToBoxAdapter(child: SizedBox(height: 90)),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  // ── Desktop: traditional single-scroll layout ────────────────────────
-  Widget _buildDesktopLayout() {
-    return RefreshIndicator(
-      onRefresh: _onRefresh,
-      color: AppTheme.primaryBlue,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(
-            parent: BouncingScrollPhysics()),
-        slivers: [
-          _buildAppBar(),
-          _buildShopInfo(),
-          if (widget.shop.deliveryOptions.isNotEmpty)
-            _buildDeliveryInformationSection(),
-          _buildAnnouncementsSection(),
-          _buildSearchAndCategoriesSection(),
-          _buildProductsSection(),
-          _buildReviewsSection(),
+          _buildFloatingCartBar(),
         ],
       ),
     );
   }
 
-  // ── Sheet-specific search bar (functional, not a push to SearchPage) ─
-  Widget _buildSheetSearchBar(BuildContext context, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: AppTheme.bgSecondary,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-              color: AppTheme.veryLightGray.withOpacity(0.5)),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 14),
-            Icon(LucideIcons.search,
-                size: 18, color: AppTheme.textTertiary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                onTap: onTap,
-                onChanged: (val) {
-                  setState(() => _searchQuery = val.toLowerCase());
-                },
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 14,
-                  color: AppTheme.textPrimary,
-                ),
-                decoration: const InputDecoration(
-                  hintText: 'Search for products...',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 14,
-                    color: AppTheme.textTertiary,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ),
-            if (_searchQuery.isNotEmpty)
-              GestureDetector(
-                onTap: () {
-                  _searchController.clear();
-                  setState(() => _searchQuery = '');
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 14),
-                  child: const Icon(LucideIcons.x,
-                      size: 16, color: AppTheme.textTertiary),
-                ),
-              )
-            else
-              const SizedBox(width: 14),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Products sliver for the sheet (SliverToBoxAdapter wrapper) ───────
-  SliverToBoxAdapter _buildProductsSectionSliver() {
-    return SliverToBoxAdapter(
-      child: Consumer<ProductProvider>(
-        builder: (context, pp, _) {
-          final isLoading = pp.isLoadingShop(widget.shop.id);
-          final error = pp.errorForShop(widget.shop.id);
-          final products = pp.filteredProducts(
-            widget.shop.id,
-            category:
-                _selectedCategory == 'All' ? null : _selectedCategory,
-            query: _searchQuery,
-          );
-
-          if (isLoading) {
-            return Padding(
-              padding: const EdgeInsets.all(16),
-              child: Shimmer.fromColors(
-                baseColor: Colors.grey[200]!,
-                highlightColor: Colors.grey[100]!,
-                child: GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.72,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  itemCount: 6,
-                  itemBuilder: (_, __) => Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          if (error != null) {
-            return Padding(
-              padding: const EdgeInsets.all(40),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.alertCircle,
-                        size: 40, color: AppTheme.errorRed),
-                    const SizedBox(height: 12),
-                    Text(error,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontFamily: 'Outfit',
-                          color: AppTheme.textSecondary,
-                          fontSize: 14,
-                        )),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => pp.fetchProductsByShop(
-                          widget.shop.id,
-                          force: true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryBlue,
-                        foregroundColor: Colors.white,
-                      ),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          if (products.isEmpty) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 48),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.searchX,
-                        size: 40, color: AppTheme.textTertiary),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'No products found',
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Try a different search or category',
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 13,
-                        color: AppTheme.textTertiary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate:
-                  const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 0.72,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              itemCount: products.length,
-              itemBuilder: (context, index) {
-                return FadeInUp(
-                  delay: Duration(milliseconds: 60 * (index % 6)),
-                  child:
-                      _ProductCard(product: products[index], shop: widget.shop),
-                );
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-
-  // ── App Bar with Banner ────────────────────────────────────────────
+  // ── Navigation Bar ─────────────────────────────────────────────────
 
   SliverAppBar _buildAppBar() {
     return SliverAppBar(
       pinned: true,
-      floating: true,
-      backgroundColor: AppTheme.white,
-      foregroundColor: AppTheme.textPrimary,
       elevation: 0,
+      backgroundColor: _surfaceWhite,
+      surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        icon: const Icon(LucideIcons.arrowLeft, color: Colors.black, size: 24),
+        icon: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: _accentLight,
+            shape: BoxShape.circle,
+            border: Border.all(color: _accent.withValues(alpha: 0.25)),
+          ),
+          child: const Icon(LucideIcons.arrowLeft, color: _accent, size: 18),
+        ),
         onPressed: () => Navigator.pop(context),
       ),
+      title: Text(
+        widget.shop.name,
+        style: const TextStyle(
+          fontFamily: 'Outfit',
+          fontSize: 17,
+          fontWeight: FontWeight.w700,
+          color: _textPrimary,
+          letterSpacing: -0.2,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      centerTitle: true,
       actions: [
         IconButton(
-          icon: const Icon(LucideIcons.share2, color: Colors.black, size: 20),
-          onPressed: () {},
+          icon: Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: _accentLight,
+              shape: BoxShape.circle,
+              border: Border.all(color: _accent.withValues(alpha: 0.25)),
+            ),
+            child: const Icon(LucideIcons.share2, color: _accent, size: 18),
+          ),
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: 'Check out ${widget.shop.name} on our marketplace!'));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Store link copied to clipboard'),
+                behavior: SnackBarBehavior.floating,
+                duration: Duration(seconds: 2),
+              ),
+            );
+          },
         ),
         _CartBadgeButton(shop: widget.shop),
         const SizedBox(width: 8),
       ],
-    );
-  }
-
-  SliverToBoxAdapter _buildSearchAndCategoriesSection() {
-    return SliverToBoxAdapter(
-      child: Container(
-        color: AppTheme.white,
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Consumer<ProductProvider>(
-          builder: (context, pp, _) {
-            final categories = pp.categoriesForShop(widget.shop.id);
-            return Column(
-              children: [
-                _buildSearchBarInAppBar(),
-                if (categories.isNotEmpty) _buildZeptoCategories(categories),
-              ],
-            );
-          },
-        ),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(color: _borderSubtle, height: 1),
       ),
     );
   }
 
-  IconData _getIconForCategory(String cat) {
-    switch (cat.toLowerCase()) {
-      case 'all': return LucideIcons.layoutGrid;
-      case 'fresh': return LucideIcons.leaf;
-      case 'electronics': return LucideIcons.cpu;
-      case 'fashion': return LucideIcons.shirt;
-      case 'bakery': return LucideIcons.cake;
-      case 'grocery': return LucideIcons.shoppingBag;
-      case 'pharmacy': return LucideIcons.cross;
-      default: return LucideIcons.box;
-    }
-  }
+  // ── Shop Identity Section (Compact Header) ─────────────────────────
 
-  Widget _buildZeptoCategories(List<String> categories) {
-    return SizedBox(
-      height: 74,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: categories.length,
-        itemBuilder: (ctx, i) {
-          final cat = categories[i];
-          final selected = cat == _selectedCategory;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedCategory = cat),
-            child: Container(
-              margin: const EdgeInsets.only(right: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: selected ? AppTheme.primaryBlue.withOpacity(0.1) : AppTheme.bgSecondary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      _getIconForCategory(cat),
-                      size: 20,
-                      color: selected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    cat,
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 12,
-                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                      color: selected ? AppTheme.textPrimary : AppTheme.textSecondary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    height: 3,
-                    width: 24,
-                    decoration: BoxDecoration(
-                      color: selected ? AppTheme.primaryBlue : Colors.transparent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildSearchBarInAppBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const SearchPage()),
-          );
-        },
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: AppTheme.bgSecondary,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.veryLightGray.withOpacity(0.5)),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 14),
-              Icon(LucideIcons.search, size: 18, color: AppTheme.textTertiary),
-              const SizedBox(width: 10),
-              Text(
-                'Search for products...',
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 14,
-                  color: AppTheme.textTertiary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Shop Info Card ─────────────────────────────────────────────────
-
-  SliverToBoxAdapter _buildShopInfo() {
+  SliverToBoxAdapter _buildShopIdentitySection() {
     final hasBanner = widget.shop.bannerUrl != null && widget.shop.bannerUrl!.isNotEmpty;
     final hasLogo = widget.shop.logoUrl != null && widget.shop.logoUrl!.isNotEmpty;
+    final double? distance = widget.shop.distance;
 
     return SliverToBoxAdapter(
       child: Container(
-        color: AppTheme.white,
+        color: _surfaceWhite,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Banner & Logo Stack
-            if (hasBanner || hasLogo)
-              Stack(
-                clipBehavior: Clip.none,
+            // Banner (Restrained controlled height)
+            if (hasBanner)
+              SizedBox(
+                height: 125,
+                width: double.infinity,
+                child: CachedNetworkImage(
+                  imageUrl: widget.shop.bannerUrl!,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(color: _bgWarm),
+                  errorWidget: (context, url, error) => Container(color: _bgWarm),
+                ),
+              ),
+
+            // Profile info row
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (hasBanner)
-                    Container(
-                      height: 160,
-                      width: double.infinity,
-                      color: AppTheme.bgSecondary,
-                      child: CachedNetworkImage(
-                        imageUrl: widget.shop.bannerUrl!,
-                        fit: BoxFit.cover,
-                        errorWidget: (context, url, error) => const SizedBox(),
-                      ),
-                    )
-                  else
-                    Container(
-                      height: 40,
-                      width: double.infinity,
-                      color: Colors.transparent,
-                    ),
-                  
-                  if (hasLogo)
-                    Positioned(
-                      left: 24,
-                      bottom: -28,
-                      child: Container(
-                        width: 72,
-                        height: 72,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Shop Logo
+                      Container(
+                        width: 54,
+                        height: 54,
                         decoration: BoxDecoration(
-                          color: AppTheme.white,
+                          color: _surfaceWhite,
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppTheme.white, width: 3),
+                          border: Border.all(color: _borderSubtle, width: 2),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
                             ),
                           ],
                         ),
                         child: ClipOval(
-                          child: CachedNetworkImage(
-                            imageUrl: widget.shop.logoUrl!,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, url, error) => const Icon(LucideIcons.store, color: AppTheme.primaryBlue, size: 32),
-                          ),
+                          child: hasLogo
+                              ? CachedNetworkImage(
+                                  imageUrl: widget.shop.logoUrl!,
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => _buildLogoFallback(),
+                                  errorWidget: (context, url, error) => _buildLogoFallback(),
+                                )
+                              : _buildLogoFallback(),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            
-            Padding(
-              padding: EdgeInsets.fromLTRB(24, (hasLogo ? 40.0 : 12.0), 24, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Name and Verified
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.shop.name,
-                    style: const TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.textPrimary,
-                      height: 1.2,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Consumer2<FavoritesApiProvider, AuthProvider>(
-                  builder: (context, favorites, auth, child) {
-                    final isFav = favorites.isShopFavorited(widget.shop.id);
-                    return SizedBox(
-                      height: 32,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isFav ? Colors.grey[200] : AppTheme.primaryBlue,
-                          foregroundColor: isFav ? Colors.black87 : Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        onPressed: () async {
-                          if (_isFollowLoading) return;
-                          if (auth.userId == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Please log in to follow shops'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                            return;
-                          }
-                          
-                          setState(() => _isFollowLoading = true);
-                          
-                          await favorites.toggleShopFavorite(auth.userId!, widget.shop.id);
-                          
-                          if (mounted) {
-                            setState(() => _isFollowLoading = false);
-                            if (favorites.error != null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(favorites.error!),
-                                  backgroundColor: AppTheme.errorRed,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                              favorites.clearError();
-                            }
-                          }
-                        },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      const SizedBox(width: 14),
+
+                      // Name & Category
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (_isFollowLoading) ...[
-                              SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    isFav ? Colors.black54 : Colors.white,
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    widget.shop.name,
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textPrimary,
+                                      height: 1.2,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                            ],
+                                const SizedBox(width: 4),
+                                const Icon(Icons.verified, size: 16, color: _accent),
+                              ],
+                            ),
+                            const SizedBox(height: 3),
                             Text(
-                              isFav ? 'Following' : 'Follow',
+                              widget.shop.categories.isNotEmpty
+                                  ? widget.shop.categories.join(' • ')
+                                  : (widget.shop.city.isNotEmpty ? widget.shop.city : 'Local Retailer'),
                               style: const TextStyle(
                                 fontFamily: 'Outfit',
-                                fontWeight: FontWeight.w600,
                                 fontSize: 13,
+                                color: _textSecondary,
+                                fontWeight: FontWeight.w500,
                               ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            // Tagline
-            if (widget.shop.tagline?.isNotEmpty == true) ...[
-              Text(
-                widget.shop.tagline!,
-                style: const TextStyle(
-                  fontFamily: 'Georgia',
-                  fontStyle: FontStyle.italic,
-                  color: Colors.black54,
-                  fontSize: 15,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ] else ...[
-              const SizedBox(height: 16),
-            ],
-            // Description
-            Text(
-              widget.shop.description?.isNotEmpty == true
-                  ? widget.shop.description!
-                  : 'No description available.',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 14,
-                color: Colors.black.withOpacity(0.75),
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Rating
-            Consumer<ReviewProvider>(
-              builder: (context, reviewProvider, child) {
-                final rating = reviewProvider.averageRatingForShop(widget.shop.id);
-                final count = reviewProvider.reviewCountForShop(widget.shop.id);
-                if (count == 0) return const SizedBox.shrink();
-                return Row(
-                  children: [
-                    const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 18),
-                    const SizedBox(width: 4),
-                    Text(
-                      rating.toStringAsFixed(1),
-                      style: const TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '($count reviews)',
-                      style: const TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 14,
-                        color: AppTheme.textTertiary,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-            
 
-            // Return Policy
-            if (widget.shop.returnPolicy != null && widget.shop.returnPolicy.toString().isNotEmpty)
-              Builder(
-                builder: (context) {
-                  Map<String, dynamic>? policyData;
-                  try {
-                    final raw = widget.shop.returnPolicy;
-                    if (raw is Map) {
-                      policyData = Map<String, dynamic>.from(raw);
-                    } else if (raw is String) {
-                      final parsed = json.decode(raw);
-                      if (parsed is Map) {
-                        policyData = Map<String, dynamic>.from(parsed);
-                      }
-                    }
-                  } catch (_) {}
-
-                  return Column(
-                    children: [
-                      const SizedBox(height: 12),
-                      Theme(
-                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                        child: ExpansionTile(
-                          initiallyExpanded: true,
-                          tilePadding: EdgeInsets.zero,
-                          collapsedIconColor: AppTheme.primaryBlue,
-                          iconColor: AppTheme.primaryBlue,
-                          title: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(color: AppTheme.primaryBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                                child: const Icon(LucideIcons.refreshCcw, size: 16, color: AppTheme.primaryBlue),
+                      // Follow Button
+                      Consumer2<FavoritesApiProvider, AuthProvider>(
+                        builder: (context, favorites, auth, _) {
+                          final isFav = favorites.isShopFavorited(widget.shop.id);
+                          return SizedBox(
+                            height: 34,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isFav ? _accentLight : _accent,
+                                foregroundColor: isFav ? _accent : Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                side: isFav ? BorderSide(color: _accent.withValues(alpha: 0.4)) : BorderSide.none,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                               ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Return Policy',
-                                style: TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
-                              ),
-                            ],
-                          ),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12, left: 38, right: 12),
-                              child: policyData != null
-                                  ? Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        if (policyData['title'] != null)
-                                          Text(policyData['title'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary)),
-                                        if (policyData['title'] != null) const SizedBox(height: 6),
-                                        if (policyData['details'] != null)
-                                          Text(policyData['details'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5)),
-                                        if (policyData['subtitle'] != null) ...[
-                                          const SizedBox(height: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(color: AppTheme.bgSecondary, borderRadius: BorderRadius.circular(6)),
-                                            child: Text(policyData['subtitle'].toString(), style: const TextStyle(fontFamily: 'Outfit', fontSize: 12, color: AppTheme.textTertiary)),
-                                          ),
-                                        ],
-                                      ],
-                                    )
-                                  : Text(
-                                      widget.shop.returnPolicy.toString(),
-                                      style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+                              onPressed: () async {
+                                if (_isFollowLoading) return;
+                                if (auth.userId == null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Please log in to follow shops'),
+                                      behavior: SnackBarBehavior.floating,
                                     ),
+                                  );
+                                  return;
+                                }
+
+                                setState(() => _isFollowLoading = true);
+                                await favorites.toggleShopFavorite(auth.userId!, widget.shop.id);
+                                if (mounted) {
+                                  setState(() => _isFollowLoading = false);
+                                }
+                              },
+                              icon: _isFollowLoading
+                                  ? SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          isFav ? _accent : Colors.white,
+                                        ),
+                                      ),
+                                    )
+                                  : Icon(
+                                      isFav ? LucideIcons.check : LucideIcons.plus,
+                                      size: 14,
+                                    ),
+                              label: Text(
+                                isFav ? 'Following' : 'Follow',
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12.5,
+                                ),
+                              ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }
-              ),
-            
-            // Delivery Information
-            if (widget.shop.deliveryInfoMessage != null && widget.shop.deliveryInfoMessage!.isNotEmpty) ...[
-              Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  initiallyExpanded: true,
-                  tilePadding: EdgeInsets.zero,
-                  collapsedIconColor: AppTheme.primaryBlue,
-                  iconColor: AppTheme.primaryBlue,
-                  title: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: AppTheme.primaryBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-                        child: const Icon(LucideIcons.truck, size: 16, color: AppTheme.primaryBlue),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'Delivery Information',
-                        style: TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                          );
+                        },
                       ),
                     ],
                   ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12, left: 38, right: 12),
+
+                  const SizedBox(height: 10),
+
+                  // Metadata Badges (Rating, Distance, Status)
+                  Row(
+                    children: [
+                      Consumer<ReviewProvider>(
+                        builder: (context, reviewProvider, _) {
+                          final rating = reviewProvider.averageRatingForShop(widget.shop.id);
+                          final count = reviewProvider.reviewCountForShop(widget.shop.id);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: _bgWarm,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: _borderSubtle),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 15),
+                                const SizedBox(width: 4),
+                                Text(
+                                  count > 0 ? rating.toStringAsFixed(1) : 'New',
+                                  style: const TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: _textPrimary,
+                                  ),
+                                ),
+                                if (count > 0) ...[
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '($count)',
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 11,
+                                      color: _textTertiary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      if (distance != null && distance > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: _bgWarm,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideIcons.mapPin, size: 12, color: _textSecondary),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${distance.toStringAsFixed(1)} km away',
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0FDF4),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFDCFCE7)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.circle, size: 7, color: _successGreen),
+                            SizedBox(width: 4),
+                            Text(
+                              'Open',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: _successGreen,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Short Description / Tagline (Controlled 1-2 lines)
+                  if (widget.shop.description?.isNotEmpty == true || widget.shop.tagline?.isNotEmpty == true) ...[
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => _showServicesBottomSheet(context, initialTab: 2),
                       child: Text(
-                        widget.shop.deliveryInfoMessage!,
-                        style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textSecondary, height: 1.5),
+                        widget.shop.description?.isNotEmpty == true
+                            ? widget.shop.description!
+                            : widget.shop.tagline!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          color: _textSecondary,
+                          height: 1.4,
+                        ),
                       ),
                     ),
                   ],
-                ),
-              ),
-            ],
                 ],
               ),
             ),
@@ -1088,14 +658,598 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
     );
   }
 
+  Widget _buildLogoFallback() {
+    return Container(
+      color: _bgWarm,
+      child: Center(
+        child: Text(
+          widget.shop.name.isNotEmpty ? widget.shop.name[0].toUpperCase() : 'S',
+          style: const TextStyle(
+            fontFamily: 'Outfit',
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: _textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
 
+  // ── Compact Service Summary Bar ────────────────────────────────────
+  // Solves: "Delivery and pickup we can just show the basic details and it occupies more spaces in front page.
+  // All details just complete in half of the page and the next page the products list should show"
+  // And: "We can ignore the return policy in the store detailpage .."
 
+  SliverToBoxAdapter _buildCompactServiceSummary() {
+    final activeOptions = _deliveryOptions.isNotEmpty
+        ? _deliveryOptions
+        : _deduplicateDeliveryOptions(widget.shop.parsedDeliveryOptions);
 
-  // ── Products Grid ─────────────────────────────────────────────────
+    // Compute basic summary labels
+    String deliveryText = 'Delivery available';
+    bool hasDelivery = false;
+    ShopDeliveryOption? primaryDelivery;
 
-  SliverPadding _buildProductsSection() {
+    for (final opt in activeOptions) {
+      if (!opt.isPickup) {
+        hasDelivery = true;
+        primaryDelivery = opt;
+        break;
+      }
+    }
+
+    if (hasDelivery && primaryDelivery != null) {
+      if (primaryDelivery.isInstant && primaryDelivery.speed.isNotEmpty) {
+        deliveryText = '⚡ ${primaryDelivery.speed}';
+      } else if (primaryDelivery.deliveryCharge <= 0) {
+        deliveryText = 'Free delivery';
+      } else if (primaryDelivery.freeShippingAmount > 0) {
+        deliveryText = 'Free > ₹${primaryDelivery.freeShippingAmount.toStringAsFixed(0)}';
+      } else {
+        deliveryText = 'From ₹${primaryDelivery.deliveryCharge.toStringAsFixed(0)}';
+      }
+    } else if (!hasDelivery && activeOptions.isNotEmpty) {
+      deliveryText = 'Store only';
+    }
+
+    final hasPickup = activeOptions.any((o) => o.isPickup);
+
+    return SliverToBoxAdapter(
+      child: Container(
+        color: _surfaceWhite,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+        child: GestureDetector(
+          onTap: () => _showServicesBottomSheet(context),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: _accentLight,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _accent.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                // Delivery Pill
+                const Icon(LucideIcons.truck, size: 14, color: _accent),
+                const SizedBox(width: 6),
+                Text(
+                  deliveryText,
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: _textPrimary,
+                  ),
+                ),
+
+                const SizedBox(width: 10),
+                Container(width: 3, height: 3, decoration: const BoxDecoration(color: _accentMid, shape: BoxShape.circle)),
+                const SizedBox(width: 10),
+
+                // Pickup Pill
+                const Icon(LucideIcons.shoppingBag, size: 14, color: _accent),
+                const SizedBox(width: 6),
+                Text(
+                  hasPickup ? 'Pickup: Free' : 'Self pickup',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: _textPrimary,
+                  ),
+                ),
+
+                const Spacer(),
+                const Icon(LucideIcons.chevronRight, size: 15, color: _accentMid),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Services & Policies Bottom Sheet (Detailed on demand) ─────────
+
+  void _showServicesBottomSheet(BuildContext context, {int initialTab = 0}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: _surfaceWhite,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(ctx).padding.bottom + 20),
+          child: DefaultTabController(
+            length: 3,
+            initialIndex: initialTab,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Drag handle
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: _borderSubtle,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Title row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Services & Shop Information',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(LucideIcons.x, size: 20, color: _textSecondary),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // Tab Header
+                Container(
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: _accentLight,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: _accent.withValues(alpha: 0.2)),
+                  ),
+                  child: TabBar(
+                    indicator: BoxDecoration(
+                      color: _accent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: _textSecondary,
+                    labelStyle: const TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w600),
+                    unselectedLabelStyle: const TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w500),
+                    dividerColor: Colors.transparent,
+                    tabs: const [
+                      Tab(text: 'Delivery & Pickup'),
+                      Tab(text: 'Return Policy'),
+                      Tab(text: 'About Store'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Tab Content
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.55,
+                  ),
+                  child: TabBarView(
+                    children: [
+                      _buildDeliveryOptionsDetailView(),
+                      _buildReturnPolicyDetailView(),
+                      _buildStoreInfoDetailView(),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDeliveryOptionsDetailView() {
+    final activeOptions = _deliveryOptions.isNotEmpty
+        ? _deliveryOptions
+        : _deduplicateDeliveryOptions(widget.shop.parsedDeliveryOptions);
+
+    if (activeOptions.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'No specific delivery options listed by this shop.',
+            style: TextStyle(fontFamily: 'Outfit', color: _textSecondary),
+          ),
+        ),
+      );
+    }
+
+    final double? distance = widget.shop.distance;
+
+    return ListView(
+      shrinkWrap: true,
+      children: [
+        ...activeOptions.map((opt) {
+          final isFree = opt.deliveryCharge <= 0 || opt.isPickup;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _bgWarm,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: opt.isPickup ? const Color(0xFFDCFCE7) : _accentLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    opt.isPickup ? LucideIcons.shoppingBag : LucideIcons.truck,
+                    color: opt.isPickup ? _successGreen : _accent,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            opt.title,
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: _textPrimary,
+                            ),
+                          ),
+                          Text(
+                            isFree ? 'FREE' : '₹${opt.deliveryCharge.toStringAsFixed(0)}',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: isFree ? _successGreen : _textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        opt.speed.isNotEmpty ? opt.speed : (opt.isPickup ? 'Store counter collection' : 'Standard delivery'),
+                        style: const TextStyle(fontFamily: 'Outfit', fontSize: 12.5, color: _textSecondary),
+                      ),
+                      if (opt.freeShippingAmount > 0) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '• Free delivery on orders over ₹${opt.freeShippingAmount.toStringAsFixed(0)}',
+                          style: const TextStyle(fontFamily: 'Outfit', fontSize: 11.5, color: _successGreen, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                      if (opt.minOrderAmount > 0) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '• Minimum order amount: ₹${opt.minOrderAmount.toStringAsFixed(0)}',
+                          style: const TextStyle(fontFamily: 'Outfit', fontSize: 11.5, color: _textTertiary),
+                        ),
+                      ],
+                      if (distance != null && distance > 0 && opt.isDistanceTiered) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          '• ${opt.calculate(subtotal: 0.0, distance: distance).description}',
+                          style: const TextStyle(fontFamily: 'Outfit', fontSize: 11.5, color: _textSecondary),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        if (widget.shop.deliveryInfoMessage?.isNotEmpty == true) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(LucideIcons.info, size: 15, color: _textSecondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.shop.deliveryInfoMessage!.trim(),
+                    style: const TextStyle(fontFamily: 'Outfit', fontSize: 12.5, color: _textSecondary, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildReturnPolicyDetailView() {
+    final raw = widget.shop.returnPolicy;
+    if (raw == null || raw.toString().trim().isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'This store follows standard return guidelines. Contact retailer for damaged or incorrect items.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontFamily: 'Outfit', fontSize: 14, color: _textSecondary, height: 1.45),
+          ),
+        ),
+      );
+    }
+
+    Map<String, dynamic>? policyData;
+    try {
+      if (raw is Map) {
+        policyData = Map<String, dynamic>.from(raw);
+      } else if (raw is String) {
+        final parsed = json.decode(raw);
+        if (parsed is Map) policyData = Map<String, dynamic>.from(parsed);
+      }
+    } catch (_) {}
+
+    return SingleChildScrollView(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _bgWarm,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _borderSubtle),
+        ),
+        child: policyData != null
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (policyData['title'] != null) ...[
+                    Text(
+                      policyData['title'].toString(),
+                      style: const TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w700, color: _textPrimary),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  if (policyData['details'] != null)
+                    Text(
+                      policyData['details'].toString(),
+                      style: const TextStyle(fontFamily: 'Outfit', fontSize: 13.5, color: _textSecondary, height: 1.5),
+                    ),
+                  if (policyData['subtitle'] != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderSubtle)),
+                      child: Text(
+                        policyData['subtitle'].toString(),
+                        style: const TextStyle(fontFamily: 'Outfit', fontSize: 12, color: _textSecondary),
+                      ),
+                    ),
+                  ],
+                ],
+              )
+            : Text(
+                raw.toString(),
+                style: const TextStyle(fontFamily: 'Outfit', fontSize: 13.5, color: _textSecondary, height: 1.5),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildStoreInfoDetailView() {
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.shop.description?.isNotEmpty == true) ...[
+            const Text(
+              'About the Shop',
+              style: TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              widget.shop.description!,
+              style: const TextStyle(fontFamily: 'Outfit', fontSize: 13.5, color: _textSecondary, height: 1.45),
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (widget.shop.displayAddress.isNotEmpty) ...[
+            const Text(
+              'Store Address',
+              style: TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Icon(LucideIcons.mapPin, size: 16, color: _textSecondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.shop.displayAddress,
+                    style: const TextStyle(fontFamily: 'Outfit', fontSize: 13.5, color: _textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ── Announcements & Offers Section ─────────────────────────────────
+
+  SliverToBoxAdapter _buildAnnouncementsSection() {
+    return SliverToBoxAdapter(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFDE68A)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: const BoxDecoration(
+                color: Color(0xFFFDE68A),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.tag, size: 15, color: Color(0xFFB45309)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'STORE OFFER',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: Color(0xFFB45309),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _announcements.first['message']?.toString() ?? '',
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: _textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                final code = _extractPromoCode(_announcements.first['message']?.toString() ?? '');
+                if (code != null) {
+                  Clipboard.setData(ClipboardData(text: code));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Coupon code "$code" copied!'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } else {
+                  _showNewAnnouncementDialog(_announcements.first);
+                }
+              },
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text(
+                'View',
+                style: TextStyle(fontFamily: 'Outfit', fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showNewAnnouncementDialog(Map<String, dynamic> ann) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Store Announcement', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w700)),
+        content: Text(ann['message']?.toString() ?? '', style: const TextStyle(fontFamily: 'Outfit')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close', style: TextStyle(fontFamily: 'Outfit')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String? _extractPromoCode(String message) {
+    final codeRegex = RegExp(r'(?:code|coupon|promo|voucher)[:\s]+([A-Z0-9_-]{3,15})', caseSensitive: false);
+    final match = codeRegex.firstMatch(message);
+    if (match != null && match.groupCount >= 1) {
+      return match.group(1);
+    }
+    return null;
+  }
+
+  // ── Products Header & Sticky Filter ────────────────────────────────
+
+  SliverPersistentHeader _buildProductsHeaderAndFilter() {
+    return SliverPersistentHeader(
+      pinned: true,
+      delegate: _ProductsFilterHeaderDelegate(
+        searchController: _searchController,
+        searchQuery: _searchQuery,
+        selectedCategory: _selectedCategory,
+        shopName: widget.shop.name,
+        onSearchChanged: (query) => setState(() => _searchQuery = query),
+        onCategorySelected: (cat) => setState(() => _selectedCategory = cat),
+        shopId: widget.shop.id,
+      ),
+    );
+  }
+
+  // ── Products Grid ──────────────────────────────────────────────────
+
+  SliverPadding _buildProductsGrid() {
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       sliver: Consumer<ProductProvider>(
         builder: (context, pp, _) {
           final isLoading = pp.isLoadingShop(widget.shop.id);
@@ -1107,52 +1261,52 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
           );
 
           if (isLoading) return _buildShimmerGrid();
-          if (error != null) return _buildError(error, pp);
-          if (products.isEmpty) return _buildEmpty();
-          return _buildGrid(products);
-        },
-      ),
-    );
-  }
+          if (error != null) return _buildErrorState(error, pp);
+          if (products.isEmpty) return _buildEmptyState();
 
-  SliverGrid _buildGrid(List<ApiProduct> products) {
-    return SliverGrid(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          return FadeInUp(
-            delay: Duration(milliseconds: 60 * (index % 6)),
-            child: _ProductCard(product: products[index], shop: widget.shop),
+          return SliverGrid(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final product = products[index];
+                return _ProductCard(
+                  product: product,
+                  shop: widget.shop,
+                  onSelectVariant: () => _showVariantPickerBottomSheet(context, product, widget.shop),
+                );
+              },
+              childCount: products.length,
+            ),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.69,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
           );
         },
-        childCount: products.length,
-      ),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 0.72,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
       ),
     );
   }
 
-  SliverFillRemaining _buildShimmerGrid() {
-    return SliverFillRemaining(
+  SliverToBoxAdapter _buildShimmerGrid() {
+    return SliverToBoxAdapter(
       child: Shimmer.fromColors(
         baseColor: Colors.grey[200]!,
         highlightColor: Colors.grey[100]!,
         child: GridView.builder(
+          shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
-            childAspectRatio: 0.72,
+            childAspectRatio: 0.69,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
-          itemCount: 6,
-          itemBuilder: (_, __) => Container(
+          itemCount: 4,
+          itemBuilder: (context, index) => Container(
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
         ),
@@ -1160,99 +1314,34 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
     );
   }
 
-  SliverFillRemaining _buildError(String error, ProductProvider pp) {
-    return SliverFillRemaining(
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: AppTheme.errorRed.withOpacity(0.1),
-                shape: BoxShape.circle,
+  SliverToBoxAdapter _buildErrorState(String error, ProductProvider pp) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: Column(
+            children: [
+              const Icon(LucideIcons.alertCircle, size: 36, color: _accentMid),
+              const SizedBox(height: 10),
+              const Text(
+                'Unable to load products',
+                style: TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w700, color: _textPrimary),
               ),
-              child: Icon(Icons.wifi_off_rounded, color: AppTheme.errorRed, size: 32),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Failed to load products',
-              style: const TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
+              const SizedBox(height: 4),
+              Text(
                 error,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                ),
+                style: const TextStyle(fontFamily: 'Outfit', fontSize: 13, color: _textSecondary),
               ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () => pp.refreshProductsByShop(widget.shop.id),
-              icon: const Icon(Icons.refresh_rounded, size: 18),
-              label: const Text('Retry'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryBlue,
-                foregroundColor: AppTheme.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 14),
+              ElevatedButton(
+                onPressed: () => pp.refreshProductsByShop(widget.shop.id),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _accent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  SliverFillRemaining _buildEmpty() {
-    return SliverFillRemaining(
-      child: Center(
-        child: FadeIn(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(LucideIcons.package, color: AppTheme.primaryBlue, size: 32),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _searchQuery.isNotEmpty ? 'No products match your search' : 'No products yet',
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _searchQuery.isNotEmpty
-                    ? 'Try a different search term'
-                    : 'This shop hasn\'t added any products yet',
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 13,
-                  color: AppTheme.textSecondary,
-                ),
+                child: const Text('Try Again'),
               ),
             ],
           ),
@@ -1260,493 +1349,336 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
       ),
     );
   }
-  // ── Delivery Information Section ───────────────────────────────────
 
-  Widget _buildDeliveryInformationSection() {
-    final opts = widget.shop.deliveryOptions;
-    if (opts.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
-
-    // We take the first delivery option as primary for display
-    final opt = opts.first;
-    final type = opt['type']?.toString() ?? 'DELIVERY';
-    final speed = opt['speed']?.toString() ?? 'Standard';
-    final freeAmt = opt['free_shipping_amount']?.toString() ?? '0.0';
-    final partner = opt['delivery_by']?.toString() ?? 'STORE';
-
+  SliverToBoxAdapter _buildEmptyState() {
     return SliverToBoxAdapter(
-      child: Container(
-        color: AppTheme.white,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.blue.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.blue.withOpacity(0.1)),
-          ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+        child: Center(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(color: _bgWarm, shape: BoxShape.circle),
+                child: const Icon(LucideIcons.shoppingBag, size: 32, color: _textTertiary),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                _searchQuery.isNotEmpty ? 'No products match "$_searchQuery"' : 'No products available',
+                style: const TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w700, color: _textPrimary),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Try selecting a different category or search term',
+                style: TextStyle(fontFamily: 'Outfit', fontSize: 13, color: _textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Variant Picker Bottom Sheet ────────────────────────────────────
+
+  void _showVariantPickerBottomSheet(BuildContext context, ApiProduct product, Shop shop) {
+    if (product.variants.isEmpty) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        String? selectedVariantId = product.variants.first['id']?.toString();
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final cart = context.watch<ApiCartProvider>();
+            final isAdding = cart.state == CartState.adding && cart.addingProductId == product.id;
+
+            return Container(
+              decoration: const BoxDecoration(
+                color: _surfaceWhite,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(ctx).padding.bottom + 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(LucideIcons.truck, color: AppTheme.primaryBlue, size: 20),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Delivery Information',
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary,
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(color: _borderSubtle, borderRadius: BorderRadius.circular(2)),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildDeliveryDetail(LucideIcons.clock, 'Speed', speed),
-                  _buildDeliveryDetail(LucideIcons.package, 'Type', type),
-                  _buildDeliveryDetail(LucideIcons.user, 'By', partner),
-                ],
-              ),
-              if (double.tryParse(freeAmt) != null && double.parse(freeAmt) > 0) ...[
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                  const SizedBox(height: 16),
+                  Row(
                     children: [
-                      const Icon(LucideIcons.checkCircle, color: Colors.green, size: 14),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Free shipping on orders over ₹$freeAmt',
-                        style: const TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green,
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: _bgWarm,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _borderSubtle),
                         ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: product.primaryImage != null
+                              ? CachedNetworkImage(
+                                  imageUrl: product.primaryImage!,
+                                  fit: BoxFit.cover,
+                                  errorWidget: (context, url, error) => const Icon(LucideIcons.box, color: _textTertiary),
+                                )
+                              : const Icon(LucideIcons.box, color: _textTertiary),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              product.name,
+                              style: const TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.w700, color: _textPrimary),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Select an option below:',
+                              style: TextStyle(fontFamily: 'Outfit', fontSize: 13, color: _textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(LucideIcons.x, size: 20, color: _textSecondary),
+                        onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+                  const SizedBox(height: 16),
+                  const Divider(color: _borderSubtle, height: 1),
+                  const SizedBox(height: 12),
 
-  Widget _buildDeliveryDetail(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: Colors.black54),
-        const SizedBox(width: 4),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 11,
-                color: Colors.black54,
-              ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+                  // Variants List
+                  ...product.variants.map((v) {
+                    final vId = v['id']?.toString() ?? '';
+                    final vName = v['name']?.toString() ?? v['title']?.toString() ?? 'Option';
+                    final vPrice = ApiProduct.getVariantPrice(v);
+                    final isSelected = selectedVariantId == vId;
 
-  // ── Announcements Section ──────────────────────────────────────────
-
-  Widget _buildAnnouncementsSection() {
-    if (_isAnnouncementsLoading) {
-      return SliverToBoxAdapter(
-        child: Container(
-          key: _announcementsKey,
-          color: AppTheme.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          child: Shimmer.fromColors(
-            baseColor: Colors.grey[200]!,
-            highlightColor: Colors.grey[100]!,
-            child: Container(
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_announcementsError != null) {
-      return SliverToBoxAdapter(
-        child: Container(
-          key: _announcementsKey,
-          color: AppTheme.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.red.withOpacity(0.1)),
-            ),
-            child: Row(
-              children: [
-                const Icon(LucideIcons.alertCircle, color: AppTheme.errorRed, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _announcementsError!,
-                    style: const TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 14,
-                      color: AppTheme.errorRed,
-                    ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: _fetchAnnouncements,
-                  child: const Text('Retry', style: TextStyle(fontFamily: 'Outfit')),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    if (_announcements.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Container(
-          key: _announcementsKey,
-          color: AppTheme.white,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Shop Announcements',
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                ),
-                child: const Text(
-                  'No announcements at this time.',
-                  style: TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 14,
-                    color: Colors.black54,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SliverToBoxAdapter(
-      child: Container(
-        key: _announcementsKey,
-        color: AppTheme.white,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Shop Announcements',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 140, // fixed height for carousel
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: _announcements.length,
-                separatorBuilder: (context, index) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final ann = _announcements[index];
-                  final msg = ann['message']?.toString() ?? '';
-                  final cta = ann['call_to_action']?.toString();
-                  final type = ann['type']?.toString() ?? 'OFFER';
-                  
-                  return Container(
-                    width: 280, // fixed width for cards in carousel
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.withOpacity(0.2)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                    return GestureDetector(
+                      onTap: () {
+                        setSheetState(() => selectedVariantId = vId);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected ? _bgWarm : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected ? _textPrimary : _borderSubtle,
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.15),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(LucideIcons.megaphone, color: Colors.deepOrange, size: 14),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                type,
-                                style: const TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.deepOrange,
+                            Row(
+                              children: [
+                                Icon(
+                                  isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                                  color: isSelected ? _textPrimary : _textTertiary,
+                                  size: 18,
                                 ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  vName,
+                                  style: TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 14,
+                                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                    color: _textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '₹${vPrice.toStringAsFixed(vPrice.truncateToDouble() == vPrice ? 0 : 2)}',
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: _textPrimary,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        Expanded(
-                          child: Text(
-                            msg,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 13,
-                              color: AppTheme.textPrimary,
-                              height: 1.4,
+                      ),
+                    );
+                  }),
+
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: isAdding
+                          ? null
+                          : () async {
+                              await context.read<ApiCartProvider>().addItem(
+                                    product: product,
+                                    shopId: shop.id,
+                                    variantId: selectedVariantId,
+                                  );
+                              if (context.mounted) {
+                                Navigator.pop(ctx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Added ${product.name} to cart!'),
+                                    behavior: SnackBarBehavior.floating,
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _accent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: isAdding
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            )
+                          : const Text(
+                              'Add to Cart',
+                              style: TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w700),
                             ),
-                          ),
-                        ),
-                        if (cta != null && cta.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            cta,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.primaryBlue,
-                            ),
-                          ),
-                        ],
-                      ],
                     ),
-                  );
-                },
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
-  Widget _buildReviewsSection() {
-    return Consumer2<ReviewProvider, AuthProvider>(
-      builder: (context, reviewProvider, authProvider, child) {
-        final isLoading = reviewProvider.isLoadingShop(widget.shop.id);
-        final reviews = reviewProvider.reviewsForShop(widget.shop.id);
-        final avgRating = reviewProvider.averageRatingForShop(widget.shop.id);
-        final reviewCount = reviewProvider.reviewCountForShop(widget.shop.id);
-        
-        final userId = authProvider.userId;
-        final hasReviewed = userId != null && reviews.any((r) => r.userId == userId);
 
-        if (isLoading && reviews.isEmpty) {
-          return const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        }
+  // ── Ratings & Reviews Section (Bottom of Page) ─────────────────────
 
-        return SliverToBoxAdapter(
-          child: Container(
-            color: AppTheme.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+  SliverToBoxAdapter _buildReviewsSection() {
+    return SliverToBoxAdapter(
+      child: Consumer2<ReviewProvider, AuthProvider>(
+        builder: (context, reviewProvider, authProvider, _) {
+          final reviews = reviewProvider.reviewsForShop(widget.shop.id);
+          final avgRating = reviewProvider.averageRatingForShop(widget.shop.id);
+          final reviewCount = reviewProvider.reviewCountForShop(widget.shop.id);
+          final userId = authProvider.userId;
+          final hasReviewed = userId != null && reviews.any((r) => r.userId == userId);
+
+          return Container(
+            color: _surfaceWhite,
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Ratings & Reviews',
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
+                          'Customer Reviews',
+                          style: TextStyle(fontFamily: 'Outfit', fontSize: 17, fontWeight: FontWeight.w700, color: _textPrimary),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         if (reviewCount > 0)
                           Row(
                             children: [
-                              const Icon(Icons.star, color: Colors.amber, size: 18),
+                              const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
                               const SizedBox(width: 4),
                               Text(
-                                '${avgRating.toStringAsFixed(1)} out of 5',
-                                style: const TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                ' ($reviewCount)',
-                                style: const TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 14,
-                                  color: Colors.black54,
-                                ),
+                                '${avgRating.toStringAsFixed(1)} / 5.0 ($reviewCount reviews)',
+                                style: const TextStyle(fontFamily: 'Outfit', fontSize: 13, color: _textSecondary, fontWeight: FontWeight.w500),
                               ),
                             ],
                           )
                         else
                           const Text(
-                            'No reviews yet.',
-                            style: TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 14,
-                              color: Colors.black54,
-                            ),
+                            'No reviews yet',
+                            style: TextStyle(fontFamily: 'Outfit', fontSize: 13, color: _textTertiary),
                           ),
                       ],
                     ),
                     if (userId != null && !hasReviewed)
-                      TextButton(
+                      TextButton.icon(
                         onPressed: _showReviewModal,
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        icon: const Icon(LucideIcons.edit3, size: 14, color: _textPrimary),
+                        label: const Text(
+                          'Write Review',
+                          style: TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w700, color: _textPrimary),
                         ),
-                        child: const Text(
-                          'Write a Review',
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            color: AppTheme.primaryBlue,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          backgroundColor: _bgWarm,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: _borderSubtle)),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                if (reviews.isNotEmpty)
+                if (reviews.isNotEmpty) ...[
+                  const SizedBox(height: 14),
                   SizedBox(
-                    height: 150,
+                    height: 120,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: reviews.length,
-                      separatorBuilder: (context, index) => const SizedBox(width: 12),
+                      separatorBuilder: (context, index) => const SizedBox(width: 10),
                       itemBuilder: (context, index) {
                         final r = reviews[index];
                         return Container(
-                          width: 280,
-                          padding: const EdgeInsets.all(16),
+                          width: 250,
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade200),
+                            color: _bgWarm,
                             borderRadius: BorderRadius.circular(12),
-                            color: Colors.grey.shade50,
+                            border: Border.all(color: _borderSubtle),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                children: [
-                                  Row(
-                                    children: List.generate(5, (i) {
-                                      return Icon(
-                                        i < r.rating ? Icons.star : Icons.star_border,
-                                        color: Colors.amber,
-                                        size: 16,
-                                      );
-                                    }),
-                                  ),
-                                  const Spacer(),
-                                  if (r.timestamp != null)
-                                    Text(
-                                      '${r.timestamp!.day}/${r.timestamp!.month}/${r.timestamp!.year}',
-                                      style: const TextStyle(
-                                        fontFamily: 'Outfit',
-                                        fontSize: 12,
-                                        color: Colors.black38,
-                                      ),
-                                    ),
-                                ],
+                                children: List.generate(5, (i) {
+                                  return Icon(
+                                    i < r.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                                    color: const Color(0xFFF59E0B),
+                                    size: 14,
+                                  );
+                                }),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Expanded(
                                 child: Text(
-                                  r.reviewText?.isNotEmpty == true
-                                      ? r.reviewText!
-                                      : 'No written review provided.',
-                                  maxLines: 4,
+                                  r.reviewText?.isNotEmpty == true ? r.reviewText! : 'Verified purchase rating.',
+                                  maxLines: 3,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontFamily: 'Outfit',
-                                    fontSize: 14,
-                                    color: r.reviewText?.isNotEmpty == true
-                                        ? AppTheme.textPrimary
-                                        : Colors.black38,
-                                    fontStyle: r.reviewText?.isNotEmpty == true
-                                        ? FontStyle.normal
-                                        : FontStyle.italic,
+                                    fontSize: 12.5,
+                                    color: r.reviewText?.isNotEmpty == true ? _textPrimary : _textTertiary,
+                                    fontStyle: r.reviewText?.isNotEmpty == true ? FontStyle.normal : FontStyle.italic,
                                   ),
                                 ),
                               ),
@@ -1756,11 +1688,12 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                       },
                     ),
                   ),
+                ],
               ],
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
@@ -1797,70 +1730,43 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                       children: [
                         const Text(
                           'Write a Review',
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: TextStyle(fontFamily: 'Outfit', fontSize: 18, fontWeight: FontWeight.w700, color: _textPrimary),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close),
+                          icon: const Icon(LucideIcons.x, size: 20),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Rating',
-                      style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w600, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Row(
                       children: List.generate(5, (index) {
                         return IconButton(
-                          onPressed: () {
-                            setModalState(() {
-                              rating = index + 1.0;
-                            });
-                          },
+                          onPressed: () => setModalState(() => rating = index + 1.0),
                           icon: Icon(
-                            index < rating ? Icons.star : Icons.star_border,
-                            color: Colors.amber,
-                            size: 32,
+                            index < rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                            color: const Color(0xFFF59E0B),
+                            size: 30,
                           ),
                         );
                       }),
                     ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Review (Optional)',
-                      style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w600, fontSize: 16),
-                    ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: textController,
                       maxLines: 3,
                       decoration: InputDecoration(
-                        hintText: 'Share your experience with this shop...',
-                        hintStyle: const TextStyle(fontFamily: 'Outfit', color: Colors.black38),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppTheme.primaryBlue),
-                        ),
+                        hintText: 'Share your feedback about this store...',
+                        hintStyle: const TextStyle(fontFamily: 'Outfit', color: _textTertiary, fontSize: 13.5),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _borderSubtle)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _borderSubtle)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _textPrimary)),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 18),
                     SizedBox(
                       width: double.infinity,
-                      height: 50,
+                      height: 46,
                       child: Consumer<ReviewProvider>(
                         builder: (context, reviewProvider, _) {
                           final isSubmitting = reviewProvider.isSubmitting;
@@ -1874,40 +1780,24 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                                       rating: rating,
                                       reviewText: textController.text.trim().isEmpty ? null : textController.text.trim(),
                                     );
-                                    
                                     final success = await reviewProvider.submitReview(review);
                                     if (success && context.mounted) {
                                       Navigator.pop(context);
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(content: Text('Review submitted successfully!')),
                                       );
-                                    } else if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text(reviewProvider.error ?? 'Failed to submit review')),
-                                      );
                                     }
                                   },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primaryBlue,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              backgroundColor: _textPrimary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
                             child: isSubmitting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                  )
-                                : const Text(
-                                    'Submit Review',
-                                    style: TextStyle(
-                                      fontFamily: 'Outfit',
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Text('Submit Review', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w700)),
                           );
-                        }
+                        },
                       ),
                     ),
                   ],
@@ -1919,18 +1809,266 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
       },
     );
   }
+
+  // ── Floating Cart Summary Bar ──────────────────────────────────────
+
+  Widget _buildFloatingCartBar() {
+    return Consumer<ApiCartProvider>(
+      builder: (context, cart, _) {
+        if (cart.isEmpty) return const SizedBox.shrink();
+        return Positioned(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
+          child: FadeInUp(
+            duration: const Duration(milliseconds: 200),
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ApiCheckoutPage(shop: widget.shop)),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [_accent, _accentMid],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _accent.withValues(alpha: 0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(LucideIcons.shoppingBag, color: Colors.white, size: 16),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${cart.itemCount} ${cart.itemCount == 1 ? 'item' : 'items'} in cart',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          Text(
+                            '₹${cart.subtotal.toStringAsFixed(cart.subtotal.truncateToDouble() == cart.subtotal ? 0 : 2)}',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      children: const [
+                        Text(
+                          'View Cart',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(LucideIcons.arrowRight, color: Colors.white, size: 15),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
-// ── Product Card ────────────────────────────────────────────────────
+// ── Persistent Products Filter Header Delegate ──────────────────────
+
+class _ProductsFilterHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final TextEditingController searchController;
+  final String searchQuery;
+  final String selectedCategory;
+  final String shopName;
+  final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onCategorySelected;
+  final String shopId;
+
+  _ProductsFilterHeaderDelegate({
+    required this.searchController,
+    required this.searchQuery,
+    required this.selectedCategory,
+    required this.shopName,
+    required this.onSearchChanged,
+    required this.onCategorySelected,
+    required this.shopId,
+  });
+
+  @override
+  double get minExtent => 112;
+
+  @override
+  double get maxExtent => 112;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppTheme.bgPrimary,
+        border: Border(bottom: BorderSide(color: AppTheme.border, width: 1)),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Search Bar ────────────────────────────────────────────
+          Container(
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.border, width: 1.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 12),
+                const Icon(LucideIcons.search, size: 17, color: AppTheme.textTertiary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: searchController,
+                    onChanged: onSearchChanged,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 13.5,
+                      color: AppTheme.textPrimary,
+                    ),
+                    decoration: const InputDecoration(
+                      hintText: 'Search products in store...',
+                      hintStyle: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 13.5,
+                        color: AppTheme.textTertiary,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 11),
+                    ),
+                  ),
+                ),
+                if (searchQuery.isNotEmpty)
+                  GestureDetector(
+                    onTap: () {
+                      searchController.clear();
+                      onSearchChanged('');
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.softPeach,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(LucideIcons.x, size: 14, color: AppTheme.primary),
+                    ),
+                  )
+                else
+                  const SizedBox(width: 8),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // ── Categories Horizontal Chips with Realistic Product Thumbnails ─
+          Consumer<ProductProvider>(
+            builder: (context, pp, _) {
+              final rawCats = pp.categoriesForShop(shopId);
+              final categories = ['All', ...rawCats.where((c) => c.toLowerCase() != 'all')];
+
+              return SizedBox(
+                height: 34,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  clipBehavior: Clip.none,
+                  itemCount: categories.length,
+                  separatorBuilder: (context, index) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final cat = categories[index];
+                    final isSelected = cat == selectedCategory;
+                    final item = CategoryCatalog.find(cat);
+
+                    return CategoryPillItem(
+                      item: item,
+                      isSelected: isSelected,
+                      onTap: () => onCategorySelected(cat),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _ProductsFilterHeaderDelegate oldDelegate) {
+    return oldDelegate.searchQuery != searchQuery ||
+        oldDelegate.selectedCategory != selectedCategory ||
+        oldDelegate.shopId != shopId;
+  }
+}
+
+// ── Premium Product Card ─────────────────────────────────────────────
 
 class _ProductCard extends StatelessWidget {
   final ApiProduct product;
   final Shop shop;
+  final VoidCallback onSelectVariant;
 
-  const _ProductCard({required this.product, required this.shop});
+  const _ProductCard({
+    required this.product,
+    required this.shop,
+    required this.onSelectVariant,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final bool hasVariants = product.hasVariant && product.variants.isNotEmpty;
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -1945,59 +2083,53 @@ class _ProductCard extends StatelessWidget {
       },
       child: Container(
         decoration: BoxDecoration(
-          color: AppTheme.white,
-          borderRadius: BorderRadius.circular(16),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.veryLightGray),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image
+            // Consistent 4:3 Image Area
             Expanded(
-              flex: 3,
+              flex: 11,
               child: Stack(
                 children: [
                   Positioned.fill(
                     child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
                       child: product.primaryImage != null
                           ? CachedNetworkImage(
                               imageUrl: product.primaryImage!,
                               fit: BoxFit.cover,
-                              width: double.infinity,
-                              placeholder: (_, __) => Container(color: AppTheme.bgSecondary),
-                              errorWidget: (_, __, ___) => _buildImageFallback(product.name),
+                              placeholder: (context, url) => Container(color: AppTheme.ultraLightGray),
+                              errorWidget: (context, url, error) => _buildFallback(product.name),
                             )
-                          : _buildImageFallback(product.name),
+                          : _buildFallback(product.name),
                     ),
                   ),
-                  if (product.hasVariant && product.variants.isNotEmpty)
+                  if (hasVariants)
                     Positioned(
-                      top: 8,
-                      left: 8,
+                      top: 7,
+                      left: 7,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                         decoration: BoxDecoration(
-                          color: AppTheme.primaryBlue,
+                          color: AppTheme.primaryBlue.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(6),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 4,
-                            ),
-                          ],
                         ),
                         child: Text(
-                          '${product.variants.length} Options',
+                          '${product.variants.length} options',
                           style: const TextStyle(
                             fontFamily: 'Outfit',
-                            fontSize: 10,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                           ),
@@ -2005,10 +2137,10 @@ class _ProductCard extends StatelessWidget {
                       ),
                     ),
                   Positioned(
-                    top: 8,
-                    right: 8,
+                    top: 6,
+                    right: 6,
                     child: Consumer2<FavoritesApiProvider, AuthProvider>(
-                      builder: (context, favorites, auth, child) {
+                      builder: (context, favorites, auth, _) {
                         final isFav = favorites.isProductFavorited(product.id);
                         return GestureDetector(
                           onTap: () {
@@ -2017,29 +2149,28 @@ class _ProductCard extends StatelessWidget {
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Please log in to save favourites'),
+                                  content: Text('Please log in to save favorites'),
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );
                             }
                           },
                           child: Container(
-                            padding: const EdgeInsets.all(6),
+                            padding: const EdgeInsets.all(5),
                             decoration: BoxDecoration(
-                              color: AppTheme.white.withOpacity(0.9),
+                              color: Colors.white.withValues(alpha: 0.92),
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
+                                  color: Colors.black.withValues(alpha: 0.06),
                                   blurRadius: 4,
-                                  offset: const Offset(0, 2),
                                 ),
                               ],
                             ),
                             child: Icon(
                               isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                              size: 18,
-                              color: isFav ? AppTheme.errorRed : AppTheme.textSecondary,
+                              size: 15,
+                              color: isFav ? const Color(0xFFDC2626) : const Color(0xFF77736D),
                             ),
                           ),
                         );
@@ -2050,11 +2181,11 @@ class _ProductCard extends StatelessWidget {
               ),
             ),
 
-            // Info
+            // Product Details
             Expanded(
-              flex: 2,
+              flex: 9,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2063,51 +2194,50 @@ class _ProductCard extends StatelessWidget {
                       style: const TextStyle(
                         fontFamily: 'Outfit',
                         fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary,
+                        height: 1.25,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 2),
+                    if (product.unit != null && product.unit!.isNotEmpty)
+                      Text(
+                        product.unit!,
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 11,
+                          color: AppTheme.textTertiary,
+                        ),
+                        maxLines: 1,
+                      )
+                    else
+                      const SizedBox(height: 14),
                     const Spacer(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '₹${product.displayPrice.toStringAsFixed(product.displayPrice.truncateToDouble() == product.displayPrice ? 0 : 2)}',
-                              style: TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                                color: AppTheme.primaryBlue,
-                              ),
+                        Flexible(
+                          child: Text(
+                            '₹${product.displayPrice.toStringAsFixed(product.displayPrice.truncateToDouble() == product.displayPrice ? 0 : 2)}',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.primaryBlue,
                             ),
-                            if (product.hasVariant && product.variants.isNotEmpty)
-                              Text(
-                                '${product.variants.length} variants',
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textTertiary,
-                                ),
-                              )
-                            else if (product.unit != null)
-                              Text(
-                                product.unit!,
-                                style: TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 11,
-                                  color: AppTheme.textTertiary,
-                                ),
-                              ),
-                          ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        // Add to cart quick button
-                        _QuickAddButton(product: product, shop: shop),
+                        const SizedBox(width: 4),
+                        _QuickAddButton(
+                          product: product,
+                          shop: shop,
+                          onSelectVariant: onSelectVariant,
+                        ),
                       ],
                     ),
                   ],
@@ -2120,18 +2250,17 @@ class _ProductCard extends StatelessWidget {
     );
   }
 
-  Widget _buildImageFallback(String name) {
+  Widget _buildFallback(String name) {
     return Container(
-      width: double.infinity,
-      color: AppTheme.bgSecondary,
+      color: AppTheme.ultraLightGray,
       child: Center(
         child: Text(
           name.isNotEmpty ? name[0].toUpperCase() : 'P',
-          style: TextStyle(
+          style: const TextStyle(
             fontFamily: 'Outfit',
-            fontSize: 40,
+            fontSize: 28,
             fontWeight: FontWeight.w800,
-            color: AppTheme.primaryBlue.withOpacity(0.4),
+            color: AppTheme.primaryBlue,
           ),
         ),
       ),
@@ -2139,13 +2268,18 @@ class _ProductCard extends StatelessWidget {
   }
 }
 
-// ── Quick Add Button ───────────────────────────────────────────────
+// ── Quick Add Button ─────────────────────────────────────────────────
 
 class _QuickAddButton extends StatelessWidget {
   final ApiProduct product;
   final Shop shop;
+  final VoidCallback onSelectVariant;
 
-  const _QuickAddButton({required this.product, required this.shop});
+  const _QuickAddButton({
+    required this.product,
+    required this.shop,
+    required this.onSelectVariant,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -2153,13 +2287,14 @@ class _QuickAddButton extends StatelessWidget {
       builder: (context, cart, _) {
         final qty = cart.totalQuantityOf(product.id);
         final isAdding = cart.state == CartState.adding && cart.addingProductId == product.id;
+        final hasVariants = product.hasVariant && product.variants.isNotEmpty;
 
         if (qty > 0) {
           return Container(
-            height: 30,
+            height: 28,
             decoration: BoxDecoration(
               color: AppTheme.primaryBlue,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(7),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -2189,39 +2324,46 @@ class _QuickAddButton extends StatelessWidget {
                     }
                   },
                   child: const SizedBox(
-                    width: 28,
-                    height: 30,
-                    child: Icon(Icons.remove_rounded, color: AppTheme.white, size: 14),
+                    width: 24,
+                    height: 28,
+                    child: Icon(Icons.remove, color: Colors.white, size: 13),
                   ),
                 ),
-                Text(
-                  '$qty',
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.white,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: Text(
+                    '$qty',
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
                 GestureDetector(
                   onTap: () async {
-                    CartSessionItem? item;
-                    for (final i in cart.items) {
-                      if (i.productId == product.id) {
-                        item = i;
-                        break;
-                      }
-                    }
-                    if (item != null) {
-                      await cart.updateQuantity(item, item.qty.round() + 1);
+                    if (hasVariants) {
+                      onSelectVariant();
                     } else {
-                      cart.addItem(product: product, shopId: shop.id);
+                      CartSessionItem? item;
+                      for (final i in cart.items) {
+                        if (i.productId == product.id) {
+                          item = i;
+                          break;
+                        }
+                      }
+                      if (item != null) {
+                        await cart.updateQuantity(item, item.qty.round() + 1);
+                      } else {
+                        cart.addItem(product: product, shopId: shop.id);
+                      }
                     }
                   },
                   child: const SizedBox(
-                    width: 28,
-                    height: 30,
-                    child: Icon(Icons.add_rounded, color: AppTheme.white, size: 14),
+                    width: 24,
+                    height: 28,
+                    child: Icon(Icons.add, color: Colors.white, size: 13),
                   ),
                 ),
               ],
@@ -2232,23 +2374,34 @@ class _QuickAddButton extends StatelessWidget {
         return GestureDetector(
           onTap: isAdding
               ? null
-              : () => cart.addItem(product: product, shopId: shop.id),
+              : () {
+                  if (hasVariants) {
+                    onSelectVariant();
+                  } else {
+                    cart.addItem(product: product, shopId: shop.id);
+                  }
+                },
           child: Container(
-            width: 30,
-            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: AppTheme.primaryBlue,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(7),
             ),
             child: isAdding
-                ? const Padding(
-                    padding: EdgeInsets.all(7),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppTheme.white,
-                    ),
+                ? const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
                   )
-                : const Icon(Icons.add_rounded, color: AppTheme.white, size: 18),
+                : Text(
+                    hasVariants ? 'Options' : '+ Add',
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
           ),
         );
       },
@@ -2256,7 +2409,7 @@ class _QuickAddButton extends StatelessWidget {
   }
 }
 
-// ── Cart Badge Button ──────────────────────────────────────────────
+// ── Cart Badge Button ────────────────────────────────────────────────
 
 class _CartBadgeButton extends StatelessWidget {
   final Shop shop;
@@ -2271,35 +2424,27 @@ class _CartBadgeButton extends StatelessWidget {
         return GestureDetector(
           onTap: () => Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => ApiCheckoutPage(shop: shop),
-            ),
+            MaterialPageRoute(builder: (_) => ApiCheckoutPage(shop: shop)),
           ),
           child: Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.05),
+              color: AppTheme.primaryBlue,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(LucideIcons.shoppingCart, color: Colors.black, size: 20),
-                const SizedBox(width: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorRed,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${cart.itemCount}',
-                    style: const TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: AppTheme.white,
-                    ),
+                const Icon(LucideIcons.shoppingBag, color: Colors.white, size: 14),
+                const SizedBox(width: 5),
+                Text(
+                  '${cart.itemCount}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
                   ),
                 ),
               ],

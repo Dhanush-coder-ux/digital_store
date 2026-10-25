@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import '../theme/app_theme.dart';
 
 /// Sheet position state
@@ -56,11 +57,21 @@ class ProductBottomSheet extends StatefulWidget {
   ) contentBuilder;
 
   /// The search bar widget, pinned at the top of the sheet.
+  /// If null, a modern default [ProductSheetSearchBar] is automatically used.
   final Widget Function(
     BuildContext context,
     ProductSheetState sheetState,
     VoidCallback onTap,
-  ) searchBarBuilder;
+  )? searchBarBuilder;
+
+  /// Optional controller passed to default [ProductSheetSearchBar].
+  final TextEditingController? searchController;
+
+  /// Optional on-changed callback for default [ProductSheetSearchBar].
+  final ValueChanged<String>? onSearchChanged;
+
+  /// Optional hint text for search.
+  final String? searchHint;
 
   /// Optional category filter row, pinned below search.
   final Widget? categoryFilter;
@@ -81,7 +92,10 @@ class ProductBottomSheet extends StatefulWidget {
     super.key,
     required this.controller,
     required this.contentBuilder,
-    required this.searchBarBuilder,
+    this.searchBarBuilder,
+    this.searchController,
+    this.onSearchChanged,
+    this.searchHint,
     required this.shopName,
     this.categoryFilter,
     this.categoryFilterHeight = 56.0,
@@ -373,8 +387,7 @@ class _ProductBottomSheetState extends State<ProductBottomSheet>
               delegate: _SheetHeaderDelegate(
                 sheetState: _sheetState,
                 shopName: widget.shopName,
-                searchBar: widget.searchBarBuilder(
-                    context, _sheetState, _onSearchTap),
+                searchBar: _buildSearchBar(context, _sheetState, _onSearchTap),
                 categoryFilter: widget.categoryFilter,
                 categoryFilterHeight: widget.categoryFilterHeight,
                 onCollapse: () => _animateTo(ProductSheetState.collapsed),
@@ -398,13 +411,34 @@ class _ProductBottomSheetState extends State<ProductBottomSheet>
     );
   }
 
+  Widget _buildSearchBar(
+    BuildContext context,
+    ProductSheetState sheetState,
+    VoidCallback onTap,
+  ) {
+    if (widget.searchBarBuilder != null) {
+      return widget.searchBarBuilder!(context, sheetState, onTap);
+    }
+    return ProductSheetSearchBar(
+      controller: widget.searchController,
+      onChanged: widget.onSearchChanged,
+      sheetState: sheetState,
+      onTap: onTap,
+      shopName: widget.shopName,
+      hintText: widget.searchHint,
+    );
+  }
+
   Widget _buildDesktopLayout() {
     // On desktop, show products in a normal scrollable section (no sheet).
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Divider(height: 1),
-        widget.searchBarBuilder(context, ProductSheetState.expanded, () {}),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: _buildSearchBar(context, ProductSheetState.expanded, () {}),
+        ),
         if (widget.categoryFilter != null) widget.categoryFilter!,
         Expanded(
           child: widget.contentBuilder(
@@ -570,7 +604,7 @@ class _SheetHeaderDelegate extends SliverPersistentHeaderDelegate {
         width: 36,
         height: 4,
         decoration: BoxDecoration(
-          color: const Color(0xFFE0D6CC),
+          color: AppTheme.border,
           borderRadius: BorderRadius.circular(2),
         ),
       ),
@@ -586,7 +620,7 @@ class _SheetHeaderDelegate extends SliverPersistentHeaderDelegate {
           width: 38,
           height: 4,
           decoration: BoxDecoration(
-            color: const Color(0xFFD6C8BB),
+            color: AppTheme.border,
             borderRadius: BorderRadius.circular(2.5),
           ),
         ),
@@ -632,7 +666,7 @@ class _SheetHeaderDelegate extends SliverPersistentHeaderDelegate {
             height: 4,
             decoration: BoxDecoration(
               color: Color.lerp(
-                const Color(0xFFD6C8BB),
+                AppTheme.border,
                 AppTheme.primaryBlue,
                 0.35 * glow,
               ),
@@ -722,5 +756,282 @@ class _SheetHeaderDelegate extends SliverPersistentHeaderDelegate {
         ),
       ),
     );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Premium Product Sheet Search Bar
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// A premium, modern search bar designed specifically for [ProductBottomSheet].
+///
+/// Features:
+/// - Smooth animated focus state with primary accent border & soft ambient glow
+/// - Branded icon container badge with primary tint
+/// - Crisp 'Outfit' typography with custom cursor and perfect vertical centering
+/// - Circular clear button with tactile haptic tap
+/// - Graceful handling of sheet collapsed state (prevents awkward keyboard pop-up in peek mode)
+/// - Auto-focus support when sheet transitions to [ProductSheetState.searchFocused]
+class ProductSheetSearchBar extends StatefulWidget {
+  final TextEditingController? controller;
+  final ValueChanged<String>? onChanged;
+  final VoidCallback? onClear;
+  final VoidCallback? onTap;
+  final ProductSheetState sheetState;
+  final String? shopName;
+  final String? hintText;
+  final FocusNode? focusNode;
+  final bool enabled;
+
+  const ProductSheetSearchBar({
+    super.key,
+    this.controller,
+    this.onChanged,
+    this.onClear,
+    this.onTap,
+    this.sheetState = ProductSheetState.half,
+    this.shopName,
+    this.hintText,
+    this.focusNode,
+    this.enabled = true,
+  });
+
+  @override
+  State<ProductSheetSearchBar> createState() => _ProductSheetSearchBarState();
+}
+
+class _ProductSheetSearchBarState extends State<ProductSheetSearchBar> {
+  TextEditingController? _internalController;
+  FocusNode? _internalFocusNode;
+
+  TextEditingController get _effectiveController =>
+      widget.controller ?? (_internalController ??= TextEditingController());
+
+  FocusNode get _effectiveFocusNode =>
+      widget.focusNode ?? (_internalFocusNode ??= FocusNode());
+
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _effectiveFocusNode.addListener(_handleFocusChanged);
+    _effectiveController.addListener(_handleTextQueryChanged);
+  }
+
+  void _handleFocusChanged() {
+    if (_isFocused != _effectiveFocusNode.hasFocus && mounted) {
+      setState(() => _isFocused = _effectiveFocusNode.hasFocus);
+    }
+  }
+
+  void _handleTextQueryChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(ProductSheetSearchBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller?.removeListener(_handleTextQueryChanged);
+      _effectiveController.addListener(_handleTextQueryChanged);
+    }
+    if (widget.focusNode != oldWidget.focusNode) {
+      oldWidget.focusNode?.removeListener(_handleFocusChanged);
+      _effectiveFocusNode.addListener(_handleFocusChanged);
+    }
+
+    // Auto-focus when sheet transitions to searchFocused
+    if (widget.sheetState == ProductSheetState.searchFocused &&
+        oldWidget.sheetState != ProductSheetState.searchFocused) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted && !_effectiveFocusNode.hasFocus) {
+          _effectiveFocusNode.requestFocus();
+        }
+      });
+    } else if (widget.sheetState == ProductSheetState.collapsed &&
+        oldWidget.sheetState != ProductSheetState.collapsed) {
+      if (_effectiveFocusNode.hasFocus) {
+        _effectiveFocusNode.unfocus();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _effectiveFocusNode.removeListener(_handleFocusChanged);
+    _effectiveController.removeListener(_handleTextQueryChanged);
+    _internalController?.dispose();
+    _internalFocusNode?.dispose();
+    super.dispose();
+  }
+
+  void _handleClear() {
+    HapticFeedback.lightImpact();
+    _effectiveController.clear();
+    widget.onChanged?.call('');
+    widget.onClear?.call();
+    if (!_effectiveFocusNode.hasFocus &&
+        widget.sheetState != ProductSheetState.collapsed) {
+      _effectiveFocusNode.requestFocus();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isCollapsed = widget.sheetState == ProductSheetState.collapsed;
+    final bool hasText = _effectiveController.text.isNotEmpty;
+
+    final String placeholder = widget.hintText ??
+        (widget.shopName != null && widget.shopName!.trim().isNotEmpty
+            ? 'Search in ${widget.shopName!.trim()}...'
+            : 'Search for products...');
+
+    // Outer container with animated focus glow & border
+    final barWidget = AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      height: 48,
+      decoration: BoxDecoration(
+        color: _isFocused
+            ? AppTheme.white
+            : AppTheme.bgSecondary,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _isFocused
+              ? Colors.transparent
+              : AppTheme.border,
+          width: 1.0,
+        ),
+        boxShadow: _isFocused
+            ? [
+                BoxShadow(
+                  color: AppTheme.darkGray.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: AppTheme.darkGray.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 1.5),
+                ),
+              ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Left Search Icon Badge
+          Container(
+            width: 32,
+            height: 32,
+            margin: const EdgeInsets.only(left: 8, right: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: const Center(
+              child: Icon(
+                LucideIcons.search,
+                size: 16,
+                color: AppTheme.softRoyalBlue,
+              ),
+            ),
+          ),
+
+          // Search TextField / Peek Label
+          Expanded(
+            child: isCollapsed
+                ? Text(
+                    placeholder,
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: AppTheme.textTertiary.withValues(alpha: 0.75),
+                      letterSpacing: 0.1,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : TextField(
+                    controller: _effectiveController,
+                    focusNode: _effectiveFocusNode,
+                    enabled: widget.enabled,
+                    textInputAction: TextInputAction.search,
+                    onTap: widget.onTap,
+                    onChanged: widget.onChanged,
+                    cursorColor: AppTheme.primaryBlue,
+                    cursorWidth: 2.0,
+                    cursorRadius: const Radius.circular(2),
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: placeholder,
+                      hintStyle: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                        color: AppTheme.textTertiary.withValues(alpha: 0.75),
+                        letterSpacing: 0.1,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+          ),
+
+          // Right Clear button or subtle end spacing
+          if (hasText && !isCollapsed)
+            GestureDetector(
+              onTap: _handleClear,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                width: 26,
+                height: 26,
+                margin: const EdgeInsets.only(right: 8, left: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkGray.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Icon(
+                    LucideIcons.x,
+                    size: 13,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 10),
+        ],
+      ),
+    );
+
+    // If collapsed, clicking anywhere on the bar triggers the sheet to open
+    if (isCollapsed) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap?.call();
+        },
+        child: barWidget,
+      );
+    }
+
+    return barWidget;
   }
 }

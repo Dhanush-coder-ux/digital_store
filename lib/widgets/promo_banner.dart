@@ -34,7 +34,7 @@ class PromoBanner extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: baseColor.withOpacity(0.25),
+            color: baseColor.withValues(alpha: 0.25),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -51,7 +51,7 @@ class PromoBanner extends StatelessWidget {
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.white.withOpacity(0.06),
+                color: AppTheme.white.withValues(alpha: 0.06),
               ),
             ),
           ),
@@ -63,7 +63,7 @@ class PromoBanner extends StatelessWidget {
               height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.white.withOpacity(0.04),
+                color: AppTheme.white.withValues(alpha: 0.04),
               ),
             ),
           ),
@@ -85,10 +85,10 @@ class PromoBanner extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.white.withOpacity(0.2),
+                          color: AppTheme.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                           border: Border.all(
-                            color: AppTheme.white.withOpacity(0.3),
+                            color: AppTheme.white.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Text(
