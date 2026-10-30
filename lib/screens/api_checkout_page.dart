@@ -34,6 +34,7 @@ import '../theme/app_theme.dart';
 import 'order_success_page.dart';
 import 'main_screen.dart';
 import 'saved_addresses_page.dart';
+import '../services/delivery_eligibility_service.dart';
 
 class ApiCheckoutPage extends StatefulWidget {
   final Shop shop;
@@ -58,7 +59,6 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
   String _selectedPayment = 'Cash on Delivery';
   AddressModel? _selectedAddress;
   bool _isManualAddress = false;
-  bool _isDeliveryDetailsExpanded = false;
 
   final List<String> _paymentMethods = [
     'Cash on Delivery',
@@ -66,6 +66,8 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
 
   List<ShopDeliveryOption> _deliveryOptions = [];
   ShopDeliveryOption? _selectedDeliveryOption;
+  static const _eligibilityService = DeliveryEligibilityService();
+  bool _isLoadingDeliveryOptions = false;
 
   // ── Warm Tangerine Contemporary Palette ──────────────────────────────
   static const Color _bg = AppTheme.background;             // Main warm background #FCFAF6
@@ -118,11 +120,13 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
   }
 
   Future<void> _loadShopDeliveryOptions() async {
+    if (!mounted) return;
+    setState(() => _isLoadingDeliveryOptions = true);
     try {
       final service = context.read<ShopProvider>().service;
       final opts = await service.fetchShopDeliveryOptions(widget.shop.id);
-      if (mounted && opts.isNotEmpty) {
-        final deduplicated = _deduplicateDeliveryOptions(opts);
+      if (mounted) {
+        final deduplicated = _deduplicateDeliveryOptions(opts.isNotEmpty ? opts : _deliveryOptions);
         setState(() {
           _deliveryOptions = deduplicated;
           final currentType = _selectedDeliveryOption?.type;
@@ -130,32 +134,20 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
             (o) => o.type == currentType,
             orElse: () => deduplicated.firstWhere(
               (o) => !o.isPickup,
-              orElse: () => deduplicated.first,
+              orElse: () => deduplicated.isNotEmpty ? deduplicated.first : ShopDeliveryOption.defaultStandard(),
             ),
           );
+          _isLoadingDeliveryOptions = false;
         });
       }
     } catch (e) {
       debugPrint('Error fetching live delivery options for checkout: $e');
+      if (mounted) setState(() => _isLoadingDeliveryOptions = false);
     }
   }
 
   List<ShopDeliveryOption> _deduplicateDeliveryOptions(List<ShopDeliveryOption> options) {
-    final Map<String, ShopDeliveryOption> uniqueMap = {};
-    for (final opt in options) {
-      if (!opt.enabled) continue;
-      final key = opt.type;
-      if (!uniqueMap.containsKey(key)) {
-        uniqueMap[key] = opt;
-      } else {
-        final existing = uniqueMap[key]!;
-        if (opt.deliveryCharge < existing.deliveryCharge ||
-            (opt.deliveryCharge == existing.deliveryCharge && (opt.id ?? 0) > (existing.id ?? 0))) {
-          uniqueMap[key] = opt;
-        }
-      }
-    }
-    return uniqueMap.values.toList();
+    return _eligibilityService.deduplicateOptions(options);
   }
 
   Future<void> _loadProfileAndDefaultAddress({bool force = false}) async {
@@ -485,11 +477,46 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
       builder: (context, cart, _) {
         final subtotal = cart.subtotal;
         final distance = _getEffectiveDistance();
-        final selectedOption = _selectedDeliveryOption ??
-            (_deliveryOptions.isNotEmpty
-                ? _deliveryOptions.first
-                : ShopDeliveryOption.defaultStandard());
-        final deliveryCalc = selectedOption.calculate(
+        // Evaluate eligible options based on customer location and cart subtotal
+        final deduplicated = _eligibilityService.deduplicateOptions(_deliveryOptions);
+        final results = _eligibilityService.evaluateOptions(
+          options: deduplicated,
+          customerDistance: distance,
+          subtotal: subtotal,
+          alreadyDeduplicated: true,
+        );
+        final eligible = results.where((r) => r.isEligible).toList();
+
+        // Automatically determine the selected option:
+        // 1. If customer previously selected an option and it is still eligible, keep it.
+        // 2. Otherwise prefer best home-delivery (non-pickup) option.
+        // 3. If only pickup is available, select pickup.
+        // 4. If none eligible, fallback to first deduplicated or default standard.
+        ShopDeliveryOption selectedOption;
+        if (_selectedDeliveryOption != null &&
+            eligible.any((r) => r.option.type == _selectedDeliveryOption!.type)) {
+          selectedOption = eligible.firstWhere((r) => r.option.type == _selectedDeliveryOption!.type).option;
+        } else {
+          final nonPickup = eligible.where((r) => !r.option.isPickup).toList();
+          if (nonPickup.isNotEmpty) {
+            selectedOption = nonPickup.first.option;
+          } else if (eligible.isNotEmpty) {
+            selectedOption = eligible.first.option;
+          } else {
+            selectedOption = deduplicated.isNotEmpty ? deduplicated.first : ShopDeliveryOption.defaultStandard();
+          }
+        }
+
+        final selectedResult = results.firstWhere(
+          (r) => r.option.type == selectedOption.type,
+          orElse: () => DeliveryEligibilityResult(
+            option: selectedOption,
+            isEligible: false,
+            calc: selectedOption.calculate(subtotal: subtotal, distance: distance),
+            customerDistance: distance,
+          ),
+        );
+        final deliveryCalc = selectedResult.calc ?? selectedOption.calculate(
           subtotal: subtotal,
           distance: distance,
         );
@@ -908,7 +935,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
     );
   }
 
-  // ── 4. Interactive Delivery Selection & Fee Details ─────────────────
+  // ── 4. Automatically Determined Delivery Section ──────────────────────
 
   Widget _buildDeliverySection({
     required ApiCartProvider cart,
@@ -916,11 +943,33 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
     required ShopDeliveryOption selectedOption,
     required DeliveryCalculationResult calc,
   }) {
-    final options = _deliveryOptions;
     final subtotal = cart.subtotal;
+    final deduplicated = _eligibilityService.deduplicateOptions(_deliveryOptions);
+    final results = _eligibilityService.evaluateOptions(
+      options: deduplicated,
+      customerDistance: distance,
+      subtotal: subtotal,
+      alreadyDeduplicated: true,
+    );
+    final eligible = results.where((r) => r.isEligible).toList();
+    final isSelectedFree = calc.isFree || selectedOption.isPickup;
+
+    IconData getOptionIcon(ShopDeliveryOption opt) {
+      if (opt.isPickup) return LucideIcons.shoppingBag;
+      if (opt.isInstant) return LucideIcons.zap;
+      if (opt.isNationwide) return LucideIcons.globe;
+      return LucideIcons.truck;
+    }
+
+    Color getOptionColor(ShopDeliveryOption opt) {
+      if (opt.isPickup) return _successGreen;
+      if (opt.isInstant) return _amberPrimary;
+      if (opt.isNationwide) return const Color(0xFF6366F1);
+      return _amberPrimary;
+    }
 
     return _sectionCard(
-      title: 'Delivery Method',
+      title: 'Delivery',
       icon: LucideIcons.truck,
       trailing: distance != null && distance > 0
           ? Container(
@@ -951,165 +1000,250 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Selectable Options List
-          Column(
-            children: options.map((opt) {
-              final isSelected = opt.type == selectedOption.type;
-              final optCalc = opt.calculate(
-                subtotal: subtotal,
-                distance: distance,
-              );
-
-              IconData optIcon;
-              Color iconColor;
-              if (opt.isPickup) {
-                optIcon = LucideIcons.shoppingBag;
-                iconColor = _successGreen;
-              } else if (opt.isInstant) {
-                optIcon = LucideIcons.zap;
-                iconColor = _amberPrimary;
-              } else if (opt.isNationwide) {
-                optIcon = LucideIcons.globe;
-                iconColor = const Color(0xFF6366F1);
-              } else {
-                optIcon = LucideIcons.truck;
-                iconColor = _amberPrimary;
-              }
-
-              return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedDeliveryOption = opt;
-                  });
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isSelected ? _amberLight : _surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSelected ? _amberPrimary : _borderSubtle,
-                      width: isSelected ? 1.4 : 1.0,
+          if (_isLoadingDeliveryOptions)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: _amberPrimary),
+                ),
+              ),
+            )
+          else if (distance != null && deduplicated.isNotEmpty && eligible.isEmpty)
+            // No eligible delivery option for this location
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _errorBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(LucideIcons.alertCircle, size: 18, color: _errorRed),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Delivery Not Available',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _errorRed,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'This store does not deliver to your address (${DeliveryEligibilityService.formatDistance(distance)} away). Please choose a different address or contact the store.',
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 11.5,
+                            color: Color(0xFF991B1B),
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      // Radio Indicator
-                      Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: isSelected ? _amberPrimary : _borderSubtle,
-                            width: isSelected ? 5.5 : 1.5,
-                          ),
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
+                ],
+              ),
+            )
+          else ...[
+            // Primary Determined Delivery Option
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              decoration: BoxDecoration(
+                color: _amberLight,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _amberBorder, width: 1.2),
+              ),
+              child: Row(
+                children: [
+                  // Icon
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(
+                      getOptionIcon(selectedOption),
+                      size: 16,
+                      color: getOptionColor(selectedOption),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
 
-                      // Consistent Icon
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: isSelected ? Colors.white : _surfaceSecondary,
-                          borderRadius: BorderRadius.circular(7),
-                        ),
-                        child: Icon(optIcon, size: 15, color: iconColor),
-                      ),
-                      const SizedBox(width: 10),
-
-                      // Title & Speed
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  // Option Details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    opt.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontFamily: 'Outfit',
-                                      fontSize: 13,
-                                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                                      color: _textPrimary,
-                                    ),
-                                  ),
+                            Flexible(
+                              child: Text(
+                                isSelectedFree && !selectedOption.isPickup
+                                    ? 'Free ${selectedOption.title}'
+                                    : selectedOption.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: _textPrimary,
                                 ),
-                                if (opt.isInstant) ...[
-                                  const SizedBox(width: 5),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: _amberLight,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: _amberBorder),
-                                    ),
-                                    child: const Text(
-                                      'Fastest',
-                                      style: TextStyle(
-                                        fontFamily: 'Outfit',
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: _amberPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
+                              ),
                             ),
-                            const SizedBox(height: 1.5),
-                            Text(
-                              opt.speed.isNotEmpty ? opt.speed : 'Standard dispatch',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 11.5,
-                                color: _textSecondary,
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: _amberPrimary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Determined',
+                                style: TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: _amberPrimary,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Fee Pill
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                        decoration: BoxDecoration(
-                          color: optCalc.isFree ? _successBg : _surfaceSecondary,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: optCalc.isFree ? const Color(0xFFA7F3D0) : _borderSubtle,
-                          ),
-                        ),
-                        child: Text(
-                          optCalc.isFree ? 'FREE' : '₹${optCalc.fee.toStringAsFixed(0)}',
-                          style: TextStyle(
+                        const SizedBox(height: 2),
+                        Text(
+                          selectedOption.isPickup
+                              ? (selectedOption.speed.isNotEmpty ? selectedOption.speed : 'Ready same day')
+                              : (selectedOption.speed.isNotEmpty
+                                  ? selectedOption.speed
+                                  : 'Standard dispatch'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
                             fontFamily: 'Outfit',
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: optCalc.isFree ? _successGreen : _textPrimary,
+                            fontSize: 11.5,
+                            color: _textSecondary,
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              );
-            }).toList(),
-          ),
+                  const SizedBox(width: 8),
 
-          // Free Delivery Incentive Progress Bar (if threshold exists)
+                  // Fee Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: isSelectedFree ? _successBg : Colors.white,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: isSelectedFree ? const Color(0xFFA7F3D0) : _borderSubtle,
+                      ),
+                    ),
+                    child: Text(
+                      isSelectedFree ? 'FREE' : '₹${calc.fee.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: isSelectedFree ? _successGreen : _textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Multiple Eligible Options Switcher (clean tabs, no raw admin parameters)
+            if (eligible.length > 1) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'Other Available Options',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: _textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: eligible.map((r) {
+                  final opt = r.option;
+                  final isSelected = opt.type == selectedOption.type;
+                  final feeStr = r.calc?.isFree == true || opt.isPickup
+                      ? 'FREE'
+                      : '₹${(r.calc?.fee ?? opt.deliveryCharge).toStringAsFixed(0)}';
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedDeliveryOption = opt;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isSelected ? _amberLight : _surfaceSecondary,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? _amberPrimary : _borderSubtle,
+                          width: isSelected ? 1.4 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            opt.title,
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 11.5,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              color: isSelected ? _amberPrimary : _textPrimary,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            feeStr,
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: feeStr == 'FREE' ? _successGreen : _textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+
+          // Minimum Order Requirement Notice
+          if (selectedOption.minOrderAmount > 0 && subtotal < selectedOption.minOrderAmount) ...[
+            const SizedBox(height: 8),
+            _buildMinOrderWarning(subtotal, selectedOption.minOrderAmount),
+          ],
+
+          // Free Delivery Incentive Progress Bar
           if (!selectedOption.isPickup && selectedOption.freeShippingAmount > 0) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             if (calc.isFreeThresholdReached)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
@@ -1188,139 +1322,37 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
                 ),
               ),
           ],
-
-          const SizedBox(height: 8),
-
-          // Compact Expandable "Delivery fee details" (Default Collapsed)
-          GestureDetector(
-            onTap: () {
-              setState(() {
-                _isDeliveryDetailsExpanded = !_isDeliveryDetailsExpanded;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: _surfaceSecondary,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _borderSubtle),
-              ),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.info, size: 14, color: _textSecondary),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Delivery fee details',
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _textSecondary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    calc.isFree ? 'FREE' : '₹${calc.fee.toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: calc.isFree ? _successGreen : _textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: _isDeliveryDetailsExpanded ? 0.5 : 0.0,
-                    duration: const Duration(milliseconds: 180),
-                    child: const Icon(LucideIcons.chevronDown, size: 14, color: _textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Expanded Details Accordion
-          AnimatedCrossFade(
-            crossFadeState: _isDeliveryDetailsExpanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 200),
-            firstChild: const SizedBox.shrink(),
-            secondChild: Container(
-              margin: const EdgeInsets.only(top: 6),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _borderSubtle),
-              ),
-              child: Column(
-                children: [
-                  if (selectedOption.isPickup) ...[
-                    _detailRow('Pickup Charge', '₹0.00 (Free)'),
-                    const SizedBox(height: 4),
-                    _detailRow('Location', widget.shop.name),
-                  ] else ...[
-                    if (selectedOption.isDistanceTiered) ...[
-                      _detailRow(
-                        'Base Rate (up to ${selectedOption.baseDistance.toStringAsFixed(0)} km)',
-                        '₹${selectedOption.deliveryCharge.toStringAsFixed(2)}',
-                      ),
-                      if (distance != null && distance > selectedOption.baseDistance) ...[
-                        const SizedBox(height: 4),
-                        _detailRow(
-                          'Distance Surcharge (${(distance - selectedOption.baseDistance).toStringAsFixed(1)} extra km)',
-                          '+₹${(calc.originalFee - selectedOption.deliveryCharge).clamp(0.0, 9999.0).toStringAsFixed(2)}',
-                        ),
-                      ],
-                    ] else ...[
-                      _detailRow('Flat Delivery Rate', '₹${selectedOption.deliveryCharge.toStringAsFixed(2)}'),
-                    ],
-                    if (calc.isFreeThresholdReached && calc.originalFee > 0) ...[
-                      const SizedBox(height: 4),
-                      _detailRow(
-                        'Free Delivery Applied',
-                        '-₹${calc.originalFee.toStringAsFixed(2)}',
-                        color: _successGreen,
-                      ),
-                    ],
-                    const SizedBox(height: 4),
-                    _detailRow(
-                      'Fulfilled By',
-                      selectedOption.deliveryBy == 'INHOUSE' ? 'Store In-House Team' : 'Delivery Partners',
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _detailRow(String label, String value, {Color? color}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 11.5,
-            color: color ?? _textSecondary,
+  Widget _buildMinOrderWarning(double subtotal, double minAmount) {
+    final diff = minAmount - subtotal;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF3C7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFFDE68A)),
+      ),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.alertCircle, size: 14, color: Color(0xFFD97706)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'Minimum order ₹${minAmount.toStringAsFixed(0)} required. Add ₹${diff.toStringAsFixed(0)} more.',
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF92400E),
+              ),
+            ),
           ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            color: color ?? _textPrimary,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2183,7 +2215,24 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
         distance != null &&
         distance > selectedOption.radius;
 
-    final bool canPlace = !isPlacing && !isBelowMinOrder && !isOutsideRadius;
+    final eligibilityCheck = _eligibilityService.evaluateOptions(
+      options: _deliveryOptions,
+      customerDistance: distance,
+      subtotal: cart.subtotal,
+      alreadyDeduplicated: true,
+    );
+    final hasAnyEligible = eligibilityCheck.any((r) => r.isEligible);
+    final bool noDeliveryAvailable = _deliveryOptions.isNotEmpty && !hasAnyEligible;
+
+    final bool isMissingAddress = !selectedOption.isPickup &&
+        _selectedAddress == null &&
+        _addressController.text.trim().isEmpty;
+
+    final bool canPlace = !isPlacing &&
+        !isBelowMinOrder &&
+        !isOutsideRadius &&
+        !noDeliveryAvailable &&
+        !isMissingAddress;
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -2252,7 +2301,9 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isBelowMinOrder
                       ? const Color(0xFFD97706)
-                      : (isOutsideRadius ? _errorRed : _amberPrimary),
+                      : (isMissingAddress
+                          ? const Color(0xFFD97706)
+                          : (isOutsideRadius || noDeliveryAvailable ? _errorRed : _amberPrimary)),
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: _borderSubtle,
                   disabledForegroundColor: _textTertiary,
@@ -2294,15 +2345,24 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
                               fontWeight: FontWeight.w700,
                             ),
                           )
-                        : isOutsideRadius
+                        : isMissingAddress
                             ? const Text(
-                                'Outside Radius',
+                                'Select Delivery Address',
                                 style: TextStyle(
                                   fontFamily: 'Outfit',
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w700,
                                 ),
                               )
+                            : (isOutsideRadius || noDeliveryAvailable)
+                                ? Text(
+                                    noDeliveryAvailable ? 'Delivery Not Available' : 'Outside Radius',
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  )
                             : Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: const [

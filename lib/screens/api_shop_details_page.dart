@@ -33,6 +33,9 @@ import '../models/category_model.dart';
 import '../widgets/category_widget.dart';
 import 'api_product_detail_page.dart';
 import 'api_checkout_page.dart';
+import '../services/delivery_eligibility_service.dart';
+import '../models/providers.dart';
+import '../models/profile_provider.dart';
 
 class ApiShopDetailsPage extends StatefulWidget {
   final Shop shop;
@@ -124,22 +127,10 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
     }
   }
 
+  static const _eligibilityService = DeliveryEligibilityService();
+
   List<ShopDeliveryOption> _deduplicateDeliveryOptions(List<ShopDeliveryOption> options) {
-    final Map<String, ShopDeliveryOption> uniqueMap = {};
-    for (final opt in options) {
-      if (!opt.enabled) continue;
-      final key = opt.type;
-      if (!uniqueMap.containsKey(key)) {
-        uniqueMap[key] = opt;
-      } else {
-        final existing = uniqueMap[key]!;
-        if (opt.deliveryCharge < existing.deliveryCharge ||
-            (opt.deliveryCharge == existing.deliveryCharge && (opt.id ?? 0) > (existing.id ?? 0))) {
-          uniqueMap[key] = opt;
-        }
-      }
-    }
-    return uniqueMap.values.toList();
+    return _eligibilityService.deduplicateOptions(options);
   }
 
   Future<void> _checkAndShowNewAnnouncementPopup() async {
@@ -277,6 +268,7 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                 _buildAppBar(),
                 _buildShopIdentitySection(),
                 _buildCompactServiceSummary(),
+                _buildSmartDeliveryInfoSection(),
                 if (_announcements.isNotEmpty) _buildAnnouncementsSection(),
                 _buildProductsHeaderAndFilter(),
                 _buildProductsGrid(),
@@ -633,7 +625,7 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                   if (widget.shop.description?.isNotEmpty == true || widget.shop.tagline?.isNotEmpty == true) ...[
                     const SizedBox(height: 8),
                     GestureDetector(
-                      onTap: () => _showServicesBottomSheet(context, initialTab: 2),
+                      onTap: () => _showServicesBottomSheet(context, initialTab: 0),
                       child: Text(
                         widget.shop.description?.isNotEmpty == true
                             ? widget.shop.description!
@@ -675,96 +667,196 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
     );
   }
 
-  // ── Compact Service Summary Bar ────────────────────────────────────
-  // Solves: "Delivery and pickup we can just show the basic details and it occupies more spaces in front page.
-  // All details just complete in half of the page and the next page the products list should show"
-  // And: "We can ignore the return policy in the store detailpage .."
+  // ── Shop Info & Services Summary Bar ────────────────────────────────
+  // Displays professional, customer-friendly shop information and service highlights
+  // (Delivery, In-Store Pickup, Timings) instead of raw technical strings.
 
   SliverToBoxAdapter _buildCompactServiceSummary() {
     final activeOptions = _deliveryOptions.isNotEmpty
         ? _deliveryOptions
         : _deduplicateDeliveryOptions(widget.shop.parsedDeliveryOptions);
 
-    // Compute basic summary labels
-    String deliveryText = 'Delivery available';
-    bool hasDelivery = false;
-    ShopDeliveryOption? primaryDelivery;
+    final bool hasDelivery = activeOptions.any((o) => !o.isPickup);
+    final bool hasPickup = activeOptions.any((o) => o.isPickup);
 
-    for (final opt in activeOptions) {
-      if (!opt.isPickup) {
-        hasDelivery = true;
-        primaryDelivery = opt;
-        break;
-      }
+    // Customer-friendly service highlight text
+    String serviceHighlight;
+    if (hasDelivery && hasPickup) {
+      serviceHighlight = 'Delivery & Store Pickup';
+    } else if (hasDelivery) {
+      serviceHighlight = 'Home Delivery';
+    } else if (hasPickup) {
+      serviceHighlight = 'Store Pickup';
+    } else {
+      serviceHighlight = 'In-Store Shopping';
     }
 
-    if (hasDelivery && primaryDelivery != null) {
-      if (primaryDelivery.isInstant && primaryDelivery.speed.isNotEmpty) {
-        deliveryText = '⚡ ${primaryDelivery.speed}';
-      } else if (primaryDelivery.deliveryCharge <= 0) {
-        deliveryText = 'Free delivery';
-      } else if (primaryDelivery.freeShippingAmount > 0) {
-        deliveryText = 'Free > ₹${primaryDelivery.freeShippingAmount.toStringAsFixed(0)}';
-      } else {
-        deliveryText = 'From ₹${primaryDelivery.deliveryCharge.toStringAsFixed(0)}';
-      }
-    } else if (!hasDelivery && activeOptions.isNotEmpty) {
-      deliveryText = 'Store only';
-    }
+    final String addressSnippet = widget.shop.displayAddress.isNotEmpty
+        ? widget.shop.displayAddress
+        : (widget.shop.city.isNotEmpty ? widget.shop.city : '');
 
-    final hasPickup = activeOptions.any((o) => o.isPickup);
+    final String subtitleText = addressSnippet.isNotEmpty
+        ? '$addressSnippet • Tap for hours & policies'
+        : 'Tap to view store hours, address & delivery policies';
 
     return SliverToBoxAdapter(
       child: Container(
         color: _surfaceWhite,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-        child: GestureDetector(
-          onTap: () => _showServicesBottomSheet(context),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: _accentLight,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _accent.withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              children: [
-                // Delivery Pill
-                const Icon(LucideIcons.truck, size: 14, color: _accent),
-                const SizedBox(width: 6),
-                Text(
-                  deliveryText,
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: _textPrimary,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _showServicesBottomSheet(context, initialTab: 0),
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: _accentLight.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _accent.withValues(alpha: 0.22)),
+              ),
+              child: Row(
+                children: [
+                  // Shop / Info Icon Container
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: _surfaceWhite,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _accent.withValues(alpha: 0.25)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accent.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      LucideIcons.store,
+                      size: 19,
+                      color: _accent,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
 
-                const SizedBox(width: 10),
-                Container(width: 3, height: 3, decoration: const BoxDecoration(color: _accentMid, shape: BoxShape.circle)),
-                const SizedBox(width: 10),
-
-                // Pickup Pill
-                const Icon(LucideIcons.shoppingBag, size: 14, color: _accent),
-                const SizedBox(width: 6),
-                Text(
-                  hasPickup ? 'Pickup: Free' : 'Self pickup',
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: _textPrimary,
+                  // Info Content
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            const Text(
+                              'Shop Info & Services',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: _textPrimary,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              width: 3.5,
+                              height: 3.5,
+                              decoration: const BoxDecoration(
+                                color: _accentMid,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                serviceHighlight,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: _accent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2.5),
+                        Text(
+                          subtitleText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: _textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                const Spacer(),
-                const Icon(LucideIcons.chevronRight, size: 15, color: _accentMid),
-              ],
+                  const SizedBox(width: 8),
+
+                  // View Details Action Pill
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _surfaceWhite,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _accent.withValues(alpha: 0.28)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Text(
+                          'Details',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: _accent,
+                          ),
+                        ),
+                        SizedBox(width: 2),
+                        Icon(
+                          LucideIcons.chevronRight,
+                          size: 13,
+                          color: _accent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ── Smart Customer Delivery Info Section ────────────────────────────
+  // Shows eligible delivery options for the current customer location.
+  // Does NOT expose admin configuration details.
+
+  SliverToBoxAdapter _buildSmartDeliveryInfoSection() {
+    return SliverToBoxAdapter(
+      child: _SmartDeliveryInfoWidget(
+        shop: widget.shop,
+        deliveryOptions: _deliveryOptions,
+        eligibilityService: _eligibilityService,
       ),
     );
   }
@@ -844,9 +936,9 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                     unselectedLabelStyle: const TextStyle(fontFamily: 'Outfit', fontSize: 13, fontWeight: FontWeight.w500),
                     dividerColor: Colors.transparent,
                     tabs: const [
+                      Tab(text: 'Store Details'),
                       Tab(text: 'Delivery & Pickup'),
                       Tab(text: 'Return Policy'),
-                      Tab(text: 'About Store'),
                     ],
                   ),
                 ),
@@ -855,13 +947,13 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                 // Tab Content
                 ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(ctx).size.height * 0.55,
+                    maxHeight: MediaQuery.of(ctx).size.height * 0.58,
                   ),
                   child: TabBarView(
                     children: [
+                      _buildStoreInfoDetailView(),
                       _buildDeliveryOptionsDetailView(),
                       _buildReturnPolicyDetailView(),
-                      _buildStoreInfoDetailView(),
                     ],
                   ),
                 ),
@@ -950,7 +1042,13 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        opt.speed.isNotEmpty ? opt.speed : (opt.isPickup ? 'Store counter collection' : 'Standard delivery'),
+                        opt.isPickup
+                            ? (opt.speed.isNotEmpty
+                                ? 'Store counter collection (${opt.speed})'
+                                : 'Store counter collection • Free pickup')
+                            : (opt.speed.isNotEmpty
+                                ? 'Estimated delivery: ${opt.speed}'
+                                : 'Standard home delivery'),
                         style: const TextStyle(fontFamily: 'Outfit', fontSize: 12.5, color: _textSecondary),
                       ),
                       if (opt.freeShippingAmount > 0) ...[
@@ -1080,41 +1178,339 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
   }
 
   Widget _buildStoreInfoDetailView() {
+    final double? distance = widget.shop.distance;
+    final addressText = widget.shop.displayAddress;
+    final operatingHours = widget.shop.operatingHours;
+    final gstNumber = widget.shop.businessInfos?['gst_infos']?['number']?.toString();
+    final isGstRegistered = widget.shop.businessInfos?['gst_infos']?['registered'] == true ||
+        (gstNumber != null && gstNumber.isNotEmpty);
+
     return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (widget.shop.description?.isNotEmpty == true) ...[
-            const Text(
-              'About the Shop',
-              style: TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              widget.shop.description!,
-              style: const TextStyle(fontFamily: 'Outfit', fontSize: 13.5, color: _textSecondary, height: 1.45),
-            ),
-            const SizedBox(height: 14),
-          ],
-          if (widget.shop.displayAddress.isNotEmpty) ...[
-            const Text(
-              'Store Address',
-              style: TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w700, color: _textPrimary),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                const Icon(LucideIcons.mapPin, size: 16, color: _textSecondary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.shop.displayAddress,
-                    style: const TextStyle(fontFamily: 'Outfit', fontSize: 13.5, color: _textSecondary),
+          // 1. About the Shop Card
+          if (widget.shop.description?.isNotEmpty == true || widget.shop.tagline?.isNotEmpty == true) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _bgWarm,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: const [
+                      Icon(LucideIcons.store, size: 16, color: _accent),
+                      SizedBox(width: 8),
+                      Text(
+                        'About the Shop',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: _textPrimary,
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.shop.description?.isNotEmpty == true
+                        ? widget.shop.description!
+                        : widget.shop.tagline!,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 13,
+                      color: _textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // 2. Store Location & Address Card
+          if (addressText.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _bgWarm,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(LucideIcons.mapPin, size: 16, color: _accent),
+                          SizedBox(width: 8),
+                          Text(
+                            'Store Address',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: _textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (distance != null && distance > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _surfaceWhite,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: _borderSubtle),
+                          ),
+                          child: Text(
+                            '${distance.toStringAsFixed(1)} km away',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: _textSecondary,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    addressText,
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 13,
+                      color: _textPrimary,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  InkWell(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: addressText));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Store address copied to clipboard'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _surfaceWhite,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _accent.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(LucideIcons.copy, size: 13, color: _accent),
+                          SizedBox(width: 6),
+                          Text(
+                            'Copy Address',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: _accent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
+          // 3. Operating Hours Card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _bgWarm,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: const [
+                        Icon(LucideIcons.clock, size: 16, color: _accent),
+                        SizedBox(width: 8),
+                        Text(
+                          'Store Timings',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: _textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFDCFCE7)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.circle, size: 6, color: _successGreen),
+                          SizedBox(width: 4),
+                          Text(
+                            'Open Today',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: _successGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 10),
+                if (operatingHours.isNotEmpty) ...[
+                  ...operatingHours.map((h) {
+                    final day = (h['day'] ?? h['day_of_week'] ?? '').toString();
+                    final isClosed = h['is_closed'] == true;
+                    final openAt = (h['open_at'] ?? '09:00').toString();
+                    final closeAt = (h['close_at'] ?? '21:00').toString();
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3.5),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            day.isNotEmpty ? day : 'Daily',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: _textPrimary,
+                            ),
+                          ),
+                          Text(
+                            isClosed ? 'Closed' : '$openAt – $closeAt',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 12.5,
+                              color: isClosed ? _textTertiary : _textSecondary,
+                              fontWeight: isClosed ? FontWeight.w500 : FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ] else ...[
+                  const Text(
+                    'Regular business hours apply. Orders accepted daily during active store hours.',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12.5,
+                      color: _textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ],
             ),
-          ],
+          ),
+          const SizedBox(height: 12),
+
+          // 4. Verification & Business Credentials
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _bgWarm,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _borderSubtle),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(LucideIcons.shieldCheck, size: 16, color: _successGreen),
+                    SizedBox(width: 8),
+                    Text(
+                      'Store Verification & Info',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    Icon(LucideIcons.check, size: 14, color: _successGreen),
+                    SizedBox(width: 6),
+                    Text(
+                      'Verified Local Merchant on Marketplace',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12.5,
+                        color: _textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                if (isGstRegistered && gstNumber != null && gstNumber.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.check, size: 14, color: _successGreen),
+                      const SizedBox(width: 6),
+                      Text(
+                        'GST Registered: $gstNumber',
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 12.5,
+                          color: _textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1904,6 +2300,251 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
         );
       },
     );
+  }
+}
+
+// ── Smart Delivery Info Widget ───────────────────────────────────────
+// Evaluates and displays delivery eligibility for the current customer location.
+
+class _SmartDeliveryInfoWidget extends StatefulWidget {
+  final Shop shop;
+  final List<ShopDeliveryOption> deliveryOptions;
+  final DeliveryEligibilityService eligibilityService;
+
+  const _SmartDeliveryInfoWidget({
+    required this.shop,
+    required this.deliveryOptions,
+    required this.eligibilityService,
+  });
+
+  @override
+  State<_SmartDeliveryInfoWidget> createState() => _SmartDeliveryInfoWidgetState();
+}
+
+class _SmartDeliveryInfoWidgetState extends State<_SmartDeliveryInfoWidget> {
+  static const Color _bg = AppTheme.bgPrimary;
+  static const Color _surface = AppTheme.white;
+  static const Color _accent = AppTheme.primary;
+  static const Color _textPrimary = AppTheme.textPrimary;
+  static const Color _textSecondary = AppTheme.textSecondary;
+  static const Color _borderSubtle = AppTheme.border;
+  static const Color _successGreen = AppTheme.success;
+  static const Color _errorRed = AppTheme.error;
+
+  double? _getEffectiveDistance(BuildContext context) {
+    // 1. Use shop.distance if provided by the API
+    if (widget.shop.distance != null && widget.shop.distance! > 0) {
+      return widget.shop.distance;
+    }
+
+    try {
+      final profileProvider = context.read<ProfileProvider>();
+      final locationProvider = context.read<LocationProvider>();
+      final activeAddress = profileProvider.defaultAddress;
+
+      final double? userLat = activeAddress?.latitude ?? locationProvider.latitude;
+      final double? userLng = activeAddress?.longitude ?? locationProvider.longitude;
+
+      final shopAddr = widget.shop.address;
+      if (shopAddr != null && userLat != null && userLng != null) {
+        final double? shopLat = double.tryParse(
+            shopAddr['latitude']?.toString() ?? shopAddr['lat']?.toString() ?? '');
+        final double? shopLng = double.tryParse(
+            shopAddr['longitude']?.toString() ?? shopAddr['lng']?.toString() ?? '');
+
+        if (shopLat != null && shopLng != null) {
+          return widget.eligibilityService.calculateDistanceKm(
+              userLat, userLng, shopLat, shopLng);
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final options = widget.deliveryOptions.isNotEmpty
+        ? widget.deliveryOptions
+        : widget.eligibilityService.deduplicateOptions(widget.shop.parsedDeliveryOptions);
+
+    if (options.isEmpty) return const SizedBox.shrink();
+
+    final distance = _getEffectiveDistance(context);
+    final results = widget.eligibilityService.evaluateOptions(
+      options: options,
+      customerDistance: distance,
+      subtotal: 0.0, // No cart context on shop detail page
+      alreadyDeduplicated: true,
+    );
+
+    final eligible = results.where((r) => r.isEligible).toList();
+    final hasAddress = distance != null;
+
+    return Container(
+      color: _surface,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _bg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _borderSubtle),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(LucideIcons.truck, size: 14, color: _accent),
+                const SizedBox(width: 6),
+                const Text(
+                  'Delivery Options',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _textPrimary,
+                  ),
+                ),
+                if (!hasAddress) ...[
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF9C4),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: const Text(
+                      'Select address for eligibility',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (!hasAddress) ...[
+              // No address — show all enabled options without eligibility judgment
+              ...options.map((opt) => _buildOptionRow(
+                emoji: _getEmoji(opt),
+                label: opt.title,
+                detail: _buildNoAddressDetail(opt),
+                isHighlighted: false,
+              )),
+            ] else if (eligible.isEmpty) ...[
+              _buildUnavailableRow(distance),
+            ] else ...[
+              ...eligible.map((r) => _buildEligibleOptionRow(r, distance)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEligibleOptionRow(DeliveryEligibilityResult result, double distance) {
+    final opt = result.option;
+    final calc = result.calc;
+    final isFree = calc?.isFree == true || opt.isPickup;
+
+    String detail;
+    if (opt.isPickup) {
+      detail = result.speedLabel;
+    } else if (opt.isNationwide) {
+      detail = result.speedLabel;
+    } else if (isFree) {
+      detail = 'Free · ${DeliveryEligibilityService.formatDistance(distance)}';
+    } else {
+      final fee = calc?.fee ?? opt.deliveryCharge;
+      detail = '₹${fee.toStringAsFixed(0)} · ${DeliveryEligibilityService.formatDistance(distance)}';
+    }
+
+    return _buildOptionRow(
+      emoji: _getEmoji(opt),
+      label: isFree && !opt.isPickup && !opt.isNationwide
+          ? 'Free ${opt.title}'
+          : opt.title,
+      detail: detail,
+      isHighlighted: isFree,
+    );
+  }
+
+  String _buildNoAddressDetail(ShopDeliveryOption opt) {
+    if (opt.isPickup) return opt.speed.isNotEmpty ? opt.speed : 'Same day';
+    if (opt.isNationwide) return opt.speed.isNotEmpty ? opt.speed : '5–7 Business Days';
+    if (opt.deliveryCharge <= 0) return 'Free · ${opt.speed.isNotEmpty ? opt.speed : "2–3 days"}';
+    return '₹${opt.deliveryCharge.toStringAsFixed(0)} · ${opt.speed.isNotEmpty ? opt.speed : "2–3 days"}';
+  }
+
+  Widget _buildOptionRow({
+    required String emoji,
+    required String label,
+    required String detail,
+    required bool isHighlighted,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 5),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: isHighlighted ? _successGreen : _textPrimary,
+              ),
+            ),
+          ),
+          Text(
+            detail,
+            style: TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 12,
+              color: isHighlighted ? _successGreen : _textSecondary,
+              fontWeight: isHighlighted ? FontWeight.w600 : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnavailableRow(double distance) {
+    return Row(
+      children: [
+        const Icon(LucideIcons.alertCircle, size: 14, color: _errorRed),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            'Delivery not available for your location (${DeliveryEligibilityService.formatDistance(distance)})',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 12.5,
+              color: _errorRed,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getEmoji(ShopDeliveryOption opt) {
+    if (opt.isPickup) return '🏬';
+    if (opt.isInstant) return '⚡';
+    if (opt.isNationwide) return '🌐';
+    return '🚚';
   }
 }
 

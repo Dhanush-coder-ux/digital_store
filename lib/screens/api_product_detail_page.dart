@@ -1262,20 +1262,15 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
   Widget _buildSpecificationsCard(ApiProduct product) {
     final specs = <MapEntry<String, String>>[];
 
-    if (product.barcode != null && product.barcode!.trim().isNotEmpty) {
-      specs.add(MapEntry('Barcode', product.barcode!.trim()));
-    }
-    if (product.sku != null && product.sku!.trim().isNotEmpty) {
-      specs.add(MapEntry('SKU', product.sku!.trim()));
-    }
-    if (product.unit != null && product.unit!.trim().isNotEmpty) {
-      specs.add(MapEntry('Unit', product.unit!.trim()));
-    }
-
     if (product.customFields != null) {
       for (final entry in product.customFields!.entries) {
         final k = entry.key.toLowerCase().trim();
-        if (k.contains('variant') || k.contains('varient') || k.contains('return_policy')) {
+        if (k.contains('variant') ||
+            k.contains('varient') ||
+            k.contains('return_policy') ||
+            k == 'barcode' ||
+            k == 'sku' ||
+            k == 'unit') {
           continue;
         }
         final val = entry.value?.toString().trim() ?? '';

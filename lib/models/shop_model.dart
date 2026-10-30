@@ -252,7 +252,7 @@ class ShopDeliveryOption {
 
   bool get isDistanceTiered {
     final p = pricingModel.toUpperCase();
-    return p == 'DISTANCE_TIERED' || p == 'DISTANCE';
+    return p == 'DISTANCE_TIERED' || p == 'DISTANCE' || p == 'DISTANCE_BASED';
   }
 
   DeliveryCalculationResult calculate({
@@ -274,7 +274,7 @@ class ShopDeliveryOption {
     if (isDistanceTiered) {
       distanceApplied = true;
       if (distance != null && distance > 0) {
-        if (baseDistance > 0 && distance > baseDistance) {
+        if (distance > baseDistance) {
           final double extraKm = distance - baseDistance;
           final double step = extraDistanceStep > 0 ? extraDistanceStep : 1.0;
           final int steps = (extraKm / step).ceil();
@@ -308,7 +308,7 @@ class ShopDeliveryOption {
     if (freeUnlocked) {
       desc = 'Free delivery unlocked on orders ≥ ₹${freeShippingAmount.toStringAsFixed(0)}!';
     } else if (isDistanceTiered && distance != null && distance > 0) {
-      if (baseDistance > 0 && distance > baseDistance) {
+      if (distance > baseDistance) {
         desc = 'Base ₹${deliveryCharge.toStringAsFixed(0)} (first ${baseDistance.toStringAsFixed(0)} km) + ₹${(computedFee - deliveryCharge).toStringAsFixed(0)} for ${distance.toStringAsFixed(1)} km';
       } else {
         desc = 'Base rate ₹${deliveryCharge.toStringAsFixed(0)} (within ${baseDistance.toStringAsFixed(0)} km)';
