@@ -1262,25 +1262,92 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
   Widget _buildSpecificationsCard(ApiProduct product) {
     final specs = <MapEntry<String, String>>[];
 
+    // System/internal response keys to never display in the customer-facing card
+    const ignoredSubstrings = [
+      'barcode',
+      'sku',
+      'unit',
+      'price',
+      'mrp',
+      'cost',
+      'brand',
+      'image',
+      'active',
+      'stock',
+      'discount',
+      'alert',
+      'variant',
+      'varient',
+      'policy',
+      'refund',
+      'return',
+      'location',
+      'tracking',
+      'inventory',
+      'quantity',
+      'created',
+      'updated',
+      'offer',
+      'reorder',
+      'status',
+      'gst',
+      'tax',
+    ];
+
+    const exactIgnoredKeys = {
+      'id',
+      'productid',
+      'shopid',
+      'categoryid',
+      'userid',
+      'uiid',
+      'name',
+      'title',
+      'description',
+      'typeinfos',
+      'additionalinfos',
+      'customfields',
+    };
+
     if (product.customFields != null) {
       for (final entry in product.customFields!.entries) {
-        final k = entry.key.toLowerCase().trim();
-        if (k.contains('variant') ||
-            k.contains('varient') ||
-            k.contains('return_policy') ||
-            k == 'barcode' ||
-            k == 'sku' ||
-            k == 'unit') {
+        final rawKey = entry.key;
+        final cleanKey = rawKey.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+        // Check if cleanKey matches any exact ignored keys or contains any ignored substrings
+        if (exactIgnoredKeys.contains(cleanKey) ||
+            ignoredSubstrings.any((sub) => cleanKey.contains(sub))) {
           continue;
         }
-        final val = entry.value?.toString().trim() ?? '';
-        if (val.isNotEmpty) {
-          final label = entry.key
-              .split('_')
-              .map((w) => w.isNotEmpty ? w[0].toUpperCase() + w.substring(1) : '')
-              .join(' ');
-          specs.add(MapEntry(label, val));
+
+        // Validate value: skip null, empty, boolean, lists, maps, or stringified empty/null/false
+        final rawVal = entry.value;
+        if (rawVal == null) continue;
+        if (rawVal is bool) continue;
+        if (rawVal is List && rawVal.isEmpty) continue;
+        if (rawVal is Map && rawVal.isEmpty) continue;
+
+        final val = rawVal.toString().trim();
+        final lowerVal = val.toLowerCase();
+        if (val.isEmpty ||
+            val == '[]' ||
+            val == '{}' ||
+            lowerVal == 'null' ||
+            lowerVal == 'none' ||
+            lowerVal == 'false' ||
+            lowerVal == 'true' ||
+            lowerVal.startsWith('http://') ||
+            lowerVal.startsWith('https://')) {
+          continue;
         }
+
+        final label = rawKey
+            .split(RegExp(r'[_\s]+'))
+            .where((w) => w.isNotEmpty)
+            .map((w) => w[0].toUpperCase() + w.substring(1))
+            .join(' ');
+
+        specs.add(MapEntry(label, val));
       }
     }
 

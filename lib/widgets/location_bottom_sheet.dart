@@ -32,14 +32,24 @@ class LocationBottomSheet extends StatefulWidget {
 
 class _LocationBottomSheetState extends State<LocationBottomSheet> {
   final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   List<dynamic> _suggestions = [];
   bool _isSearching = false;
   bool _isLocating = false;
   String? _locationError;
 
   @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   void dispose() {
     _searchCtrl.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -387,39 +397,115 @@ class _LocationBottomSheetState extends State<LocationBottomSheet> {
   }
 
   Widget _buildSearchField() {
-    return Container(
-      height: 48,
+    final isFocused = _searchFocusNode.hasFocus;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
+      height: 50,
       decoration: BoxDecoration(
-        color: AppTheme.bgSecondary,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.veryLightGray),
+        color: isFocused ? AppTheme.white : AppTheme.bgSecondary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isFocused ? Colors.transparent : AppTheme.border.withValues(alpha: 0.6),
+          width: 1.0,
+        ),
+        boxShadow: isFocused
+            ? [
+                BoxShadow(
+                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  blurRadius: 14,
+                  offset: const Offset(0, 3),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
       ),
       child: Row(
         children: [
-          const SizedBox(width: AppTheme.lg),
-          const Icon(LucideIcons.search, size: 18, color: AppTheme.textTertiary),
-          const SizedBox(width: AppTheme.sm),
+          const SizedBox(width: 10),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: isFocused
+                  ? AppTheme.primary.withValues(alpha: 0.12)
+                  : AppTheme.white.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(
+              child: Icon(
+                LucideIcons.search,
+                size: 17,
+                color: isFocused ? AppTheme.primary : AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _searchCtrl,
+              focusNode: _searchFocusNode,
               autofocus: false,
-              style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Area, street, postal code...',
-                hintStyle: TextStyle(fontFamily: 'Outfit', color: AppTheme.textTertiary, fontSize: 14),
+              cursorColor: AppTheme.primary,
+              cursorWidth: 2.0,
+              cursorRadius: const Radius.circular(2),
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 14.5,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.textPrimary,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search area, street, postal code...',
+                hintStyle: TextStyle(
+                  fontFamily: 'Outfit',
+                  color: AppTheme.textTertiary.withValues(alpha: 0.8),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                errorBorder: InputBorder.none,
+                focusedErrorBorder: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
                 isDense: true,
               ),
-              onChanged: _searchAddress,
+              onChanged: (val) {
+                setState(() {});
+                _searchAddress(val);
+              },
             ),
           ),
           if (_searchCtrl.text.isNotEmpty)
             GestureDetector(
-              onTap: () { _searchCtrl.clear(); setState(() => _suggestions = []); },
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppTheme.md),
-                child: Icon(LucideIcons.x, size: 16, color: AppTheme.textTertiary),
+              onTap: () {
+                _searchCtrl.clear();
+                setState(() => _suggestions = []);
+              },
+              child: Container(
+                margin: const EdgeInsets.only(right: 10),
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: isFocused ? AppTheme.bgSecondary : AppTheme.white,
+                  shape: BoxShape.circle,
+                ),
+                child: const Center(
+                  child: Icon(LucideIcons.x, size: 14, color: AppTheme.textSecondary),
+                ),
               ),
             ),
         ],
@@ -432,44 +518,58 @@ class _LocationBottomSheetState extends State<LocationBottomSheet> {
       margin: const EdgeInsets.only(top: AppTheme.sm),
       decoration: BoxDecoration(
         color: AppTheme.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: AppTheme.veryLightGray),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.border.withValues(alpha: 0.6)),
         boxShadow: AppTheme.shadowMedium,
       ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _suggestions.length,
-        separatorBuilder: (_, __) => const Divider(height: 1, color: AppTheme.veryLightGray),
-        itemBuilder: (_, i) {
-          final item = _suggestions[i];
-          final parts = item['display_name'].toString().split(', ');
-          return InkWell(
-            onTap: () {
-              _searchCtrl.clear();
-              setState(() => _suggestions = []);
-              _confirmFromNominatim(item);
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg, vertical: AppTheme.md),
-              child: Row(children: [
-                const Icon(LucideIcons.mapPin, color: AppTheme.primaryBlue, size: 16),
-                const SizedBox(width: AppTheme.sm),
-                Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(parts.first,
-                      style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
-                    if (parts.length > 1)
-                      Text(parts.sublist(1).join(', '),
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontFamily: 'Outfit', fontSize: 12, color: AppTheme.textTertiary)),
-                  ],
-                )),
-              ]),
-            ),
-          );
-        },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _suggestions.length,
+          separatorBuilder: (_, __) => Divider(height: 1, color: AppTheme.border.withValues(alpha: 0.4)),
+          itemBuilder: (_, i) {
+            final item = _suggestions[i];
+            final parts = item['display_name'].toString().split(', ');
+            return InkWell(
+              onTap: () {
+                _searchCtrl.clear();
+                setState(() => _suggestions = []);
+                _confirmFromNominatim(item);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppTheme.lg, vertical: 12),
+                child: Row(children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Center(
+                      child: Icon(LucideIcons.mapPin, color: AppTheme.primary, size: 15),
+                    ),
+                  ),
+                  const SizedBox(width: AppTheme.md),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(parts.first,
+                        style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
+                      if (parts.length > 1)
+                        Text(parts.sublist(1).join(', '),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontFamily: 'Outfit', fontSize: 12, color: AppTheme.textSecondary)),
+                    ],
+                  )),
+                  const Icon(LucideIcons.arrowUpRight, size: 15, color: AppTheme.textTertiary),
+                ]),
+              ),
+            );
+          },
+        ),
       ),
     );
   }

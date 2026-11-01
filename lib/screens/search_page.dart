@@ -35,6 +35,9 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _focusNode.addListener(() {
+      if (mounted) setState(() {});
+    });
     _focusNode.requestFocus();
 
     // Load search history
@@ -53,6 +56,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   }
 
   void _onSearchChanged(String query) {
+    if (mounted) setState(() {});
     final userId = context.read<AuthProvider>().userId;
     context.read<SearchProvider>().search(query, userId: userId);
   }
@@ -186,61 +190,138 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   }
 
   Widget _buildSearchBarRow() {
+    final isFocused = _focusNode.hasFocus;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              height: 48,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              height: 50,
               decoration: BoxDecoration(
                 color: AppTheme.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.veryLightGray),
-                boxShadow: AppTheme.shadowSmall,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isFocused ? Colors.transparent : AppTheme.border.withValues(alpha: 0.6),
+                  width: 1.0,
+                ),
+                boxShadow: isFocused
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.primary.withValues(alpha: 0.12),
+                          blurRadius: 14,
+                          offset: const Offset(0, 3),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.04),
+                          blurRadius: 6,
+                          offset: const Offset(0, 1),
+                        ),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
               ),
-              child: TextField(
-                controller: _searchController,
-                focusNode: _focusNode,
-                onChanged: _onSearchChanged,
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 15,
-                  color: AppTheme.textPrimary,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Search stores, categories or items...',
-                  hintStyle: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 14,
-                    color: AppTheme.textSecondary,
+              child: Row(
+                children: [
+                  const SizedBox(width: 10),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: isFocused
+                          ? AppTheme.primary.withValues(alpha: 0.12)
+                          : AppTheme.bgSecondary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        LucideIcons.search,
+                        size: 17,
+                        color: isFocused ? AppTheme.primary : AppTheme.textSecondary,
+                      ),
+                    ),
                   ),
-                  prefixIcon: const Icon(LucideIcons.search, size: 18, color: AppTheme.textSecondary),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(LucideIcons.x, size: 16, color: AppTheme.textSecondary),
-                          onPressed: () {
-                            _searchController.clear();
-                            context.read<SearchProvider>().clearResults();
-                          },
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      focusNode: _focusNode,
+                      onChanged: _onSearchChanged,
+                      cursorColor: AppTheme.primary,
+                      cursorWidth: 2.0,
+                      cursorRadius: const Radius.circular(2),
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Search stores, categories or items...',
+                        hintStyle: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w400,
+                          color: AppTheme.textTertiary.withValues(alpha: 0.8),
+                        ),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        focusedErrorBorder: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                  if (_searchController.text.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () {
+                          _searchController.clear();
+                          context.read<SearchProvider>().clearResults();
+                          if (mounted) setState(() {});
+                        },
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.bgSecondary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: Icon(LucideIcons.x, size: 14, color: AppTheme.textSecondary),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           GestureDetector(
             onTap: () => Navigator.pop(context),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: AppTheme.textPrimary,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textSecondary,
+                ),
               ),
             ),
           ),

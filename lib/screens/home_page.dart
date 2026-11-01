@@ -245,24 +245,38 @@ class _HomePageState extends State<HomePage> {
     return GestureDetector(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchPage())),
       child: Container(
-        height: 46,
+        height: 50,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppTheme.border.withValues(alpha: 0.6),
+            width: 1.0,
+          ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
-        child: const Row(children: [
-          SizedBox(width: AppTheme.lg),
-          Icon(LucideIcons.search, size: 18, color: AppTheme.primary),
-          SizedBox(width: AppTheme.sm),
-          Text(
-            'Search stores or products',
+        child: Row(children: [
+          const SizedBox(width: 10),
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Center(
+              child: Icon(LucideIcons.search, size: 17, color: AppTheme.primary),
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Text(
+            'Search stores, categories or items...',
             style: TextStyle(
               fontFamily: 'Outfit',
               fontSize: 14,
