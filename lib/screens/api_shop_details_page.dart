@@ -78,6 +78,7 @@ class _ApiShopDetailsPageState extends State<ApiShopDetailsPage> {
       context.read<ReviewProvider>().fetchShopReviews(widget.shop.id);
       _fetchAnnouncements();
       _fetchDeliveryOptions();
+      context.read<ApiCartProvider>().initCart(widget.shop.id);
     });
   }
 

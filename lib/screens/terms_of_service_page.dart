@@ -37,12 +37,12 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
           await rootBundle.loadString('assets/legal/terms.md');
 
       // Markers for shopper documents only:
-      // Document 3: Shopper Terms of Use
-      // Document 4: Shopper Privacy Policy
+      // Document 3: ShopQ Terms of Use
+      // Document 4: ShopQ Privacy Policy
       final doc3Start =
-          fullContent.indexOf('# DOCUMENT 3 — Shopper Terms of Use');
+          fullContent.indexOf('# DOCUMENT 3 — ShopQ Terms of Use');
       final doc4Start =
-          fullContent.indexOf('# DOCUMENT 4 — Shopper Privacy Policy');
+          fullContent.indexOf('# DOCUMENT 4 — ShopQ Privacy Policy');
       final appendixStart = fullContent.indexOf('# APPENDIX A —');
 
       String doc3 = '';
@@ -78,8 +78,8 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _doc3Content = 'Failed to load Shopper Terms of Use.';
-          _doc4Content = 'Failed to load Shopper Privacy Policy.';
+          _doc3Content = 'Failed to load ShopQ Terms of Use.';
+          _doc4Content = 'Failed to load ShopQ Privacy Policy.';
           _isLoading = false;
         });
       }
@@ -100,7 +100,7 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'Shopper Legal',
+          'ShopQ Legal',
           style: TextStyle(
             fontFamily: 'Outfit',
             fontSize: 18,

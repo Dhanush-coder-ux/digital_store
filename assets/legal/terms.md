@@ -8,8 +8,8 @@ This file contains four documents for publication and two appendices for impleme
 |---|---|---|---|
 | 1 | InventQ Terms of Service | Retailer app — signup + Settings; website footer | Retailers |
 | 2 | InventQ Privacy Policy | Retailer app — signup + Settings; website footer | Retailers |
-| 3 | Shopper Terms of Use | Shopper app — signup + Menu; store pages | Shoppers |
-| 4 | Shopper Privacy Policy | Shopper app — signup + Menu; store pages | Shoppers |
+| 3 | ShopQ Terms of Use | ShopQ app — signup + Menu; store pages | Shoppers |
+| 4 | ShopQ Privacy Policy | ShopQ app — signup + Menu; store pages | Shoppers |
 | A | Digital Store Activation Undertaking | In-app checklist when a store is published | Retailers |
 | B | Just-in-time privacy notices | In-app strings at the point of collection | Shoppers |
 | E | Registration and consent specification | Signup and login screens | Developers |
@@ -356,7 +356,7 @@ With your consent, we may send you product updates and offers. You can withdraw 
 
 We share information only with:
 
-- **Shopper**, where you have published a Digital Store. The business details you provide — business name, address, contact number, GSTIN and return policy — are displayed publicly, as required by applicable e-commerce rules.
+- **ShopQ**, where you have published a Digital Store. The business details you provide — business name, address, contact number, GSTIN and return policy — are displayed publicly, as required by applicable e-commerce rules.
 - **Service providers and subprocessors**, as described below.
 - **Authorities**, where required by law or valid legal process.
 
@@ -483,7 +483,7 @@ At least once every year, we will remind you of this policy and of any changes m
 ---
 ---
 
-# DOCUMENT 3 — Shopper Terms of Use
+# DOCUMENT 3 — ShopQ Terms of Use
 
 ### *(Consumer application)*
 
@@ -491,13 +491,13 @@ At least once every year, we will remind you of this policy and of any changes m
 
 ## 1. About these terms
 
-These Terms of Use govern your use of the `Shopper` application and website, operated by InventQ
+These Terms of Use govern your use of the `ShopQ` application and website, operated by InventQ
 
 By creating an account or placing an order, you agree to these terms.
 
 ## 2. What we are — and what we are not
 
-Shopper is a **technology platform** that allows local retailers to display their products and receive orders from customers.
+ShopQ is a **technology platform** that allows local retailers to display their products and receive orders from customers.
 
 **We are not the seller.** For every order you place:
 
@@ -512,7 +512,7 @@ The seller's name, address, contact number and GSTIN (where applicable) are disp
 
 ## 3. Platform disclosures
 
-Shopper is operated by:
+ShopQ is operated by:
 
 **Legal name:** InventQ
 **Customer support:** shopper@gmail.com · +918883442378
@@ -684,7 +684,7 @@ These terms are governed by the laws of India.
 ---
 ---
 
-# DOCUMENT 4 — Shopper Privacy Policy
+# DOCUMENT 4 — ShopQ Privacy Policy
 
 ### *(Consumer application)*
 
@@ -751,7 +751,7 @@ The retailer needs this to prepare and deliver your order and to contact you abo
 
 **The retailer is an independent Data Fiduciary.** After receiving your information, the retailer independently determines how it handles that information for purposes such as order fulfilment, delivery, customer support, invoicing, returns, refunds, warranty administration and legal compliance. **The retailer is responsible for its own processing of that information under applicable law.**
 
-Shopper remains responsible for personal data processing for the purposes independently determines, including operating and securing the platform, account administration, fraud prevention, analytics and support, as described in this policy.
+ShopQ remains responsible for personal data processing for the purposes independently determines, including operating and securing the platform, account administration, fraud prevention, analytics and support, as described in this policy.
 
 We share your details only with retailers you actually order from. **Browsing a store does not share anything.**
 
@@ -908,7 +908,7 @@ Together with section 6 of the Terms of Service, this satisfies the requirement 
 
 **These are in-app strings, not a published document.** Under the DPDP framework a notice must be clear, standalone, and given at the point of collection. A link to the Privacy Policy is not enough on its own.
 
-### B1 · Shopper signup
+### B1 · ShopQ signup
 
 > **Why we need your information**
 > We use your name and mobile number to create your account, sign you in, and manage your orders. Your email, if you give one, is used for receipts and support.
@@ -999,7 +999,7 @@ Fill every item before publishing. Items marked 🔴 are legally required to be 
 | Subprocessor page published and accurate | ☐ |
 | Content report route — `[GRIEVANCE EMAIL]` | ☐ |
 | MRP validation live (already built into product pricing) | ☐ |
-| Prohibited-content list published in Shopper Terms (IT Rules Rule 3(1)(b)) | ☐ |
+| Prohibited-content list published in ShopQ Terms (IT Rules Rule 3(1)(b)) | ☐ |
 | Grievance acknowledgement within **24 hours** — not 48 | ☐ |
 | 36-hour takedown route for court and government orders | ☐ |
 | 24-hour route for intimate-imagery complaints | ☐ |
@@ -1088,7 +1088,7 @@ Aadhaar number, date of birth, gender, photograph of an ID document — none of 
 
 ---
 
-## E3 · Shopper registration — the shopper app
+## E3 · ShopQ registration — the shopper app
 
 ### Collect at signup
 
@@ -1210,7 +1210,7 @@ Required by the SPDI Rules, which treat passwords as sensitive personal informat
 | Item | Done |
 |---|---|
 | Retailer signup collects only the seven fields in E2 | ☐ |
-| Shopper signup collects only the three fields in E3 | ☐ |
+| ShopQ signup collects only the three fields in E3 | ☐ |
 | Terms and marketing are **separate** checkboxes, both unticked | ☐ |
 | Age confirmation is its own checkbox on shopper signup | ☐ |
 | Create-account button disabled until terms are accepted | ☐ |

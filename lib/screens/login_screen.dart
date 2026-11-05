@@ -1,6 +1,6 @@
 // lib/screens/login_screen.dart
 //
-// OAuth login & onboarding screen with warm faded yellow-orange / caramel Shopper branding.
+// OAuth login & onboarding screen with warm faded yellow-orange / caramel ShopQ branding.
 // Displays app logo, storefront illustration, animated waves, and OAuth login handler.
 //
 
@@ -175,7 +175,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               animation: _pinBobAnimation,
               builder: (context, _) {
                 return CustomPaint(
-                  painter: _ShopperStoreIllustrationPainter(
+                  painter: _ShopQStoreIllustrationPainter(
                     pinOffsetY: _pinBobAnimation.value,
                   ),
                 );
@@ -221,7 +221,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
                   const SizedBox(height: 20),
 
-                  // ── Welcome to Shopper Headings ──────────────────────
+                  // ── Welcome to ShopQ Headings ──────────────────────
                   FadeInUp(
                     duration: const Duration(milliseconds: 650),
                     delay: const Duration(milliseconds: 150),
@@ -239,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Shopper',
+                          'ShopQ',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.outfit(
                             fontSize: 44,
@@ -403,10 +403,10 @@ class _DotMatrixDecoration extends StatelessWidget {
 
 /// CustomPainter rendering the storefront, flanking trees,
 /// floating location pin, and layered faded yellow-orange waves.
-class _ShopperStoreIllustrationPainter extends CustomPainter {
+class _ShopQStoreIllustrationPainter extends CustomPainter {
   final double pinOffsetY;
 
-  _ShopperStoreIllustrationPainter({required this.pinOffsetY});
+  _ShopQStoreIllustrationPainter({required this.pinOffsetY});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -718,7 +718,7 @@ class _ShopperStoreIllustrationPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ShopperStoreIllustrationPainter oldDelegate) {
+  bool shouldRepaint(covariant _ShopQStoreIllustrationPainter oldDelegate) {
     return oldDelegate.pinOffsetY != pinOffsetY;
   }
 }

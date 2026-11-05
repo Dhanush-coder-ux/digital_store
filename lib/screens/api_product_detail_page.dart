@@ -100,9 +100,10 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
       _selectedBatchId = initialBatch['id']?.toString();
     }
 
-    // Refresh reviews for shop
+    // Refresh reviews for shop and pre-warm cart session
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ReviewProvider>().fetchShopReviews(widget.shop.id);
+      context.read<ApiCartProvider>().initCart(widget.shop.id);
     });
   }
 

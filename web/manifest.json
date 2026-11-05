@@ -1,6 +1,6 @@
 {
-    "name": "Shopper",
-    "short_name": "Shopper",
+    "name": "ShopQ",
+    "short_name": "ShopQ",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#ffffff",

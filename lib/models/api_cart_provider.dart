@@ -98,6 +98,10 @@ class ApiCartProvider extends ChangeNotifier {
 
   static const _sessionKey = 'api_cart_session_id';
   static const _shopKey = 'api_cart_shop_id';
+  static const _sessionTsKey = 'api_cart_session_ts';
+
+  // Redis session TTL is 20 minutes (1200s). Re-init if older than 18 minutes.
+  static const int _sessionMaxAgeMs = 18 * 60 * 1000;
 
   Future<void> initCart(String shopId) async {
     if (_sessionId != null && _shopId == shopId) return; // Already initialized
@@ -111,15 +115,17 @@ class ApiCartProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final savedSession = prefs.getString(_sessionKey);
       final savedShop = prefs.getString(_shopKey);
+      final savedTs = prefs.getInt(_sessionTsKey) ?? 0;
+      final isFresh = (DateTime.now().millisecondsSinceEpoch - savedTs) < _sessionMaxAgeMs;
 
-      if (savedSession != null && savedSession.isNotEmpty && savedShop == shopId) {
+      if (savedSession != null && savedSession.isNotEmpty && savedShop == shopId && isFresh) {
         // Try to resume session
         _sessionId = savedSession;
         await _syncCart();
         
         // If _syncCart wiped _sessionId because it was expired or invalid in Redis, fall through to init a new one
         if (_sessionId != null) {
-          await _loadPersistedOrders();
+          unawaited(_loadPersistedOrders());
           _state = CartState.idle;
           notifyListeners();
           return;
@@ -130,10 +136,11 @@ class ApiCartProvider extends ChangeNotifier {
       _sessionId = await _cartService.initCart();
       await prefs.setString(_sessionKey, _sessionId!);
       await prefs.setString(_shopKey, shopId);
+      await prefs.setInt(_sessionTsKey, DateTime.now().millisecondsSinceEpoch);
 
       _items = [];
-      _localMirror.clear();
-      await _loadPersistedOrders();
+      // Do not clear _localMirror here — preserves optimistic items added by user
+      unawaited(_loadPersistedOrders());
       await _loadProductCache(prefs);
     } on ApiException catch (e) {
       _error = e.message;
@@ -184,6 +191,7 @@ class ApiCartProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_sessionKey);
       await prefs.remove(_shopKey);
+      await prefs.remove(_sessionTsKey);
     } catch (_) {}
 
     _sessionId = null;
@@ -206,9 +214,7 @@ class ApiCartProvider extends ChangeNotifier {
     String? variantId,
     String? batchId,
   }) async {
-    int attempts = 0;
-
-    // Auto-resolve variantId and batchId if missing or nested in variant
+    // 1. Auto-resolve variantId and batchId if missing or nested in variant
     String? effectiveVariantId = variantId;
     String? effectiveBatchId = batchId;
 
@@ -251,25 +257,29 @@ class ApiCartProvider extends ChangeNotifier {
     if (effectiveBatchId == null && product.batches.isNotEmpty) {
       effectiveBatchId = product.batches.first['id']?.toString();
     }
-    
+
+    // 2. Instant optimistic local feedback before any network latency
+    _updateLocalMirror(product, qty, variantId: effectiveVariantId, batchId: effectiveBatchId);
+    _productCache[product.id] = product;
+    _saveProductCache(); // fire and forget
+    _state = CartState.adding;
+    _addingProductId = product.id;
+    _error = null;
+    notifyListeners();
+
+    int attempts = 0;
     while (attempts < 2) {
       attempts++;
-      
-      // 1. Ensure cart session is ready for this shop
+
+      // Ensure cart session is ready for this shop
       if (_sessionId == null || _shopId != shopId) {
         await initCart(shopId);
-        if (_sessionId == null) return; // Init failed
-      }
-
-      if (attempts == 1) {
-        // Instant local feedback only on first attempt
-        _updateLocalMirror(product, qty, variantId: effectiveVariantId, batchId: effectiveBatchId);
-        _productCache[product.id] = product;
-        _saveProductCache(); // fire and forget
-        _state = CartState.adding;
-        _addingProductId = product.id;
-        _error = null;
-        notifyListeners();
+        if (_sessionId == null) {
+          _state = CartState.idle;
+          _addingProductId = null;
+          notifyListeners();
+          return; // Init failed
+        }
       }
 
       try {
@@ -282,37 +292,43 @@ class ApiCartProvider extends ChangeNotifier {
           batchId: effectiveBatchId,
           unit: product.unit,
         );
-        
+
+        // Update session timestamp on successful touch
+        SharedPreferences.getInstance().then((prefs) {
+          prefs.setInt(_sessionTsKey, DateTime.now().millisecondsSinceEpoch);
+        });
+
         // Sync with backend to get enriched items
         await _syncCart();
-        
+
         _state = CartState.idle;
         _addingProductId = null;
         notifyListeners();
         return; // Success!
-        
+
       } on ApiException catch (e) {
         final msg = e.message.toLowerCase();
         if (e.statusCode == 400 || 
             e.statusCode == 404 || 
             msg.contains('invalid') || 
             msg.contains('expired') || 
-            msg.contains('session') ||
+            msg.contains('session') || 
             msg.contains('not found')) {
           _sessionId = null;
           try {
             final prefs = await SharedPreferences.getInstance();
             await prefs.remove(_sessionKey);
             await prefs.remove(_shopKey);
+            await prefs.remove(_sessionTsKey);
           } catch (_) {}
-          
+
           if (attempts < 2) continue; // Retry with a fresh session!
         }
-        
+
         // Handle intermittent server errors without clearing session
         if (e.statusCode != null && e.statusCode! >= 500) {
           if (attempts < 2) {
-            await Future.delayed(const Duration(milliseconds: 500));
+            await Future.delayed(const Duration(milliseconds: 300));
             continue; // Retry
           }
         }
@@ -521,7 +537,11 @@ class ApiCartProvider extends ChangeNotifier {
       // Patch missing backend data using our local cache
       for (int i = 0; i < _items.length; i++) {
         final item = _items[i];
-        if (item.productName == 'Unknown Product' && _productCache.containsKey(item.productId)) {
+        final bool isMissingInfo = item.itemInfo == null ||
+            item.itemInfo!.isEmpty ||
+            item.productName == 'Product' ||
+            item.productName == 'Unknown Product';
+        if (isMissingInfo && _productCache.containsKey(item.productId)) {
           final cached = _productCache[item.productId]!;
           
           final Map<String, dynamic> fakeItemInfo = {
@@ -529,6 +549,10 @@ class ApiCartProvider extends ChangeNotifier {
               'name': cached.name,
               'image_url': cached.imageUrls,
               'selling_price': cached.displayPrice,
+              'pricing_infos': {
+                'sell_price': cached.displayPrice,
+                'online_sell_price': cached.displayPrice,
+              },
             }
           };
 
@@ -545,8 +569,16 @@ class ApiCartProvider extends ChangeNotifier {
         }
       }
 
-      // Clear local mirror after successful sync
-      _localMirror.clear();
+      // Selectively clean up local mirror for items confirmed by backend
+      for (final item in _items) {
+        final key = '${item.productId}_${item.variantId ?? ''}_${item.batchId ?? ''}';
+        _localMirror.remove(key);
+        _localMirror.remove('${item.productId}__');
+      }
+      if (_items.isNotEmpty) {
+        _localMirror.removeWhere((key, entry) =>
+            _items.any((i) => i.productId == entry.product.id));
+      }
     } on NotFoundException catch (_) {
       _sessionId = null;
       _items = [];
@@ -554,6 +586,7 @@ class ApiCartProvider extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_sessionKey);
         await prefs.remove(_shopKey);
+        await prefs.remove(_sessionTsKey);
       } catch (_) {}
     } on ApiException catch (e) {
       final msg = e.message.toLowerCase();
@@ -564,6 +597,7 @@ class ApiCartProvider extends ChangeNotifier {
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove(_sessionKey);
           await prefs.remove(_shopKey);
+          await prefs.remove(_sessionTsKey);
         } catch (_) {}
       }
     } catch (_) {
@@ -800,6 +834,7 @@ class ApiCartProvider extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove(_sessionKey);
         await prefs.remove(_shopKey);
+        await prefs.remove(_sessionTsKey);
       } catch (_) {}
 
       _sessionId = null;
@@ -833,6 +868,7 @@ class ApiCartProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_sessionKey);
       await prefs.remove(_shopKey);
+      await prefs.remove(_sessionTsKey);
     } catch (_) {}
 
     _sessionId = null;
@@ -861,9 +897,24 @@ class ApiCartProvider extends ChangeNotifier {
   }
 
   bool isVariantInCart(String productId, String? variantId, String? batchId) {
-    if (_items.any((i) => i.productId == productId && i.variantId == variantId && i.batchId == batchId)) return true;
+    // 1. Strict match in backend items
+    if (_items.any((i) =>
+        i.productId == productId &&
+        i.variantId == variantId &&
+        (batchId == null || i.batchId == null || i.batchId == batchId))) {
+      return true;
+    }
+    // 2. Strict match in local mirror
     final key = '${productId}_${variantId ?? ''}_${batchId ?? ''}';
-    return _localMirror.containsKey(key);
+    if (_localMirror.containsKey(key)) return true;
+
+    // 3. Relaxed match in local mirror if batch was omitted or auto-resolved
+    if (_localMirror.values.any((e) =>
+        e.product.id == productId &&
+        (variantId == null || e.variantId == null || e.variantId == variantId))) {
+      return true;
+    }
+    return false;
   }
 
   bool isInCart(String productId) {
@@ -873,12 +924,21 @@ class ApiCartProvider extends ChangeNotifier {
 
   int quantityOf(String productId, {String? variantId, String? batchId}) {
     for (final item in _items) {
-      if (item.productId == productId && item.variantId == variantId && item.batchId == batchId) {
+      if (item.productId == productId &&
+          item.variantId == variantId &&
+          (batchId == null || item.batchId == null || item.batchId == batchId)) {
         return item.qty.round();
       }
     }
     final key = '${productId}_${variantId ?? ''}_${batchId ?? ''}';
-    return _localMirror[key]?.qty ?? 0;
+    if (_localMirror.containsKey(key)) return _localMirror[key]!.qty;
+    for (final entry in _localMirror.values) {
+      if (entry.product.id == productId &&
+          (variantId == null || entry.variantId == null || entry.variantId == variantId)) {
+        return entry.qty;
+      }
+    }
+    return 0;
   }
 
   int totalQuantityOf(String productId) {

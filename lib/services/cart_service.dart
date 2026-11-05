@@ -131,28 +131,31 @@ class CartService {
             .map((e) => CartSessionItem.fromJson(e))
             .toList();
             
-        // Workaround: if the backend cart API fails to enrich item_info, fetch it from the product API
+        // Parallel fallback if the backend cart API fails to enrich item_info
+        final missingIndices = <int>[];
         for (var i = 0; i < items.length; i++) {
-          final item = items[i];
-          if (item.itemInfo == null || item.itemInfo!.isEmpty) {
-            print('DEBUG: Fallback triggered for product ${item.productId}');
+          if (items[i].itemInfo == null || items[i].itemInfo!.isEmpty) {
+            missingIndices.add(i);
+          }
+        }
+        if (missingIndices.isNotEmpty) {
+          await Future.wait(missingIndices.map((i) async {
+            final item = items[i];
             try {
               final prodUrl = ApiConfig.dsProductById(item.shopId, item.productId);
               final prodResp = await _client.get(prodUrl, requiresAuth: true);
-              print('DEBUG: Fallback response: $prodResp');
               if (prodResp is Map<String, dynamic>) {
                 final productData = prodResp.containsKey('data') ? prodResp['data'] : prodResp;
                 if (productData != null && productData.isNotEmpty) {
                   final updatedJson = Map<String, dynamic>.from(itemsRaw[i] as Map<String, dynamic>);
                   updatedJson['item_info'] = productData;
                   items[i] = CartSessionItem.fromJson(updatedJson);
-                  print('DEBUG: Fallback successful, new name: ${items[i].productName}');
                 }
               }
             } catch (e) {
               print('Fallback product fetch failed: $e');
             }
-          }
+          }));
         }
         return items;
       }
