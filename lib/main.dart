@@ -146,7 +146,7 @@ class _MyAppState extends State<MyApp> {
         builder: (context, language, child) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
-            title: 'ShopQ',
+            title: 'ShopIQ',
             theme: AppTheme.lightTheme,
             locale: language.currentLocale,
             supportedLocales: LanguageProvider.supportedLanguages

@@ -452,7 +452,7 @@ class _ProfilePageState extends State<ProfilePage> {
               iconBg: AppTheme.bgSecondary,
               iconColor: AppTheme.textPrimary,
               title: 'Terms of Service',
-              subtitle: 'ShopQ terms & privacy policy',
+              subtitle: 'ShopIQ terms & privacy policy',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const TermsOfServicePage()),
