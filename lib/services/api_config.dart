@@ -198,4 +198,32 @@ class ApiConfig {
   static String get customerBase => '$gatewayBase/customers';
   static String get customerCreate => customerBase;
   static String customerByShop(String shopId) => '$customerBase/by/shop/$shopId';
+
+  // ── Return Request endpoints ───────────────────────────────────
+  /// POST /api/returns/request & /returns/requests (Customer return request endpoints)
+  static String get returnRequestCreate => '$gatewayBase/returns/request';
+  static String get returnRequestCreateAlt => '$gatewayBase/returns/requests';
+  static String get returnRequestCreateOrders => '$gatewayBase/orders/return-request';
+
+  /// GET /api/orders/return-requests/{shop_id}?order_id={order_id} (Fetch return requests for an order)
+  static String returnRequestsByOrder(String orderId, {String? shopId}) {
+    final sId = (shopId != null && shopId.trim().isNotEmpty) ? shopId.trim() : 'ALL';
+    return '$gatewayBase/orders/return-requests/$sId?order_id=$orderId';
+  }
+
+  /// Alternative direct order returns route: GET /api/returns/requests/order/{order_id}
+  static String returnRequestsByOrderDirect(String orderId) =>
+      '$gatewayBase/returns/requests/order/$orderId';
+
+  /// GET /api/orders/return-requests/{shop_id} (Fetch return requests for a shop)
+  static String returnRequestsByShop(String shopId) =>
+      '$gatewayBase/orders/return-requests/$shopId';
+
+  /// GET /api/returns/requests/detail/{request_id} (Fetch return request detail)
+  static String returnRequestDetail(String requestId) =>
+      '$gatewayBase/returns/requests/detail/$requestId';
+
+  /// PATCH /api/orders/return-requests/{request_id}/status
+  static String returnRequestUpdateStatus(String requestId) =>
+      '$gatewayBase/orders/return-requests/$requestId/status';
 }

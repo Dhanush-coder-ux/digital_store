@@ -23,6 +23,7 @@ class ApiProduct {
   final bool haveTracking;
   final String? barcode;
   final String? sku;
+  final String? gst;
   final Map<String, dynamic>? customFields;
   final Map<String, dynamic>? additionalInfos;
   final String? createdAt;
@@ -47,6 +48,7 @@ class ApiProduct {
     this.haveTracking = true,
     this.barcode,
     this.sku,
+    this.gst,
     this.customFields,
     this.additionalInfos,
     this.createdAt,
@@ -211,6 +213,7 @@ class ApiProduct {
       haveTracking: haveTracking,
       barcode: productData['barcode']?.toString(),
       sku: productData['sku']?.toString(),
+      gst: productData['gst']?.toString() ?? json['gst']?.toString(),
       customFields: productData['custom_fields'] is Map
           ? Map<String, dynamic>.from(productData['custom_fields'] as Map)
           : null,
@@ -342,5 +345,6 @@ class ApiProduct {
         'have_tracking': haveTracking,
         'barcode': barcode,
         'sku': sku,
+        'gst': gst,
       };
 }

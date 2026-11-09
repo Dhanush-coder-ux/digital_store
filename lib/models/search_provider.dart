@@ -105,8 +105,8 @@ class SearchProvider extends ChangeNotifier {
       } catch (_) {}
 
       final body = await _service.fetchShops(
-          latitude: lat, longitude: lon, limit: 20, offset: 1);
-      return _parseShopList(body);
+          latitude: lat, longitude: lon, limit: 50, offset: 1);
+      return _parseShopList(body, query: query);
     } catch (_) {
       return [];
     }
@@ -150,23 +150,39 @@ class SearchProvider extends ChangeNotifier {
 
   // ── Parsers ─────────────────────────────────────────────────────
 
-  List<Shop> _parseShopList(dynamic body) {
+  List<Shop> _parseShopList(dynamic body, {String query = ''}) {
+    List<dynamic>? list;
     if (body is List) {
-      return body
+      list = body;
+    } else if (body is Map<String, dynamic>) {
+      final data = body['data'] ?? body['datas'];
+      if (data is List) {
+        list = data;
+      } else if (data is Map<String, dynamic>) {
+        list = [data];
+      }
+    }
+
+    if (list != null) {
+      final parsed = list
           .whereType<Map<String, dynamic>>()
           .map((e) => Shop.fromJson(e))
           .where((s) => s.visibleOnline)
           .toList();
-    }
-    if (body is Map<String, dynamic>) {
-      final data = body['data'];
-      if (data is List) {
-        return data
-            .whereType<Map<String, dynamic>>()
-            .map((e) => Shop.fromJson(e))
-            .where((s) => s.visibleOnline)
-            .toList();
-      }
+
+      if (query.trim().isEmpty) return parsed;
+
+      final cleanQ = query.trim().toLowerCase();
+      return parsed.where((s) {
+        final nameMatches = s.name.toLowerCase().contains(cleanQ);
+        final tagMatches = s.tagline?.toLowerCase().contains(cleanQ) ?? false;
+        final descMatches = s.description?.toLowerCase().contains(cleanQ) ?? false;
+        final catMatches = s.categories.any((c) => c.toLowerCase().contains(cleanQ));
+        final cityMatches = s.city.toLowerCase().contains(cleanQ);
+        final addressMatches = s.displayAddress.toLowerCase().contains(cleanQ);
+
+        return nameMatches || tagMatches || descMatches || catMatches || cityMatches || addressMatches;
+      }).toList();
     }
     return [];
   }

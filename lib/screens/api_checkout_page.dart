@@ -894,6 +894,8 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
   // ── 3. Order Items Section ──────────────────────────────────────────
 
   Widget _buildCartItemsSection(ApiCartProvider cart) {
+    final bool isShopRegistered = widget.shop.isGstRegistered;
+
     return _sectionCard(
       title: 'Order Items',
       icon: LucideIcons.shoppingBag,
@@ -921,7 +923,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
             final item = entry.value;
             return Column(
               children: [
-                _CartItemRow(item: item, cart: cart),
+                _CartItemRow(item: item, cart: cart, isShopGstRegistered: isShopRegistered),
                 if (i < cart.items.length - 1)
                   const Divider(color: _borderSubtle, height: 18),
               ],
@@ -929,7 +931,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
           }),
           // Local fallback items if synced before backend response
           if (cart.items.isEmpty)
-            ...cart.localItems.map((e) => _LocalItemRow(entry: e)),
+            ...cart.localItems.map((e) => _LocalItemRow(entry: e, isShopGstRegistered: isShopRegistered)),
         ],
       ),
     );
@@ -2435,11 +2437,29 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
 class _CartItemRow extends StatelessWidget {
   final CartSessionItem item;
   final ApiCartProvider cart;
+  final bool isShopGstRegistered;
 
-  const _CartItemRow({required this.item, required this.cart});
+  const _CartItemRow({
+    required this.item,
+    required this.cart,
+    this.isShopGstRegistered = true,
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Determine effective GST rate and pricing split
+    final double rawGstRate = item.gstRate;
+    final double effectiveGstRate = isShopGstRegistered ? rawGstRate : 0.0;
+    final bool hasGst = effectiveGstRate > 0;
+
+    final double unitPrice = item.sellingPrice;
+    final double unitGst = hasGst ? double.parse((unitPrice * (effectiveGstRate / 100.0)).toStringAsFixed(2)) : 0.0;
+    final double unitBasePrice = hasGst ? double.parse((unitPrice - unitGst).toStringAsFixed(2)) : unitPrice;
+
+    final double itemSubtotal = item.lineTotal;
+    final double lineGst = hasGst ? double.parse((unitGst * item.qty).toStringAsFixed(2)) : 0.0;
+    final double lineBasePrice = hasGst ? double.parse((unitBasePrice * item.qty).toStringAsFixed(2)) : itemSubtotal;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2467,7 +2487,7 @@ class _CartItemRow extends StatelessWidget {
         ),
         const SizedBox(width: 10),
 
-        // Product Name & Variant info
+        // Product Name & Variant info & Price breakdown
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2502,15 +2522,47 @@ class _CartItemRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-              const SizedBox(height: 3),
-              Text(
-                '₹${item.sellingPrice.toStringAsFixed(2)}${item.unit != null ? ' / ${item.unit}' : ''}',
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 11.5,
-                  color: Color(0xFF8A7664),
+              const SizedBox(height: 4),
+
+              // Product pricing display
+              if (hasGst) ...[
+                Text(
+                  'Base Price: ₹${lineBasePrice.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11,
+                    color: Color(0xFF8A7664),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 1),
+                Text(
+                  'GST (${effectiveGstRate.toStringAsFixed(effectiveGstRate % 1 == 0 ? 0 : 1)}%): ₹${lineGst.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11,
+                    color: Color(0xFF8A7664),
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  'Item Subtotal: ₹${itemSubtotal.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF493629),
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  '₹${item.sellingPrice.toStringAsFixed(2)}${item.unit != null ? ' / ${item.unit}' : ''}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11.5,
+                    color: Color(0xFF8A7664),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -2595,12 +2647,29 @@ class _CartItemRow extends StatelessWidget {
 
 class _LocalItemRow extends StatelessWidget {
   final dynamic entry;
+  final bool isShopGstRegistered;
 
-  const _LocalItemRow({required this.entry});
+  const _LocalItemRow({
+    required this.entry,
+    this.isShopGstRegistered = true,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final double rawGstRate = entry.gstRate;
+    final double effectiveGstRate = isShopGstRegistered ? rawGstRate : 0.0;
+    final bool hasGst = effectiveGstRate > 0;
+
+    final double unitPrice = entry.product.displayPrice;
+    final double unitGst = hasGst ? double.parse((unitPrice * (effectiveGstRate / 100.0)).toStringAsFixed(2)) : 0.0;
+    final double unitBasePrice = hasGst ? double.parse((unitPrice - unitGst).toStringAsFixed(2)) : unitPrice;
+
+    final double itemSubtotal = entry.lineTotal;
+    final double lineGst = hasGst ? double.parse((unitGst * entry.qty).toStringAsFixed(2)) : 0.0;
+    final double lineBasePrice = hasGst ? double.parse((unitBasePrice * entry.qty).toStringAsFixed(2)) : itemSubtotal;
+
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
           width: 48,
@@ -2639,20 +2708,50 @@ class _LocalItemRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 3),
-              Text(
-                'Qty: ${entry.qty} • ₹${entry.product.displayPrice.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 11.5,
-                  color: Color(0xFF8A7664),
+              if (hasGst) ...[
+                Text(
+                  'Base Price: ₹${lineBasePrice.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11,
+                    color: Color(0xFF8A7664),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 1),
+                Text(
+                  'GST (${effectiveGstRate.toStringAsFixed(effectiveGstRate % 1 == 0 ? 0 : 1)}%): ₹${lineGst.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11,
+                    color: Color(0xFF8A7664),
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  'Item Subtotal: ₹${itemSubtotal.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF493629),
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  'Qty: ${entry.qty} • ₹${entry.product.displayPrice.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11.5,
+                    color: Color(0xFF8A7664),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
         const SizedBox(width: 8),
         Text(
-          '₹${(entry.product.displayPrice * entry.qty).toStringAsFixed(2)}',
+          '₹${itemSubtotal.toStringAsFixed(2)}',
           style: const TextStyle(
             fontFamily: 'Outfit',
             fontSize: 13.5,

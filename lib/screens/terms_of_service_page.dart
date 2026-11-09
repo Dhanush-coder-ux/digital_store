@@ -78,8 +78,8 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _doc3Content = 'Failed to load ShopIQ Terms of Use.';
-          _doc4Content = 'Failed to load ShopIQ Privacy Policy.';
+          _doc3Content = 'Failed to load ShopiQ Terms of Use.';
+          _doc4Content = 'Failed to load ShopiQ Privacy Policy.';
           _isLoading = false;
         });
       }
@@ -100,7 +100,7 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          'ShopIQ Legal',
+          'ShopiQ Legal',
           style: TextStyle(
             fontFamily: 'Outfit',
             fontSize: 18,

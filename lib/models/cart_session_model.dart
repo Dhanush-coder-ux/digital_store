@@ -188,7 +188,41 @@ class CartSessionItem {
     return null;
   }
 
-  /// Line total
+  /// Raw GST rate percentage (e.g., 18.0 for "18%")
+  double get gstRate {
+    final product = itemInfo?['product'] ?? itemInfo;
+    if (product is Map) {
+      final rawGst = product['gst'];
+      if (rawGst != null) {
+        final cleaned = rawGst.toString().replaceAll('%', '').trim();
+        final parsed = double.tryParse(cleaned);
+        if (parsed != null && parsed > 0) return parsed;
+      }
+    }
+    return 0.0;
+  }
+
+  /// Unit GST amount based on inclusive selling price
+  double get unitGstAmount {
+    if (gstRate <= 0) return 0.0;
+    // Selling price is inclusive of GST: GST = SP * (rate / 100)
+    final calculated = sellingPrice * (gstRate / 100.0);
+    return double.parse(calculated.toStringAsFixed(2));
+  }
+
+  /// Unit base price excluding GST
+  double get unitBasePrice {
+    final base = sellingPrice - unitGstAmount;
+    return double.parse(base.toStringAsFixed(2));
+  }
+
+  /// Total base price for line item
+  double get lineBasePrice => double.parse((unitBasePrice * qty).toStringAsFixed(2));
+
+  /// Total GST amount for line item
+  double get lineGstAmount => double.parse((unitGstAmount * qty).toStringAsFixed(2));
+
+  /// Line total (Base Price + GST = Selling Price * qty)
   double get lineTotal => sellingPrice * qty;
 
   Map<String, dynamic> toJson() => {

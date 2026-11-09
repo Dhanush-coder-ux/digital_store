@@ -21,6 +21,7 @@ import '../models/order_model.dart';
 import '../models/shop_model.dart';
 import '../theme/app_theme.dart';
 import 'order_detail_page.dart';
+import 'my_return_requests_page.dart';
 import 'main_screen.dart';
 
 class MyOrdersPage extends StatefulWidget {
@@ -189,6 +190,14 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.rotateCcw, color: _textSecondary, size: 19),
+            tooltip: 'Return requests',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MyReturnRequestsPage()),
+            ),
+          ),
           IconButton(
             icon: const Icon(LucideIcons.rotateCw, color: _textSecondary, size: 19),
             tooltip: 'Refresh orders',

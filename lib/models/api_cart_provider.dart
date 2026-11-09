@@ -549,6 +549,7 @@ class ApiCartProvider extends ChangeNotifier {
               'name': cached.name,
               'image_url': cached.imageUrls,
               'selling_price': cached.displayPrice,
+              'gst': cached.gst,
               'pricing_infos': {
                 'sell_price': cached.displayPrice,
                 'online_sell_price': cached.displayPrice,
@@ -1016,4 +1017,36 @@ class LocalCartEntry {
     this.variantId,
     this.batchId,
   });
+
+  /// Raw GST rate percentage (e.g. 18.0)
+  double get gstRate {
+    if (product.gst != null) {
+      final cleaned = product.gst!.replaceAll('%', '').trim();
+      final parsed = double.tryParse(cleaned);
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return 0.0;
+  }
+
+  /// Unit GST amount based on inclusive selling price
+  double get unitGstAmount {
+    if (gstRate <= 0) return 0.0;
+    final calculated = product.displayPrice * (gstRate / 100.0);
+    return double.parse(calculated.toStringAsFixed(2));
+  }
+
+  /// Unit base price excluding GST
+  double get unitBasePrice {
+    final base = product.displayPrice - unitGstAmount;
+    return double.parse(base.toStringAsFixed(2));
+  }
+
+  /// Total base price for line item
+  double get lineBasePrice => double.parse((unitBasePrice * qty).toStringAsFixed(2));
+
+  /// Total GST amount for line item
+  double get lineGstAmount => double.parse((unitGstAmount * qty).toStringAsFixed(2));
+
+  /// Line total
+  double get lineTotal => product.displayPrice * qty;
 }

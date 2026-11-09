@@ -111,6 +111,30 @@ class ApiClient {
     }, url: url, requiresAuth: requiresAuth);
   }
 
+  Future<dynamic> patch(
+    String url, {
+    dynamic body,
+    Map<String, String>? queryParams,
+    Duration? timeout,
+    bool requiresAuth = true,
+  }) async {
+    return _executeWithRetry(() async {
+      final uri = _buildUri(url, queryParams);
+      final headers = await _buildHeaders(requiresAuth: requiresAuth);
+      final encodedBody = body != null ? jsonEncode(body) : null;
+      _logRequest('PATCH', uri, headers, encodedBody);
+      final stopwatch = Stopwatch()..start();
+      final response = await http.patch(
+        uri,
+        headers: headers,
+        body: encodedBody,
+      ).timeout(timeout ?? _defaultTimeout);
+      stopwatch.stop();
+      _logResponse(response, stopwatch.elapsed);
+      return _handleResponse(response);
+    }, url: url, requiresAuth: requiresAuth);
+  }
+
   Future<dynamic> delete(
     String url, {
     Map<String, String>? queryParams,
@@ -147,6 +171,8 @@ class ApiClient {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'x-origin': 'digitalstore',
+      'X-Origin': 'digitalstore',
     };
 
     if (requiresAuth) {

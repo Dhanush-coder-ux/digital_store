@@ -30,6 +30,7 @@ class ApiOrder {
   final String? createdAt;
   final String? updatedAt;
   final String? otp;
+  final List<dynamic> returnRequests;
 
   const ApiOrder({
     required this.id,
@@ -56,6 +57,7 @@ class ApiOrder {
     this.createdAt,
     this.updatedAt,
     this.otp,
+    this.returnRequests = const [],
   });
 
   factory ApiOrder.fromJson(Map<String, dynamic> json) {
@@ -187,6 +189,9 @@ class ApiOrder {
       createdAt: json['created_at']?.toString(),
       updatedAt: json['updated_at']?.toString(),
       otp: json['otp']?.toString(),
+      returnRequests: (json['return_requests'] ?? json['returnRequests']) is List
+          ? ((json['return_requests'] ?? json['returnRequests']) as List)
+          : const [],
     );
   }
 
@@ -207,10 +212,12 @@ class ApiOrder {
         if (pincode != null) 'pincode': pincode,
         if (state != null) 'state': state,
         if (note != null) 'note': note,
+        if (returnRequests != null) 'return_requests': returnRequests,
       };
 }
 
 class ApiOrderItem {
+  final String? orderItemId;
   final String productId;
   final String? variantId;
   final String? batchId;
@@ -222,6 +229,7 @@ class ApiOrderItem {
   final String? imageUrl;
 
   const ApiOrderItem({
+    this.orderItemId,
     required this.productId,
     this.variantId,
     this.batchId,
@@ -263,6 +271,7 @@ class ApiOrderItem {
     }
 
     return ApiOrderItem(
+      orderItemId: json['id']?.toString() ?? json['order_item_id']?.toString(),
       productId: json['product_id']?.toString() ?? '',
       variantId: json['variant_id']?.toString(),
       batchId: json['batch_id']?.toString(),
@@ -277,6 +286,7 @@ class ApiOrderItem {
   }
 
   Map<String, dynamic> toJson() => {
+        if (orderItemId != null) 'order_item_id': orderItemId,
         'product_id': productId,
         'variant_id': variantId,
         'batch_id': batchId,

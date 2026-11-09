@@ -464,7 +464,15 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                   child: shop.logoUrl != null && shop.logoUrl!.isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: Image.network(shop.logoUrl!, fit: BoxFit.cover),
+                          child: Image.network(
+                            shop.logoUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => const Icon(
+                              LucideIcons.store,
+                              color: AppTheme.primaryBlue,
+                              size: 24,
+                            ),
+                          ),
                         )
                       : const Icon(LucideIcons.store, color: AppTheme.primaryBlue, size: 24),
                 ),

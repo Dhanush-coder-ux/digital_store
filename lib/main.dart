@@ -19,6 +19,7 @@ import 'services/product_service.dart';
 import 'services/cart_service.dart';
 import 'services/order_service.dart';
 import 'services/customer_service.dart';
+import 'services/return_service.dart';
 
 // Legacy / Mock Providers (UI state)
 import 'models/providers.dart';
@@ -33,6 +34,7 @@ import 'models/search_provider.dart';
 import 'models/review_provider.dart';
 import 'models/user_order_provider.dart';
 import 'models/language_provider.dart';
+import 'models/return_request_provider.dart';
 
 // Screens
 import 'screens/splash_screen.dart';
@@ -140,13 +142,16 @@ class _MyAppState extends State<MyApp> {
             CustomerService(widget.apiClient),
           ),
         ),
+        ChangeNotifierProvider(
+          create: (_) => ReturnRequestProvider(ReturnService(widget.apiClient)),
+        ),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
       ],
       child: Consumer<LanguageProvider>(
         builder: (context, language, child) {
           return MaterialApp(
             debugShowCheckedModeBanner: false,
-            title: 'ShopIQ',
+            title: 'ShopiQ',
             theme: AppTheme.lightTheme,
             locale: language.currentLocale,
             supportedLocales: LanguageProvider.supportedLanguages

@@ -119,6 +119,26 @@ class Shop {
     return additionalInfos!['delivery_info_message']?.toString();
   }
 
+  /// GST Registration status
+  bool get isGstRegistered {
+    final gstInfos = businessInfos?['gst_infos'];
+    if (gstInfos is Map) {
+      if (gstInfos['registered'] == true) return true;
+      final num = gstInfos['number']?.toString();
+      if (num != null && num.trim().isNotEmpty) return true;
+    }
+    return false;
+  }
+
+  /// GST Number if available
+  String? get gstNumber {
+    final gstInfos = businessInfos?['gst_infos'];
+    if (gstInfos is Map) {
+      return gstInfos['number']?.toString();
+    }
+    return null;
+  }
+
   /// Whether there's a delivery option configured
   bool get hasDelivery => deliveryOptions.isNotEmpty;
 

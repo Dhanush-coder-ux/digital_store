@@ -1016,94 +1016,48 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
         border: Border.all(color: AppTheme.veryLightGray),
         boxShadow: AppTheme.shadowSmall,
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: hasDelivery ? AppTheme.successBg : AppTheme.bgSecondary,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  hasDelivery ? LucideIcons.truck : LucideIcons.store,
-                  size: 18,
-                  color: hasDelivery ? AppTheme.successGreen : AppTheme.primaryBlue,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      hasDelivery ? 'Home Delivery Available' : 'Store Pickup Only',
-                      style: const TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      hasDelivery
-                          ? (deliveryCharge > 0 ? 'Delivery fee from ₹${deliveryCharge.toStringAsFixed(0)}' : 'Free delivery on eligible orders')
-                          : 'Collect in store at $locationLabel',
-                      style: const TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 11.5,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: hasDelivery ? AppTheme.successBg : AppTheme.bgSecondary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              hasDelivery ? LucideIcons.truck : LucideIcons.store,
+              size: 18,
+              color: hasDelivery ? AppTheme.successGreen : AppTheme.primaryBlue,
+            ),
           ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: AppTheme.veryLightGray),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppTheme.bgSecondary,
-                  borderRadius: BorderRadius.circular(10),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasDelivery ? 'Home Delivery Available' : 'Store Pickup Only',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
                 ),
-                child: const Icon(LucideIcons.shieldCheck, size: 18, color: AppTheme.primaryBlue),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Genuine Local Commerce',
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                    SizedBox(height: 1),
-                    Text(
-                      'Direct from verified neighborhood retailers',
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 11.5,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 1),
+                Text(
+                  hasDelivery
+                      ? (deliveryCharge > 0 ? 'Delivery fee from ₹${deliveryCharge.toStringAsFixed(0)}' : 'Free delivery on eligible orders')
+                      : 'Collect in store at $locationLabel',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 11.5,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

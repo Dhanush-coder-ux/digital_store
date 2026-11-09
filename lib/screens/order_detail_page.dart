@@ -19,10 +19,14 @@ import '../models/product_provider.dart';
 import '../models/product_model.dart';
 import '../models/profile_provider.dart';
 import '../models/user_order_provider.dart';
+import '../models/return_request_model.dart';
+import '../models/return_request_provider.dart';
 import '../core/models/address_model.dart';
 import '../theme/app_theme.dart';
 import 'cart_page.dart';
 import 'api_shop_details_page.dart';
+import 'return_request_page.dart';
+import 'return_request_detail_page.dart';
 
 class _OrderAddressDetails {
   final String? recipientName;
@@ -84,6 +88,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     super.initState();
     _order = widget.order;
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final returns = _order.returnRequests;
+      if (returns != null && returns.isNotEmpty) {
+        context.read<ReturnRequestProvider>().seedFromOrder(_order);
+      }
       _refreshOrder();
     });
   }
@@ -97,6 +105,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         setState(() {
           _order = userOrderProv.selectedOrder!;
         });
+      }
+      if (mounted) {
+        final returns = _order.returnRequests;
+        if (returns != null && returns.isNotEmpty) {
+          context.read<ReturnRequestProvider>().seedFromOrder(_order);
+        }
+        await context.read<ReturnRequestProvider>().fetchRequestsForOrder(
+          _order.id,
+          shopId: _order.shopId,
+          force: true,
+        );
       }
     } catch (_) {}
   }
@@ -1670,6 +1689,57 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           const SizedBox(height: 12),
         ],
 
+        // Return Product Action / Current Return Status (only eligible if order is DELIVERED)
+        if (_isDelivered) ...[
+          Consumer<ReturnRequestProvider>(
+            builder: (context, returnProv, _) {
+              final activeRequest = returnProv.getLatestRequestForOrder(_order.id);
+              if (activeRequest != null) {
+                // An active or completed return request already exists - show status
+                return _buildReturnStatusBanner(activeRequest, shop);
+              }
+
+              // Eligible for return request - present return action
+              return SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ReturnRequestPage(
+                          order: _order,
+                          shop: shop,
+                        ),
+                      ),
+                    );
+                    _refreshOrder();
+                  },
+                  icon: const Icon(LucideIcons.rotateCcw, size: 16, color: _amber),
+                  label: const Text(
+                    'Return Items',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _amber,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFFCD34D), width: 1.5),
+                    backgroundColor: const Color(0xFFFFFBEB),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
+
         // Reorder (for delivered or cancelled orders)
         if (_isDelivered || _isCancelled) ...[
           SizedBox(
@@ -1734,6 +1804,121 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildReturnStatusBanner(ReturnRequestModel request, Shop? shop) {
+    Color bg;
+    Color borderCol;
+    Color fg;
+    IconData icon;
+    String statusTitle;
+
+    if (request.isAccepted) {
+      bg = const Color(0xFFF0FDF4);
+      borderCol = const Color(0xFFBBF7D0);
+      fg = _success;
+      icon = LucideIcons.checkCircle2;
+      statusTitle = 'Return Request: ACCEPTED';
+    } else if (request.isRejected) {
+      bg = const Color(0xFFFEF2F2);
+      borderCol = const Color(0xFFFECACA);
+      fg = _error;
+      icon = LucideIcons.xCircle;
+      statusTitle = 'Return Request: REJECTED';
+    } else {
+      bg = const Color(0xFFFFFBEB);
+      borderCol = const Color(0xFFFDE68A);
+      fg = _amber;
+      icon = LucideIcons.clock;
+      statusTitle = 'Return Request: PENDING REVIEW';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderCol, width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: fg),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  statusTitle,
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: fg,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${request.items.length} item${request.items.length == 1 ? '' : 's'} requested for return.',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 12,
+              color: _textSecondary,
+            ),
+          ),
+          if (request.adminNotes != null && request.adminNotes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Seller Note: ${request.adminNotes}',
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+                color: fg,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 38,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ReturnRequestDetailPage(
+                      returnRequest: request,
+                      order: _order,
+                    ),
+                  ),
+                );
+              },
+              icon: Icon(LucideIcons.arrowUpRight, size: 14, color: fg),
+              label: Text(
+                'View Return Details',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: borderCol),
+                backgroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

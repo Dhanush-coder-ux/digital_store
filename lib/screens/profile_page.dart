@@ -10,6 +10,7 @@ import '../theme/app_constants.dart';
 import '../theme/app_theme.dart';
 import 'favorites_page.dart';
 import 'my_orders_page.dart';
+import 'my_return_requests_page.dart';
 import 'saved_addresses_page.dart';
 import 'package:provider/provider.dart';
 import '../models/profile_provider.dart';
@@ -377,6 +378,19 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildDivider(),
             _buildListTile(
               context,
+              icon: LucideIcons.rotateCcw,
+              iconBg: const Color(0xFFFEF3C7),
+              iconColor: const Color(0xFFD97706),
+              title: 'Return Requests',
+              subtitle: 'Track returns & refunds',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MyReturnRequestsPage()),
+              ),
+            ),
+            _buildDivider(),
+            _buildListTile(
+              context,
               icon: LucideIcons.mapPin,
               iconBg: AppTheme.lightBlue,
               iconColor: AppTheme.primaryBlue,
@@ -452,7 +466,7 @@ class _ProfilePageState extends State<ProfilePage> {
               iconBg: AppTheme.bgSecondary,
               iconColor: AppTheme.textPrimary,
               title: 'Terms of Service',
-              subtitle: 'ShopIQ terms & privacy policy',
+              subtitle: 'ShopiQ terms & privacy policy',
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const TermsOfServicePage()),
