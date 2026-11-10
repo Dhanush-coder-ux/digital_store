@@ -189,8 +189,8 @@ class ApiOrder {
       createdAt: json['created_at']?.toString(),
       updatedAt: json['updated_at']?.toString(),
       otp: json['otp']?.toString(),
-      returnRequests: (json['return_requests'] ?? json['returnRequests']) is List
-          ? ((json['return_requests'] ?? json['returnRequests']) as List)
+      returnRequests: (json['return_requests'] ?? json['returnRequests'] ?? json['returns']) is List
+          ? ((json['return_requests'] ?? json['returnRequests'] ?? json['returns']) as List)
           : const [],
     );
   }

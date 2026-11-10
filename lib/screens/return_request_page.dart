@@ -155,9 +155,11 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
       }
     }
 
+    final effectiveShopId = (widget.order.shopId.isNotEmpty ? widget.order.shopId : widget.shop?.id) ?? '';
+
     final payload = CreateReturnRequestPayload(
       orderId: widget.order.id,
-      shopId: widget.order.shopId,
+      shopId: effectiveShopId.isNotEmpty ? effectiveShopId : null,
       items: returnItems,
       description: _descController.text.trim(),
       customerName: customerName,

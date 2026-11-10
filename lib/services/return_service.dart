@@ -15,36 +15,85 @@ class ReturnService {
   const ReturnService(this._client);
 
   /// Submits a new customer return request.
-  /// POST /returns/request (with fallback to /returns/requests & /orders/return-request)
+  /// POST /orders/return-request (with multi-endpoint fallback to /returns/request, /returns/requests, & /orders/returns/request)
   Future<ReturnRequestModel> submitReturnRequest(CreateReturnRequestPayload payload) async {
     dynamic response;
-    try {
-      response = await _client.post(
-        ApiConfig.returnRequestCreate,
-        body: payload.toJson(),
-        requiresAuth: true,
-      );
-    } on ApiException catch (e) {
-      if (kDebugMode) print('[ReturnService] returnRequestCreate error: ${e.statusCode} ${e.message}');
-      final isRouteMissing = (e.statusCode == 404 && e.message.trim().toLowerCase() == 'not found') ||
-          e.statusCode == 405;
-      if (isRouteMissing) {
-        try {
-          response = await _client.post(
-            ApiConfig.returnRequestCreateAlt,
-            body: payload.toJson(),
-            requiresAuth: true,
-          );
-        } catch (_) {
-          response = await _client.post(
-            ApiConfig.returnRequestCreateOrders,
-            body: payload.toJson(),
-            requiresAuth: true,
-          );
+    ApiException? lastApiException;
+
+    final endpoints = [
+      ApiConfig.returnRequestCreate,              // POST /orders/return-request (primary & cleanest)
+      ApiConfig.returnRequestCreateReturns,       // POST /returns/request
+      ApiConfig.returnRequestCreateAlt,           // POST /returns/requests
+      ApiConfig.returnRequestCreateOrdersDirect,  // POST /orders/returns/request
+    ];
+
+    for (final endpoint in endpoints) {
+      try {
+        if (kDebugMode) print('[ReturnService] Submitting return request to: $endpoint');
+        response = await _client.post(
+          endpoint,
+          body: payload.toJson(),
+          requiresAuth: true,
+        );
+        lastApiException = null;
+        break;
+      } on ApiException catch (e) {
+        lastApiException = e;
+        if (kDebugMode) print('[ReturnService] Error from $endpoint (${e.statusCode}): ${e.message}');
+
+        // If the error is a domain validation error (400) from ReturnRequestRepo,
+        // it means the endpoint was reached and verified our payload.
+        if (e.statusCode == 400 && !e.message.toLowerCase().contains('invalid data for return')) {
+          rethrow;
         }
-      } else {
-        rethrow;
+
+        // On 404 (route missing or "Order not found" from wrong route) or 405 (method not allowed),
+        // proceed to test the next fallback candidate.
+      } catch (e) {
+        if (kDebugMode) print('[ReturnService] Network error from $endpoint: $e');
       }
+    }
+
+    // Final fallback: If dedicated return-request routes returned 404, attempt in-store
+    // return route: POST /api/returns/{shop_id} using the order's actual shopId
+    if (response == null && payload.shopId != null && payload.shopId!.isNotEmpty) {
+      final directShopEndpoint = '${ApiConfig.gatewayBase}/returns/${payload.shopId}';
+      try {
+        if (kDebugMode) print('[ReturnService] Attempting direct shop return fallback: $directShopEndpoint');
+        final directPayload = {
+          'shop_id': payload.shopId,
+          'order_id': payload.orderId,
+          'payment_infos': payload.paymentInfos ?? {
+            'method': 'ORIGINAL_PAYMENT',
+            'status': 'PENDING_REFUND',
+          },
+          'items': payload.items.map((i) => {
+            'order_item_id': (i.orderItemId != null && i.orderItemId!.isNotEmpty) ? i.orderItemId : (i.productId ?? ''),
+            'quantity': i.quantity,
+            if (i.unit != null && i.unit!.isNotEmpty) 'unit': i.unit,
+            if (i.reason != null && i.reason!.isNotEmpty) 'reason': i.reason,
+          }).toList(),
+          'description': payload.description,
+        };
+        response = await _client.post(
+          directShopEndpoint,
+          body: directPayload,
+          requiresAuth: true,
+        );
+        lastApiException = null;
+      } on ApiException catch (e) {
+        lastApiException = e;
+        if (kDebugMode) print('[ReturnService] Direct shop return fallback failed: ${e.statusCode} ${e.message}');
+      } catch (e) {
+        if (kDebugMode) print('[ReturnService] Direct shop return network error: $e');
+      }
+    }
+
+    if (response == null) {
+      if (lastApiException != null) {
+        throw lastApiException;
+      }
+      throw const ApiException('Unable to submit return request to server.');
     }
 
     return _parseReturnRequest(response, payload);
@@ -64,8 +113,8 @@ class ReturnService {
         ApiConfig.returnRequestsByOrder(orderId, shopId: sId),
         requiresAuth: true,
       );
-      final list = _parseReturnRequestList(response);
-      if (list.isNotEmpty) return list;
+      // Valid response (even if list is empty []). Return immediately without triggering fallbacks.
+      return _parseReturnRequestList(response);
     } catch (e) {
       if (kDebugMode) print('[ReturnService] getReturnRequestsByOrder primary route: $e');
     }

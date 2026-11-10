@@ -200,10 +200,12 @@ class ApiConfig {
   static String customerByShop(String shopId) => '$customerBase/by/shop/$shopId';
 
   // ── Return Request endpoints ───────────────────────────────────
-  /// POST /api/returns/request & /returns/requests (Customer return request endpoints)
-  static String get returnRequestCreate => '$gatewayBase/returns/request';
+  /// Primary Customer return request endpoint (Zero collision with /{shop_id}):
+  static String get returnRequestCreate => '$gatewayBase/orders/return-request';
+  static String get returnRequestCreateReturns => '$gatewayBase/returns/request';
   static String get returnRequestCreateAlt => '$gatewayBase/returns/requests';
   static String get returnRequestCreateOrders => '$gatewayBase/orders/return-request';
+  static String get returnRequestCreateOrdersDirect => '$gatewayBase/orders/returns/request';
 
   /// GET /api/orders/return-requests/{shop_id}?order_id={order_id} (Fetch return requests for an order)
   static String returnRequestsByOrder(String orderId, {String? shopId}) {
