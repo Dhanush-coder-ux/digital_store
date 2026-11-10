@@ -60,7 +60,67 @@ class ReturnRequestProvider extends ChangeNotifier {
       final List<ReturnRequestModel> parsed = [];
       for (final item in returns) {
         if (item is Map<String, dynamic>) {
-          parsed.add(ReturnRequestModel.fromJson(item));
+          final itemMap = Map<String, dynamic>.from(item);
+
+          // Backfill orderId if missing or empty
+          if ((itemMap['order_id'] == null || itemMap['order_id'].toString().trim().isEmpty) && order.id.isNotEmpty) {
+            itemMap['order_id'] = order.id;
+          }
+          // Backfill orderUiId if missing or empty
+          if (itemMap['order_ui_id'] == null || itemMap['order_ui_id'].toString().trim().isEmpty) {
+            final ui = (order.uiId != null && order.uiId!.trim().isNotEmpty) ? order.uiId!.trim() : order.id;
+            itemMap['order_ui_id'] = ui;
+          }
+          // Backfill shopId if missing
+          if ((itemMap['shop_id'] == null || itemMap['shop_id'].toString().trim().isEmpty) && order.shopId.isNotEmpty) {
+            itemMap['shop_id'] = order.shopId;
+          }
+          // Backfill customer details
+          if ((itemMap['customer_name'] == null || itemMap['customer_name'].toString().trim().isEmpty) && order.customerName != null) {
+            itemMap['customer_name'] = order.customerName;
+          }
+          if ((itemMap['customer_phone'] == null || itemMap['customer_phone'].toString().trim().isEmpty) && order.customerPhone != null) {
+            itemMap['customer_phone'] = order.customerPhone;
+          }
+          // Backfill createdAt if missing
+          if ((itemMap['created_at'] == null || itemMap['created_at'].toString().trim().isEmpty) && order.createdAt != null) {
+            itemMap['created_at'] = order.createdAt;
+          }
+
+          var model = ReturnRequestModel.fromJson(itemMap);
+
+          // If items inside model have 0 price / totalAmount, backfill from order items
+          if (model.items.isNotEmpty && model.totalRefundAmount == 0 && order.items.isNotEmpty) {
+            final updatedItems = model.items.map((retItem) {
+              if (retItem.price == 0 && retItem.totalAmount == 0) {
+                final match = order.items.cast<ApiOrderItem?>().firstWhere(
+                  (oi) => (oi != null && oi.productId.isNotEmpty && oi.productId == retItem.productId) ||
+                          (oi != null && oi.orderItemId != null && oi.orderItemId == retItem.orderItemId) ||
+                          (oi != null && oi.productName != null && oi.productName!.toLowerCase() == retItem.productName.toLowerCase()),
+                  orElse: () => null,
+                );
+                if (match != null) {
+                  final price = match.unitPrice;
+                  final total = price * retItem.quantity;
+                  return ReturnItemDetail(
+                    orderItemId: retItem.orderItemId.isNotEmpty ? retItem.orderItemId : (match.orderItemId ?? ''),
+                    productId: retItem.productId.isNotEmpty ? retItem.productId : match.productId,
+                    productName: retItem.productName != 'Item' ? retItem.productName : (match.productName ?? 'Item'),
+                    variantName: retItem.variantName,
+                    quantity: retItem.quantity,
+                    price: price,
+                    totalAmount: total,
+                    unit: retItem.unit ?? match.unit,
+                    reason: retItem.reason,
+                  );
+                }
+              }
+              return retItem;
+            }).toList();
+            model = model.copyWith(items: updatedItems);
+          }
+
+          parsed.add(model);
         }
       }
       if (parsed.isNotEmpty) {
@@ -155,10 +215,52 @@ class ReturnRequestProvider extends ChangeNotifier {
           orderId,
           shopId: orderObj?.shopId,
         );
-        if (list.isNotEmpty || !_orderRequestsMap.containsKey(orderId)) {
-          _orderRequestsMap[orderId] = list;
+
+        final enrichedList = list.map((req) {
+          if (orderObj != null) {
+            var updated = req;
+            if (updated.orderUiId == null || updated.orderUiId!.trim().isEmpty) {
+              final ui = (orderObj.uiId != null && orderObj.uiId!.trim().isNotEmpty) ? orderObj.uiId!.trim() : orderObj.id;
+              updated = updated.copyWith(orderUiId: ui);
+            }
+            if (updated.items.isNotEmpty && updated.totalRefundAmount == 0 && orderObj.items.isNotEmpty) {
+              final updatedItems = updated.items.map((retItem) {
+                if (retItem.price == 0 && retItem.totalAmount == 0) {
+                  final match = orderObj.items.cast<ApiOrderItem?>().firstWhere(
+                    (oi) => (oi != null && oi.productId.isNotEmpty && oi.productId == retItem.productId) ||
+                            (oi != null && oi.orderItemId != null && oi.orderItemId == retItem.orderItemId) ||
+                            (oi != null && oi.productName != null && oi.productName!.toLowerCase() == retItem.productName.toLowerCase()),
+                    orElse: () => null,
+                  );
+                  if (match != null) {
+                    final price = match.unitPrice;
+                    final total = price * retItem.quantity;
+                    return ReturnItemDetail(
+                      orderItemId: retItem.orderItemId.isNotEmpty ? retItem.orderItemId : (match.orderItemId ?? ''),
+                      productId: retItem.productId.isNotEmpty ? retItem.productId : match.productId,
+                      productName: retItem.productName != 'Item' ? retItem.productName : (match.productName ?? 'Item'),
+                      variantName: retItem.variantName,
+                      quantity: retItem.quantity,
+                      price: price,
+                      totalAmount: total,
+                      unit: retItem.unit ?? match.unit,
+                      reason: retItem.reason,
+                    );
+                  }
+                }
+                return retItem;
+              }).toList();
+              updated = updated.copyWith(items: updatedItems);
+            }
+            return updated;
+          }
+          return req;
+        }).toList();
+
+        if (enrichedList.isNotEmpty || !_orderRequestsMap.containsKey(orderId)) {
+          _orderRequestsMap[orderId] = enrichedList;
         }
-        combined.addAll(list);
+        combined.addAll(enrichedList);
       }
 
       // Deduplicate by ID

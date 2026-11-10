@@ -282,14 +282,29 @@ class ApiClient {
     if (body is Map) {
       final detail = body['detail'];
       if (detail is String) return detail;
-      if (detail is Map) return detail['msg']?.toString() ?? detail.toString();
+      if (detail is Map) {
+        final desc = detail['description']?.toString();
+        if (desc != null && desc.isNotEmpty && desc != 'HTTP Error') {
+          return desc;
+        }
+        final message = detail['message']?.toString();
+        if (message != null && message.isNotEmpty && message != 'HTTP Error') {
+          return message;
+        }
+        final msg = detail['msg']?.toString();
+        if (msg != null && msg.isNotEmpty && msg != 'HTTP Error') {
+          return msg;
+        }
+        return desc ?? message ?? msg ?? detail.toString();
+      }
       if (detail is List && detail.isNotEmpty) {
         // Validation error list — summarize
         return detail.map((e) {
-          if (e is Map) return e['msg']?.toString() ?? '';
+          if (e is Map) return e['msg']?.toString() ?? e['description']?.toString() ?? '';
           return e.toString();
         }).where((s) => s.isNotEmpty).join('; ');
       }
+      return body['description']?.toString() ?? body['message']?.toString() ?? body['error']?.toString();
     }
     if (body is String) return body;
     return null;

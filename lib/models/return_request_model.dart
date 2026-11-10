@@ -9,6 +9,9 @@ class CustomerReturnItemPayload {
   final double quantity;
   final String? unit;
   final String? reason;
+  final String? productName;
+  final double? price;
+  final double? totalAmount;
 
   const CustomerReturnItemPayload({
     this.orderItemId,
@@ -16,6 +19,9 @@ class CustomerReturnItemPayload {
     required this.quantity,
     this.unit,
     this.reason,
+    this.productName,
+    this.price,
+    this.totalAmount,
   });
 
   Map<String, dynamic> toJson() => {
@@ -31,6 +37,7 @@ class CustomerReturnItemPayload {
 
 class CreateReturnRequestPayload {
   final String orderId;
+  final String? orderUiId;
   final String? shopId;
   final List<CustomerReturnItemPayload> items;
   final String description;
@@ -39,9 +46,11 @@ class CreateReturnRequestPayload {
   final String? customerEmail;
   final String? customerId;
   final Map<String, dynamic>? paymentInfos;
+  final double? refundAmount;
 
   const CreateReturnRequestPayload({
     required this.orderId,
+    this.orderUiId,
     this.shopId,
     required this.items,
     required this.description,
@@ -50,10 +59,12 @@ class CreateReturnRequestPayload {
     this.customerEmail,
     this.customerId,
     this.paymentInfos,
+    this.refundAmount,
   });
 
   Map<String, dynamic> toJson() => {
         'order_id': orderId,
+        if (orderUiId != null && orderUiId!.isNotEmpty) 'order_ui_id': orderUiId,
         if (shopId != null && shopId!.isNotEmpty) 'shop_id': shopId,
         'items': items.map((i) => i.toJson()).toList(),
         'description': description.trim(),
@@ -61,6 +72,8 @@ class CreateReturnRequestPayload {
           'method': 'ORIGINAL_PAYMENT',
           'status': 'PENDING_REFUND',
         },
+        if (refundAmount != null && refundAmount! > 0)
+          'refund_amount': refundAmount,
         if (customerName != null && customerName!.isNotEmpty)
           'customer_name': customerName,
         if (customerPhone != null && customerPhone!.isNotEmpty)
@@ -178,12 +191,49 @@ class ReturnRequestModel {
   bool get isPending => status.toUpperCase() == 'PENDING';
   bool get isAccepted => status.toUpperCase() == 'ACCEPTED';
   bool get isRejected => status.toUpperCase() == 'REJECTED';
+  bool get isCompleted => status.toUpperCase() == 'COMPLETED';
 
   double get totalRefundAmount =>
       items.fold(0.0, (sum, itm) => sum + (itm.totalAmount > 0 ? itm.totalAmount : (itm.price * itm.quantity)));
 
   int get totalQuantity =>
       items.fold(0, (sum, itm) => sum + itm.quantity.toInt());
+
+  ReturnRequestModel copyWith({
+    String? id,
+    String? orderId,
+    String? orderUiId,
+    String? shopId,
+    String? customerId,
+    String? customerName,
+    String? customerPhone,
+    String? customerEmail,
+    List<ReturnItemDetail>? items,
+    String? description,
+    String? status,
+    String? adminNotes,
+    List<ReturnStatusHistoryItem>? statusHistory,
+    String? createdAt,
+    String? updatedAt,
+  }) {
+    return ReturnRequestModel(
+      id: id ?? this.id,
+      orderId: orderId ?? this.orderId,
+      orderUiId: orderUiId ?? this.orderUiId,
+      shopId: shopId ?? this.shopId,
+      customerId: customerId ?? this.customerId,
+      customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
+      customerEmail: customerEmail ?? this.customerEmail,
+      items: items ?? this.items,
+      description: description ?? this.description,
+      status: status ?? this.status,
+      adminNotes: adminNotes ?? this.adminNotes,
+      statusHistory: statusHistory ?? this.statusHistory,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 
   factory ReturnRequestModel.fromJson(Map<String, dynamic> json) {
     List<ReturnItemDetail> parseItems(dynamic raw) {
@@ -206,10 +256,24 @@ class ReturnRequestModel {
       return [];
     }
 
+    // Robust order UI ID extraction
+    final rawOrderUiId = json['order_ui_id'] ??
+        json['order_uiid'] ??
+        json['orderUiId'] ??
+        json['ui_id'] ??
+        json['order_number'] ??
+        (json['order'] is Map ? (json['order']['ui_id'] ?? json['order']['uiid'] ?? json['order']['order_ui_id']) : null);
+    final String? parsedOrderUiId = (rawOrderUiId != null && rawOrderUiId.toString().trim().isNotEmpty)
+        ? rawOrderUiId.toString().trim()
+        : null;
+
+    final rawOrderId = json['order_id'] ?? json['orderId'] ?? (json['order'] is Map ? json['order']['id'] : null);
+    final String parsedOrderId = rawOrderId?.toString().trim() ?? '';
+
     return ReturnRequestModel(
       id: json['id']?.toString() ?? '',
-      orderId: json['order_id']?.toString() ?? '',
-      orderUiId: json['order_ui_id']?.toString(),
+      orderId: parsedOrderId,
+      orderUiId: parsedOrderUiId,
       shopId: json['shop_id']?.toString() ?? '',
       customerId: json['customer_id']?.toString(),
       customerName: json['customer_name']?.toString() ?? 'Customer',

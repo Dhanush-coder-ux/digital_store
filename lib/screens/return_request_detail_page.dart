@@ -55,16 +55,48 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
         orElse: () => _request,
       );
       setState(() {
-        _request = updated;
+        _request = (updated.orderUiId == null || updated.orderUiId!.trim().isEmpty) &&
+                _request.orderUiId != null
+            ? updated.copyWith(orderUiId: _request.orderUiId)
+            : updated;
         _isRefreshing = false;
       });
     }
   }
 
-  String _formatDateTime(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return 'Recent';
+  String _getOrderDisplay() {
+    if (_request.orderUiId != null && _request.orderUiId!.trim().isNotEmpty) {
+      final ui = _request.orderUiId!.trim();
+      if (ui.length <= 20 && !ui.contains('-') || ui.startsWith('ORD-')) {
+        return ui;
+      }
+    }
+    if (widget.order?.uiId != null && widget.order!.uiId!.trim().isNotEmpty) {
+      return widget.order!.uiId!.trim();
+    }
+    final raw = (_request.orderUiId != null && _request.orderUiId!.trim().isNotEmpty)
+        ? _request.orderUiId!.trim()
+        : _request.orderId.trim();
+
+    if (raw.isEmpty) {
+      return _request.id.isNotEmpty
+          ? (_request.id.length > 8 ? _request.id.substring(0, 8).toUpperCase() : _request.id.toUpperCase())
+          : 'Order';
+    }
+
+    if (raw.contains('-') || raw.length > 12) {
+      final segment = raw.contains('-') ? raw.split('-').first.toUpperCase() : raw.substring(0, 8).toUpperCase();
+      return 'ORD-$segment';
+    }
+
+    return raw;
+  }
+
+  String _formatDateTime(String? raw, [String? fallbackDate]) {
+    final dateStr = (raw != null && raw.trim().isNotEmpty) ? raw : fallbackDate;
+    if (dateStr == null || dateStr.trim().isEmpty) return 'Recent';
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      final dt = DateTime.parse(dateStr).toLocal();
       const months = [
         'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -77,7 +109,7 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
       final ampm = dt.hour >= 12 ? 'PM' : 'AM';
       return '$day $month $year, $hour:$minute $ampm';
     } catch (_) {
-      return raw.contains('T') ? raw.split('T').first : raw;
+      return dateStr.contains('T') ? dateStr.split('T').first : dateStr;
     }
   }
 
@@ -85,7 +117,8 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
   Widget build(BuildContext context) {
     final status = _request.status.toUpperCase();
     final isPending = status == 'PENDING';
-    final isAccepted = status == 'ACCEPTED';
+    final isCompleted = status == 'COMPLETED';
+    final isAccepted = status == 'ACCEPTED' || isCompleted;
     final isRejected = status == 'REJECTED';
 
     return Scaffold(
@@ -222,8 +255,10 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
       borderCol = const Color(0xFFBBF7D0);
       fg = _success;
       icon = LucideIcons.checkCircle2;
-      title = 'Return Request Accepted';
-      subtitle = 'The merchant has approved your return request.';
+      title = _request.isCompleted ? 'Return Completed' : 'Return Request Accepted';
+      subtitle = _request.isCompleted
+          ? 'Your return and refund have been processed successfully.'
+          : 'The merchant has approved your return request.';
     } else if (isRejected) {
       bg = const Color(0xFFFEF2F2);
       borderCol = const Color(0xFFFECACA);
@@ -333,7 +368,27 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
   }
 
   Widget _buildMetadataCard() {
-    final orderDisplay = _request.orderUiId ?? _request.orderId;
+    final orderDisplay = _getOrderDisplay();
+    double refundAmount = _request.totalRefundAmount;
+    if (refundAmount == 0 && widget.order != null) {
+      if (_request.items.isEmpty) {
+        refundAmount = widget.order!.totalAmount;
+      } else {
+        for (final retItem in _request.items) {
+          final match = widget.order!.items.cast<ApiOrderItem?>().firstWhere(
+            (oi) => (oi != null && oi.productId.isNotEmpty && oi.productId == retItem.productId) ||
+                    (oi != null && oi.orderItemId != null && oi.orderItemId == retItem.orderItemId) ||
+                    (oi != null && oi.productName != null && oi.productName!.toLowerCase() == retItem.productName.toLowerCase()),
+            orElse: () => null,
+          );
+          if (match != null) {
+            refundAmount += match.unitPrice * (retItem.quantity > 0 ? retItem.quantity : 1);
+          }
+        }
+        if (refundAmount == 0) refundAmount = widget.order!.totalAmount;
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -347,9 +402,9 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
           const Divider(color: _border, height: 16),
           _buildInfoRow('Order ID', '#$orderDisplay'),
           const Divider(color: _border, height: 16),
-          _buildInfoRow('Submitted On', _formatDateTime(_request.createdAt)),
+          _buildInfoRow('Submitted On', _formatDateTime(_request.createdAt, widget.order?.createdAt)),
           const Divider(color: _border, height: 16),
-          _buildInfoRow('Total Refund Value', '₹${_request.totalRefundAmount.toStringAsFixed(2)}', isBold: true, valueColor: _amber),
+          _buildInfoRow('Total Refund Value', '₹${refundAmount.toStringAsFixed(2)}', isBold: true, valueColor: _amber),
         ],
       ),
     );
@@ -367,13 +422,19 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
             color: _textSecondary,
           ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 13,
-            fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-            color: valueColor ?? _textPrimary,
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 13,
+              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+              color: valueColor ?? _textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -512,9 +573,9 @@ class _ReturnRequestDetailPageState extends State<ReturnRequestDetailPage> {
             isCurrent: _request.isPending,
             color: _amber,
           ),
-          if (_request.isAccepted) ...[
+          if (_request.isAccepted || _request.isCompleted) ...[
             _buildTimelineStep(
-              title: 'Request Approved by Merchant',
+              title: _request.isCompleted ? 'Return Completed & Refunded' : 'Request Approved by Merchant',
               subtitle: _formatDateTime(_request.updatedAt),
               isDone: true,
               isCurrent: true,

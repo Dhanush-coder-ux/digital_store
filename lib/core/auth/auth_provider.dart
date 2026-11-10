@@ -125,7 +125,8 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
       return _pendingLoginUrl;
     } catch (e) {
-      _error = 'Could not connect to authentication service.';
+      if (kDebugMode) print('[AuthProvider] getLoginUrl error: $e');
+      _error = 'Could not connect to authentication service: $e';
       _state = AuthState.error;
       notifyListeners();
       return null;

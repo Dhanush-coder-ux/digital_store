@@ -141,6 +141,19 @@ void main() {
       expect(rejectedReq.isRejected, isTrue);
       expect(rejectedReq.isPending, isFalse);
       expect(rejectedReq.isAccepted, isFalse);
+      expect(rejectedReq.isCompleted, isFalse);
+
+      final completedReq = ReturnRequestModel.fromJson({
+        'id': 'req-3',
+        'order_id': 'ord-3',
+        'shop_id': 'shop-1',
+        'customer_name': 'Charlie',
+        'customer_phone': '1234567890',
+        'description': 'Item returned',
+        'status': 'COMPLETED',
+      });
+      expect(completedReq.isCompleted, isTrue);
+      expect(completedReq.isPending, isFalse);
     });
 
     test('Order eligibility criteria', () {

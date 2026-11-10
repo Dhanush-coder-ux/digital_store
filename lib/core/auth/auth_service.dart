@@ -105,7 +105,7 @@ class AuthService {
       }
       throw Exception('Unexpected login URL response format');
     } else {
-      throw Exception('Failed to get login URL (${response.statusCode})');
+      throw Exception('Failed to get login URL (${response.statusCode}): ${response.body}');
     }
   }
 

@@ -109,6 +109,29 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
     }
   }
 
+  String _resolvePaymentMethod() {
+    final pay = widget.order.paymentInfos;
+    if (pay != null && pay.isNotEmpty) {
+      for (final key in pay.keys) {
+        final k = key.trim().toUpperCase();
+        if (k != 'STATUS' && k != 'METHOD' && k != 'ON_CREDIT' && k != 'AMOUNT') {
+          if (k.contains('COD') || k.contains('CASH ON DELIVERY')) return 'CASH';
+          if (k.contains('UPI')) return 'UPI';
+          if (k.contains('CARD')) return 'CARD';
+          return key.trim();
+        }
+      }
+      if (pay['method'] != null && pay['method'].toString().isNotEmpty) {
+        final m = pay['method'].toString().toUpperCase();
+        if (m.contains('COD') || m.contains('CASH ON DELIVERY')) return 'CASH';
+        if (m.contains('UPI')) return 'UPI';
+        if (m.contains('CARD')) return 'CARD';
+        return pay['method'].toString();
+      }
+    }
+    return 'CASH';
+  }
+
   Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -135,6 +158,9 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
     final customerEmail = auth.email ?? '';
     final customerId = auth.userId ?? widget.order.customerId ?? '';
 
+    final String paymentMethodKey = _resolvePaymentMethod();
+    final double estimatedRefund = _totalEstimatedRefund;
+
     final List<CustomerReturnItemPayload> returnItems = [];
 
     for (int i = 0; i < widget.order.items.length; i++) {
@@ -150,6 +176,9 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
             quantity: qty,
             unit: itm.unit,
             reason: reason,
+            productName: itm.productName,
+            price: itm.unitPrice,
+            totalAmount: itm.unitPrice * qty,
           ),
         );
       }
@@ -159,6 +188,9 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
 
     final payload = CreateReturnRequestPayload(
       orderId: widget.order.id,
+      orderUiId: (widget.order.uiId != null && widget.order.uiId!.trim().isNotEmpty)
+          ? widget.order.uiId!.trim()
+          : widget.order.id,
       shopId: effectiveShopId.isNotEmpty ? effectiveShopId : null,
       items: returnItems,
       description: _descController.text.trim(),
@@ -166,9 +198,9 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
       customerPhone: customerPhone,
       customerEmail: customerEmail,
       customerId: customerId,
-      paymentInfos: widget.order.paymentInfos ?? const {
-        'method': 'ORIGINAL_PAYMENT',
-        'status': 'PENDING_REFUND',
+      refundAmount: estimatedRefund,
+      paymentInfos: {
+        paymentMethodKey: estimatedRefund,
       },
     );
 

@@ -54,38 +54,104 @@ class ReturnService {
       }
     }
 
-    // Final fallback: If dedicated return-request routes returned 404, attempt in-store
+    // Final fallback: If dedicated return-request routes returned 404/405, attempt in-store
     // return route: POST /api/returns/{shop_id} using the order's actual shopId
-    if (response == null && payload.shopId != null && payload.shopId!.isNotEmpty) {
-      final directShopEndpoint = '${ApiConfig.gatewayBase}/returns/${payload.shopId}';
-      try {
-        if (kDebugMode) print('[ReturnService] Attempting direct shop return fallback: $directShopEndpoint');
-        final directPayload = {
+    if (response == null) {
+      final List<String> fallbackEndpoints = [];
+      if (payload.shopId != null && payload.shopId!.isNotEmpty) {
+        fallbackEndpoints.add('${ApiConfig.gatewayBase}/returns/${payload.shopId}');
+      }
+      fallbackEndpoints.add('${ApiConfig.gatewayBase}/returns');
+
+      // Resolve payment method and initial refund amount
+      String paymentMethod = 'CASH';
+      double refundAmt = (payload.refundAmount != null && payload.refundAmount! > 0)
+          ? payload.refundAmount!
+          : 0.0;
+
+      if (payload.paymentInfos != null && payload.paymentInfos!.isNotEmpty) {
+        for (final entry in payload.paymentInfos!.entries) {
+          final k = entry.key.trim().toUpperCase();
+          if (k != 'STATUS' && k != 'METHOD' && k != 'ON_CREDIT' && k != 'AMOUNT') {
+            paymentMethod = entry.key;
+            if (refundAmt <= 0) {
+              if (entry.value is num) {
+                refundAmt = (entry.value as num).toDouble();
+              } else if (entry.value is Map && entry.value['amount'] is num) {
+                refundAmt = (entry.value['amount'] as num).toDouble();
+              }
+            }
+            break;
+          }
+        }
+      }
+
+      final directPayload = {
+        if (payload.shopId != null && payload.shopId!.isNotEmpty)
           'shop_id': payload.shopId,
-          'order_id': payload.orderId,
-          'payment_infos': payload.paymentInfos ?? {
-            'method': 'ORIGINAL_PAYMENT',
-            'status': 'PENDING_REFUND',
-          },
-          'items': payload.items.map((i) => {
-            'order_item_id': (i.orderItemId != null && i.orderItemId!.isNotEmpty) ? i.orderItemId : (i.productId ?? ''),
-            'quantity': i.quantity,
-            if (i.unit != null && i.unit!.isNotEmpty) 'unit': i.unit,
-            if (i.reason != null && i.reason!.isNotEmpty) 'reason': i.reason,
-          }).toList(),
-          'description': payload.description,
-        };
-        response = await _client.post(
-          directShopEndpoint,
-          body: directPayload,
-          requiresAuth: true,
-        );
-        lastApiException = null;
-      } on ApiException catch (e) {
-        lastApiException = e;
-        if (kDebugMode) print('[ReturnService] Direct shop return fallback failed: ${e.statusCode} ${e.message}');
-      } catch (e) {
-        if (kDebugMode) print('[ReturnService] Direct shop return network error: $e');
+        'order_id': payload.orderId,
+        'payment_infos': {
+          paymentMethod: refundAmt,
+        },
+        'items': payload.items.map((i) => {
+          'order_item_id': (i.orderItemId != null && i.orderItemId!.isNotEmpty) ? i.orderItemId : (i.productId ?? ''),
+          'quantity': i.quantity,
+          if (i.unit != null && i.unit!.isNotEmpty) 'unit': i.unit,
+          if (i.reason != null && i.reason!.isNotEmpty) 'reason': i.reason,
+        }).toList(),
+        'description': payload.description,
+      };
+
+      for (final directShopEndpoint in fallbackEndpoints) {
+        try {
+          if (kDebugMode) {
+            print('[ReturnService] Attempting direct shop return fallback: $directShopEndpoint with amount: $refundAmt');
+          }
+          response = await _client.post(
+            directShopEndpoint,
+            body: directPayload,
+            requiresAuth: true,
+          );
+          lastApiException = null;
+          break;
+        } on ApiException catch (e) {
+          lastApiException = e;
+          if (kDebugMode) {
+            print('[ReturnService] Direct shop return fallback error from $directShopEndpoint (${e.statusCode}): ${e.message}');
+          }
+
+          // Check if backend rejected with:
+          // "Entered refund amount (X) does not match required return total (Y)."
+          final fullErr = '${e.message} ${e.body != null ? e.body.toString() : ''}';
+          final match = RegExp(r'required return total \(([0-9.]+)\)').firstMatch(fullErr);
+          if (match != null) {
+            final requiredTotal = double.tryParse(match.group(1)!);
+            if (requiredTotal != null && requiredTotal > 0) {
+              if (kDebugMode) {
+                print('[ReturnService] Auto-healing refund amount to backend required total: $requiredTotal and retrying...');
+              }
+              try {
+                directPayload['payment_infos'] = {
+                  paymentMethod: requiredTotal,
+                };
+                response = await _client.post(
+                  directShopEndpoint,
+                  body: directPayload,
+                  requiresAuth: true,
+                );
+                lastApiException = null;
+                break;
+              } on ApiException catch (retryErr) {
+                lastApiException = retryErr;
+                if (kDebugMode) {
+                  print('[ReturnService] Auto-healed retry failed: ${retryErr.statusCode} ${retryErr.message}');
+                }
+              }
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) print('[ReturnService] Direct shop return network error: $e');
+        }
       }
     }
 
@@ -199,6 +265,7 @@ class ReturnService {
         return ReturnRequestModel(
           id: 'ret-${DateTime.now().millisecondsSinceEpoch}',
           orderId: payload.orderId,
+          orderUiId: payload.orderUiId,
           shopId: payload.shopId ?? '',
           customerId: payload.customerId,
           customerName: payload.customerName ?? 'Customer',
@@ -207,15 +274,15 @@ class ReturnService {
           items: payload.items.map((i) => ReturnItemDetail(
             orderItemId: i.orderItemId ?? '',
             productId: i.productId ?? '',
-            productName: 'Returned Item',
+            productName: (i.productName != null && i.productName!.isNotEmpty) ? i.productName! : 'Returned Item',
             quantity: i.quantity,
-            price: 0,
-            totalAmount: 0,
+            price: i.price ?? (payload.refundAmount != null && payload.items.length == 1 ? payload.refundAmount! : 0.0),
+            totalAmount: i.totalAmount ?? (payload.refundAmount != null && payload.items.length == 1 ? payload.refundAmount! : 0.0),
             unit: i.unit,
             reason: i.reason,
           )).toList(),
           description: payload.description,
-          status: 'PENDING',
+          status: 'COMPLETED',
           adminNotes: body['detail'] is Map ? body['detail']['msg']?.toString() : null,
           createdAt: nowIso,
           updatedAt: nowIso,

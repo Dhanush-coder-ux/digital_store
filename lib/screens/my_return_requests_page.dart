@@ -60,10 +60,11 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
     }
   }
 
-  String _formatDate(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return 'Recent';
+  String _formatDate(String? raw, [String? fallbackDate]) {
+    final dateStr = (raw != null && raw.trim().isNotEmpty) ? raw : fallbackDate;
+    if (dateStr == null || dateStr.trim().isEmpty) return 'Recent';
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      final dt = DateTime.parse(dateStr).toLocal();
       const months = [
         'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -73,14 +74,78 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
       final year = dt.year;
       return '$day $month $year';
     } catch (_) {
-      return raw.contains('T') ? raw.split('T').first : raw;
+      return dateStr.contains('T') ? dateStr.split('T').first : dateStr;
     }
+  }
+
+  String _getOrderDisplayId(ReturnRequestModel req, List<ApiOrder> orders) {
+    // 1. If req has orderUiId and it's not a raw 36-char UUID, use it directly
+    if (req.orderUiId != null && req.orderUiId!.trim().isNotEmpty) {
+      final ui = req.orderUiId!.trim();
+      if (ui.length <= 20 && !ui.contains('-') || ui.startsWith('ORD-')) {
+        return ui;
+      }
+    }
+
+    // 2. Try looking up in orders list by orderId
+    if (req.orderId.isNotEmpty) {
+      final match = orders.cast<ApiOrder?>().firstWhere(
+        (o) => o != null && (o.id == req.orderId || o.uiId == req.orderId),
+        orElse: () => null,
+      );
+      if (match != null && match.uiId != null && match.uiId!.trim().isNotEmpty) {
+        return match.uiId!.trim();
+      }
+    }
+
+    // 3. Fallback: Format clean short ID from orderUiId or orderId
+    final raw = (req.orderUiId != null && req.orderUiId!.trim().isNotEmpty)
+        ? req.orderUiId!.trim()
+        : req.orderId.trim();
+
+    if (raw.isEmpty) {
+      if (req.id.isNotEmpty) {
+        final shortId = req.id.length > 8 ? req.id.substring(0, 8).toUpperCase() : req.id.toUpperCase();
+        return shortId;
+      }
+      return 'Order';
+    }
+
+    // If it's a long UUID, format cleanly to ORD-XXXXXXXX
+    if (raw.contains('-') || raw.length > 12) {
+      final segment = raw.contains('-') ? raw.split('-').first.toUpperCase() : raw.substring(0, 8).toUpperCase();
+      return 'ORD-$segment';
+    }
+
+    return raw;
+  }
+
+  double _getCardRefundAmount(ReturnRequestModel req, ApiOrder? matchingOrder) {
+    if (req.totalRefundAmount > 0) return req.totalRefundAmount;
+    if (matchingOrder == null) return 0.0;
+    if (req.items.isEmpty) return matchingOrder.totalAmount;
+
+    double calculated = 0.0;
+    for (final retItem in req.items) {
+      final match = matchingOrder.items.cast<ApiOrderItem?>().firstWhere(
+        (oi) => (oi != null && oi.productId.isNotEmpty && oi.productId == retItem.productId) ||
+                (oi != null && oi.orderItemId != null && oi.orderItemId == retItem.orderItemId) ||
+                (oi != null && oi.productName != null && oi.productName!.toLowerCase() == retItem.productName.toLowerCase()),
+        orElse: () => null,
+      );
+      if (match != null) {
+        calculated += match.unitPrice * (retItem.quantity > 0 ? retItem.quantity : 1);
+      }
+    }
+    return calculated > 0 ? calculated : matchingOrder.totalAmount;
   }
 
   @override
   Widget build(BuildContext context) {
     final returnProvider = context.watch<ReturnRequestProvider>();
+    final orderProvider = context.watch<UserOrderProvider>();
     final allRequests = returnProvider.allUserRequests;
+    final orders = orderProvider.orders;
 
     final filtered = allRequests.where((r) {
       if (_statusFilter == 'ALL') return true;
@@ -149,7 +214,7 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
                           itemCount: filtered.length,
                           itemBuilder: (context, index) {
                             final request = filtered[index];
-                            return _buildReturnCard(request);
+                            return _buildReturnCard(request, orders);
                           },
                         ),
             ),
@@ -182,8 +247,14 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
     );
   }
 
-  Widget _buildReturnCard(ReturnRequestModel req) {
-    final orderDisplay = req.orderUiId ?? req.orderId;
+  Widget _buildReturnCard(ReturnRequestModel req, List<ApiOrder> orders) {
+    final orderDisplay = _getOrderDisplayId(req, orders);
+    final matchingOrder = orders.cast<ApiOrder?>().firstWhere(
+      (o) => o != null && (o.id == req.orderId || o.uiId == req.orderId),
+      orElse: () => null,
+    );
+    final displayRefund = _getCardRefundAmount(req, matchingOrder);
+
     final isPending = req.isPending;
     final isAccepted = req.isAccepted;
     final isRejected = req.isRejected;
@@ -233,7 +304,10 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => ReturnRequestDetailPage(returnRequest: req),
+              builder: (_) => ReturnRequestDetailPage(
+                returnRequest: req,
+                order: matchingOrder,
+              ),
             ),
           );
         },
@@ -247,21 +321,28 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(LucideIcons.package, size: 16, color: _amber),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Order #$orderDisplay',
-                        style: const TextStyle(
-                          fontFamily: 'Outfit',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: _textPrimary,
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.package, size: 16, color: _amber),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Order #$orderDisplay',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: _textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -310,7 +391,7 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Requested: ${_formatDate(req.createdAt)}',
+                    'Requested: ${_formatDate(req.createdAt, matchingOrder?.createdAt)}',
                     style: const TextStyle(
                       fontFamily: 'Outfit',
                       fontSize: 12,
@@ -320,7 +401,7 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
                   Row(
                     children: [
                       Text(
-                        '₹${req.totalRefundAmount.toStringAsFixed(2)}',
+                        '₹${displayRefund.toStringAsFixed(2)}',
                         style: const TextStyle(
                           fontFamily: 'Outfit',
                           fontSize: 14,
