@@ -20,6 +20,7 @@ import 'services/cart_service.dart';
 import 'services/order_service.dart';
 import 'services/customer_service.dart';
 import 'services/return_service.dart';
+import 'services/notification_service.dart';
 
 // Legacy / Mock Providers (UI state)
 import 'models/providers.dart';
@@ -37,7 +38,6 @@ import 'models/language_provider.dart';
 import 'models/return_request_provider.dart';
 
 // Screens
-import 'screens/splash_screen.dart';
 import 'screens/main_screen.dart';
 import 'screens/login_screen.dart';
 
@@ -64,12 +64,26 @@ void main() async {
   };
   await deepLinkHandler.initialize();
 
+  // 4. Restore persisted auth session before launching UI
+  await authProvider.checkSession();
+
+  // 5. Initialize Notifications Provider and bind user session if logged in
+  final notificationService = NotificationService(apiClient);
+  final notificationsProvider = NotificationsProvider(
+    service: notificationService,
+    tokenStorage: tokenStorage,
+  );
+  if (authProvider.isAuthenticated && authProvider.userId != null) {
+    await notificationsProvider.bindUser(authProvider.userId);
+  }
+
   runApp(
     MyApp(
       authProvider: authProvider,
       apiClient: apiClient,
       digitalStoreService: digitalStoreService,
       deepLinkHandler: deepLinkHandler,
+      notificationsProvider: notificationsProvider,
     ),
   );
 }
@@ -79,6 +93,7 @@ class MyApp extends StatefulWidget {
   final ApiClient apiClient;
   final DigitalStoreService digitalStoreService;
   final DeepLinkHandler deepLinkHandler;
+  final NotificationsProvider notificationsProvider;
 
   const MyApp({
     super.key,
@@ -86,6 +101,7 @@ class MyApp extends StatefulWidget {
     required this.apiClient,
     required this.digitalStoreService,
     required this.deepLinkHandler,
+    required this.notificationsProvider,
   });
 
   @override
@@ -93,8 +109,19 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  void _onAuthChanged() {
+    widget.notificationsProvider.bindUser(widget.authProvider.userId);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.authProvider.addListener(_onAuthChanged);
+  }
+
   @override
   void dispose() {
+    widget.authProvider.removeListener(_onAuthChanged);
     widget.deepLinkHandler.dispose();
     super.dispose();
   }
@@ -106,8 +133,8 @@ class _MyAppState extends State<MyApp> {
         // ── Auth Provider (Core) ────────────────────────────────────
         ChangeNotifierProvider.value(value: widget.authProvider),
 
-        // ── UI / Local State Providers (Legacy) ─────────────────────
-        ChangeNotifierProvider(create: (_) => NotificationsProvider()),
+        // ── UI / Local State Providers ──────────────────────────────
+        ChangeNotifierProvider.value(value: widget.notificationsProvider),
         ChangeNotifierProvider(create: (_) => UIStateProvider()),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
 
@@ -153,16 +180,16 @@ class _MyAppState extends State<MyApp> {
             debugShowCheckedModeBanner: false,
             title: 'ShopiQ',
             theme: AppTheme.lightTheme,
-            locale: language.currentLocale,
-            supportedLocales: LanguageProvider.supportedLanguages
-                .map((lang) => Locale(lang['code']!))
-                .toList(),
+            locale: language.materialLocale,
+            supportedLocales: LanguageProvider.materialSupportedLocales,
             localizationsDelegates: const [
               GlobalMaterialLocalizations.delegate,
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: const SplashScreen(),
+            home: widget.authProvider.isAuthenticated
+                ? const MainScreen()
+                : const LoginScreen(),
             routes: {
               '/home': (context) => const MainScreen(),
               '/login': (context) => const LoginScreen(),

@@ -105,7 +105,10 @@ class ProfileProvider extends ChangeNotifier {
     _error = null;
 
     try {
-      final updatedAddresses = [..._profile!.addresses, address];
+      final baseList = address.isDefault
+          ? _profile!.addresses.map((a) => a.copyWith(isDefault: false)).toList()
+          : _profile!.addresses;
+      final updatedAddresses = [...baseList, address];
       await _service.updateProfile(
         userId,
         UpdateUserProfile(addresses: updatedAddresses),
@@ -131,7 +134,7 @@ class ProfileProvider extends ChangeNotifier {
     try {
       final updatedAddresses = _profile!.addresses.map((a) {
         if (a.addressId == addressId) return updated;
-        return a;
+        return updated.isDefault ? a.copyWith(isDefault: false) : a;
       }).toList();
 
       await _service.updateProfile(

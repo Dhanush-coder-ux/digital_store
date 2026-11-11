@@ -10,6 +10,7 @@ import '../models/shop_provider.dart';
 import '../models/profile_provider.dart';
 import '../models/favorites_api_provider.dart';
 import '../core/auth/auth_provider.dart';
+import '../l10n/app_translations.dart';
 import 'home_page.dart';
 import 'api_checkout_page.dart';
 import 'cart_page.dart';
@@ -180,7 +181,7 @@ class _MainScreenState extends State<MainScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            '$totalQty Item${totalQty > 1 ? 's' : ''}',
+                            '$totalQty ${totalQty == 1 ? context.tr('item_singular') : context.tr('items_plural')}',
                             style: const TextStyle(
                               fontFamily: 'Outfit',
                               color: AppTheme.white,

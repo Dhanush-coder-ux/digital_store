@@ -9,6 +9,7 @@ import '../models/shop_provider.dart';
 import '../models/providers.dart';
 import '../models/category_model.dart';
 import '../widgets/category_widget.dart';
+import '../l10n/app_translations.dart';
 import 'api_shop_details_page.dart';
 import 'search_page.dart';
 import 'main_screen.dart';
@@ -108,10 +109,14 @@ class _StoresPageState extends State<StoresPage> {
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Explore Stores', style: Theme.of(context).textTheme.headlineSmall),
+                  Text(context.tr('explore_stores'), style: Theme.of(context).textTheme.headlineSmall),
                   Consumer<ShopProvider>(
                     builder: (_, sp, __) => Text(
-                      sp.hasShops ? '${sp.shops.length} stores available' : 'Find stores near you',
+                      sp.hasShops
+                          ? (sp.shops.length == 1
+                              ? context.tr('store_available_one')
+                              : context.tr('stores_available', args: {'count': '${sp.shops.length}'}))
+                          : context.tr('find_stores_near_you'),
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ),
@@ -135,8 +140,12 @@ class _StoresPageState extends State<StoresPage> {
                 const SizedBox(width: AppTheme.lg),
                 const Icon(LucideIcons.search, size: 16, color: AppTheme.textTertiary),
                 const SizedBox(width: AppTheme.sm),
-                const Text('Search stores or products',
-                  style: TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textTertiary)),
+                Expanded(
+                  child: Text(context.tr('search_stores_products'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: AppTheme.textTertiary)),
+                ),
               ]),
             ),
           ),

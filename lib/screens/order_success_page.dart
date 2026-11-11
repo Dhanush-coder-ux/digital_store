@@ -173,6 +173,20 @@ class _OrderSuccessPageState extends State<OrderSuccessPage>
             _detailRow('Order ID', '#${(order.uiId ?? order.id).toUpperCase()}'),
             const Divider(height: 20, color: AppTheme.veryLightGray),
             _detailRow('Status', order.status),
+            if (order.totalGstAmount > 0) ...[
+              const Divider(height: 20, color: AppTheme.veryLightGray),
+              _detailRow(
+                'Items Base Price',
+                '₹${order.baseSubtotal.toStringAsFixed(2)}',
+              ),
+              const Divider(height: 20, color: AppTheme.veryLightGray),
+              _detailRow(
+                order.gstPercentLabel.isNotEmpty
+                    ? 'Total GST (${order.gstPercentLabel})'
+                    : 'Total GST',
+                '₹${order.totalGstAmount.toStringAsFixed(2)}',
+              ),
+            ],
             if (order.calculationInfos?['delivery_fee'] != null) ...[
               const Divider(height: 20, color: AppTheme.veryLightGray),
               _detailRow(

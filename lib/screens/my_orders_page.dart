@@ -20,6 +20,7 @@ import '../models/product_provider.dart';
 import '../models/order_model.dart';
 import '../models/shop_model.dart';
 import '../theme/app_theme.dart';
+import '../l10n/app_translations.dart';
 import 'order_detail_page.dart';
 import 'my_return_requests_page.dart';
 import 'main_screen.dart';
@@ -176,31 +177,65 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
         ),
         leading: IconButton(
           icon: const Icon(LucideIcons.arrowLeft, color: _textPrimary, size: 20),
-          tooltip: 'Back',
+          tooltip: context.tr('back'),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: const Text(
-          'My Orders',
-          style: TextStyle(
+        title: Text(
+          context.tr('my_orders'),
+          style: const TextStyle(
             fontFamily: 'Outfit',
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: _textPrimary,
           ),
         ),
-        centerTitle: true,
+        centerTitle: false,
+        titleSpacing: 4,
         actions: [
-          IconButton(
-            icon: const Icon(LucideIcons.rotateCcw, color: _textSecondary, size: 19),
-            tooltip: 'Return requests',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MyReturnRequestsPage()),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Material(
+              color: _softAmber,
+              borderRadius: BorderRadius.circular(20),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MyReturnRequestsPage()),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: _amber.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.assignment_return_outlined,
+                        color: _amber,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        context.tr('returns'),
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF8A5C10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
           IconButton(
             icon: const Icon(LucideIcons.rotateCw, color: _textSecondary, size: 19),
-            tooltip: 'Refresh orders',
+            tooltip: context.tr('refresh'),
             onPressed: _onRefresh,
           ),
         ],
@@ -557,7 +592,28 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _buildCompactStatusBadge(status),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        _buildCompactStatusBadge(status),
+                        if (isCancelled && order.cancelledByDisplay != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            order.cancelledByDisplay!,
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: _error,
+                            ),
+                          ),
+                        ],
+                        if (order.hasReturn) ...[
+                          const SizedBox(height: 4),
+                          _buildReturnTagBadge(order.isPartiallyReturned),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
 
@@ -769,6 +825,36 @@ class _MyOrdersPageState extends State<MyOrdersPage> {
             style: TextStyle(
               fontFamily: 'Outfit',
               fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReturnTagBadge(bool isPartial) {
+    const Color bg = Color(0xFFFFF7ED);
+    const Color border = Color(0xFFFED7AA);
+    const Color fg = Color(0xFFC2410C);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.assignment_return_outlined, size: 12, color: fg),
+          const SizedBox(width: 3),
+          Text(
+            isPartial ? 'Partially Returned' : 'Returned',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 10,
               fontWeight: FontWeight.w700,
               color: fg,
             ),

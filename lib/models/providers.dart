@@ -1,10 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show WebSocket;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/models/address_model.dart';
+import '../core/auth/token_storage.dart';
+import '../services/api_config.dart';
+import '../services/notification_service.dart';
 
 /// Product model
 class Product {
@@ -382,6 +388,8 @@ class AppNotification {
   final String type;
   final IconData icon;
   final Color color;
+  final DateTime? createdAt;
+  final Map<String, dynamic> metadata;
   bool isRead;
 
   AppNotification({
@@ -392,56 +400,386 @@ class AppNotification {
     required this.type,
     required this.icon,
     required this.color,
+    this.createdAt,
+    this.metadata = const {},
     this.isRead = false,
   });
+
+  /// Ensures only Digital Store customer app notifications are shown in the mobile app
+  /// (excludes InventQ ERP inventory/purchase/product/analytics/POS or merchant-only alerts).
+  static bool isDigitalStoreCustomerNotification(Map<String, dynamic> json) {
+    final rawMeta = json['additional_metadata'];
+    final Map<String, dynamic> meta = rawMeta is Map
+        ? Map<String, dynamic>.from(rawMeta)
+        : const {};
+
+    final audience = (meta['audience'] ?? '').toString().toLowerCase().trim();
+    if (audience == 'shop' ||
+        audience == 'merchant' ||
+        audience == 'admin' ||
+        audience == 'retailer' ||
+        audience == 'erp') {
+      return false;
+    }
+    if (meta['target_shop'] == true) {
+      return false;
+    }
+
+    final rawType = (json['type'] ?? '').toString().toLowerCase().trim();
+    if (rawType == 'customer_order_cancelled' || rawType == 'analytics_sync') {
+      return false;
+    }
+
+    final channel = (meta['channel'] ?? '').toString().toLowerCase().trim();
+    final origin = (meta['origin'] ?? meta['order_origin'] ?? '').toString().toUpperCase().trim();
+    final metaType = (meta['type'] ?? '').toString().toLowerCase().trim();
+    if (channel == 'pos' || origin == 'OFFLINE' || meta['is_online'] == false) {
+      return false;
+    }
+    if (metaType == 'analytics_sync' ||
+        meta.containsKey('purchase_id') ||
+        meta.containsKey('product_id')) {
+      return false;
+    }
+
+    final title = (json['title'] ?? '').toString().toLowerCase().trim();
+    const blockedPrefixes = [
+      'product created',
+      'product updated',
+      'product deleted',
+      'purchase created',
+      'purchase updated',
+      'bulk inventory',
+      'analytics sync',
+      'new order placed',
+      'new online order received',
+      'new return request',
+    ];
+    for (final prefix in blockedPrefixes) {
+      if (title.startsWith(prefix)) return false;
+    }
+
+    if (audience == 'customer') return true;
+
+    final eventType = (meta['event_type'] ?? '').toString().toUpperCase().trim();
+    const customerEvents = {
+      'SHOP_ANNOUNCEMENT',
+      'SHOP_VACATION_MODE',
+      'ORDER_STATUS',
+      'RETURN_REQUEST_CREATED',
+      'RETURN_REQUEST_UPDATED',
+      'RETURN_REQUEST_STATUS',
+    };
+    if (customerEvents.contains(eventType)) return true;
+
+    final category = (meta['category'] ?? '').toString().toLowerCase().trim();
+    if (category == 'digital_store' || channel == 'digital_store') {
+      return true;
+    }
+
+    return false;
+  }
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) {
+    final id = (json['id'] ?? json['_id'] ?? DateTime.now().microsecondsSinceEpoch).toString();
+    final title = (json['title'] ?? 'Notification').toString();
+    final message = (json['message'] ?? '').toString();
+    final rawType = (json['type'] ?? 'info').toString().toLowerCase();
+    final rawMeta = json['additional_metadata'];
+    final Map<String, dynamic> metadata = rawMeta is Map
+        ? Map<String, dynamic>.from(rawMeta)
+        : const {};
+    final eventType = (metadata['event_type'] ?? '').toString().toUpperCase();
+
+    DateTime? parsedDate;
+    final rawCreatedAt = json['created_at']?.toString();
+    if (rawCreatedAt != null && rawCreatedAt.isNotEmpty) {
+      // Backend writes naive UTC timestamps via datetime.utcnow()
+      final normalized = rawCreatedAt.endsWith('Z') || rawCreatedAt.contains('+')
+          ? rawCreatedAt
+          : '${rawCreatedAt}Z';
+      parsedDate = DateTime.tryParse(normalized)?.toLocal();
+    }
+
+    IconData icon = Icons.notifications_outlined;
+    Color color = const Color(0xFF2563EB);
+
+    if (eventType == 'SHOP_ANNOUNCEMENT' || rawType == 'announcement' || rawType == 'promo') {
+      icon = Icons.campaign_outlined;
+      color = const Color(0xFFD97706);
+    } else if (eventType == 'SHOP_VACATION_MODE') {
+      final vacOn = metadata['vacation_mode'] == true;
+      icon = vacOn ? Icons.beach_access_outlined : Icons.storefront_outlined;
+      color = vacOn ? const Color(0xFFF59E0B) : const Color(0xFF10B981);
+    } else if (eventType.startsWith('RETURN_REQUEST')) {
+      icon = Icons.assignment_return_outlined;
+      color = rawType == 'error'
+          ? const Color(0xFFEF4444)
+          : (rawType == 'success' ? const Color(0xFF10B981) : const Color(0xFFD97706));
+    } else if (eventType == 'ORDER_STATUS' || rawType == 'order') {
+      final orderStatus = (metadata['status'] ?? '').toString().toUpperCase();
+      if (orderStatus == 'OUT_FOR_DELIVERY') {
+        icon = Icons.local_shipping_outlined;
+        color = const Color(0xFF2563EB);
+      } else if (orderStatus == 'DELIVERED' || orderStatus == 'COMPLETED' || rawType == 'success') {
+        icon = Icons.inventory_2_outlined;
+        color = const Color(0xFF10B981);
+      } else if (orderStatus == 'CANCELED' || orderStatus == 'CANCELLED' || orderStatus == 'REJECTED' || rawType == 'error') {
+        icon = Icons.cancel_outlined;
+        color = const Color(0xFFEF4444);
+      } else {
+        icon = Icons.shopping_bag_outlined;
+        color = const Color(0xFF2563EB);
+      }
+    } else if (rawType == 'success') {
+      icon = Icons.check_circle_outline;
+      color = const Color(0xFF10B981);
+    } else if (rawType == 'warning') {
+      icon = Icons.warning_amber_rounded;
+      color = const Color(0xFFF59E0B);
+    } else if (rawType == 'error') {
+      icon = Icons.error_outline;
+      color = const Color(0xFFEF4444);
+    }
+
+    return AppNotification(
+      id: id,
+      title: title,
+      message: message,
+      time: _formatRelativeTime(parsedDate),
+      type: eventType.isNotEmpty ? eventType : rawType,
+      icon: icon,
+      color: color,
+      createdAt: parsedDate,
+      metadata: metadata,
+      isRead: json['is_read'] == true,
+    );
+  }
+
+  static String _formatRelativeTime(DateTime? dt) {
+    if (dt == null) return 'Recent';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]}';
+  }
 }
 
 class NotificationsProvider extends ChangeNotifier {
-  final List<AppNotification> _notifications = [
-    AppNotification(
-      id: '1',
-      title: 'Order Delivered!',
-      message: 'Your order from Fresh Mart has been delivered successfully.',
-      time: 'Just now',
-      type: 'order',
-      icon: Icons.inventory_2_outlined,
-      color: const Color(0xFF10B981),
-    ),
-    AppNotification(
-      id: '2',
-      title: 'Special Offer',
-      message: 'Get 20% off on your next grocery purchase. Use code: GROCERY20',
-      time: '2 hours ago',
-      type: 'promo',
-      icon: Icons.local_offer_outlined,
-      color: const Color(0xFFF59E0B),
-    ),
-    AppNotification(
-      id: '3',
-      title: 'Store Update',
-      message: "Your favorite store 'Grace Super Market' added new items.",
-      time: 'Yesterday',
-      type: 'update',
-      icon: Icons.storefront_outlined,
-      color: const Color(0xFF0EA5E9),
-      isRead: true,
-    ),
-  ];
+  static const String _prefEnabledKey = 'digitalstore_notifications_enabled';
+
+  NotificationService? _service;
+  TokenStorage? _tokenStorage;
+
+  List<AppNotification> _notifications = [];
+  bool _isLoading = false;
+  bool _notificationsEnabled = true;
+  String? _error;
+  String? _boundUserId;
+
+  Timer? _pollTimer;
+  WebSocket? _socket;
+  bool _isDisposed = false;
+
+  NotificationsProvider({
+    NotificationService? service,
+    TokenStorage? tokenStorage,
+  })  : _service = service,
+        _tokenStorage = tokenStorage {
+    _loadPreference();
+  }
+
+  void configure({
+    required NotificationService service,
+    TokenStorage? tokenStorage,
+  }) {
+    _service = service;
+    if (tokenStorage != null) {
+      _tokenStorage = tokenStorage;
+    }
+  }
 
   List<AppNotification> get notifications => List.unmodifiable(_notifications);
+  bool get isLoading => _isLoading;
+  bool get notificationsEnabled => _notificationsEnabled;
+  String? get error => _error;
+  int get unreadCount => _notifications.where((n) => !n.isRead).length;
 
-  void markAllAsRead() {
+  Future<void> _loadPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getBool(_prefEnabledKey);
+      if (saved != null && saved != _notificationsEnabled) {
+        _notificationsEnabled = saved;
+        if (!_isDisposed) notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> setNotificationsEnabled(bool enabled) async {
+    _notificationsEnabled = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefEnabledKey, enabled);
+    } catch (_) {}
+
+    if (!enabled) {
+      _stopLiveListeners();
+    } else if (_boundUserId != null && _boundUserId!.isNotEmpty) {
+      await fetchNotifications(_boundUserId!, silent: true);
+      _startLiveListeners(_boundUserId!);
+    }
+  }
+
+  Future<void> bindUser(String? userId) async {
+    final cleanId = userId?.trim();
+    if (cleanId == null || cleanId.isEmpty) {
+      reset();
+      return;
+    }
+    if (_boundUserId == cleanId) return;
+
+    _boundUserId = cleanId;
+    await fetchNotifications(cleanId, silent: _notifications.isNotEmpty);
+    if (_notificationsEnabled) {
+      _startLiveListeners(cleanId);
+    }
+  }
+
+  Future<void> fetchNotifications(String userId, {bool silent = false}) async {
+    if (_service == null || userId.trim().isEmpty) return;
+
+    if (!silent) {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+    }
+
+    try {
+      final rawList = await _service!.fetchNotifications(userId.trim());
+      _notifications = rawList
+          .where(AppNotification.isDigitalStoreCustomerNotification)
+          .map(AppNotification.fromJson)
+          .toList();
+      _error = null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('[NotificationsProvider] fetchNotifications error: $e');
+      }
+      if (!silent) {
+        _error = 'Failed to load notifications.';
+      }
+    } finally {
+      _isLoading = false;
+      if (!_isDisposed) notifyListeners();
+    }
+  }
+
+  void _startLiveListeners(String userId) {
+    _stopLiveListeners();
+    if (!_notificationsEnabled) return;
+
+    _pollTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      if (_boundUserId != null && _notificationsEnabled) {
+        fetchNotifications(_boundUserId!, silent: true);
+      }
+    });
+
+    if (!kIsWeb) {
+      _connectWebSocket(userId);
+    }
+  }
+
+  Future<void> _connectWebSocket(String userId) async {
+    try {
+      final token = await _tokenStorage?.getAccessToken();
+      if (token == null || token.isEmpty || _boundUserId != userId) return;
+
+      final uri = Uri.parse(ApiConfig.notificationsWs(userId)).replace(
+        queryParameters: {
+          'token': token,
+          'scope': 'digital_store',
+          'audience': 'customer',
+        },
+      );
+      final ws = await WebSocket.connect(uri.toString()).timeout(
+        const Duration(seconds: 6),
+      );
+      if (_boundUserId != userId || !_notificationsEnabled || _isDisposed) {
+        await ws.close();
+        return;
+      }
+      _socket = ws;
+      ws.listen(
+        (event) {
+          if (event is String && event.trim().startsWith('{')) {
+            try {
+              final decoded = jsonDecode(event);
+              if (decoded is Map<String, dynamic> &&
+                  AppNotification.isDigitalStoreCustomerNotification(decoded)) {
+                final incoming = AppNotification.fromJson(decoded);
+                final existingIdx = _notifications.indexWhere((n) => n.id == incoming.id);
+                if (existingIdx >= 0) {
+                  _notifications[existingIdx] = incoming;
+                } else {
+                  _notifications.insert(0, incoming);
+                }
+                if (!_isDisposed) notifyListeners();
+              }
+            } catch (_) {}
+          }
+        },
+        onError: (_) {},
+        onDone: () {
+          _socket = null;
+        },
+        cancelOnError: true,
+      );
+    } catch (_) {
+      // Polling timer remains active as reliable fallback
+    }
+  }
+
+  void _stopLiveListeners() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    try {
+      _socket?.close();
+    } catch (_) {}
+    _socket = null;
+  }
+
+  Future<void> markAllAsRead([String? userId]) async {
     for (final notification in _notifications) {
       notification.isRead = true;
     }
     notifyListeners();
+
+    final uid = userId ?? _boundUserId;
+    if (_service != null && uid != null && uid.isNotEmpty) {
+      await _service!.markAllAsRead(uid);
+    }
   }
 
-  void markAsRead(String id) {
+  Future<void> markAsRead(String id) async {
     final index = _notifications.indexWhere((item) => item.id == id);
     if (index == -1) return;
-    _notifications[index].isRead = true;
+    if (!_notifications[index].isRead) {
+      _notifications[index].isRead = true;
+      notifyListeners();
+      await _service?.markAsRead(id);
+    }
+  }
+
+  Future<void> deleteNotification(String id) async {
+    _notifications.removeWhere((item) => item.id == id);
     notifyListeners();
+    await _service?.deleteNotification(id);
   }
 
   void broadcastRegularOffer({
@@ -463,6 +801,22 @@ class NotificationsProvider extends ChangeNotifier {
       ),
     );
     notifyListeners();
+  }
+
+  void reset() {
+    _stopLiveListeners();
+    _boundUserId = null;
+    _notifications = [];
+    _isLoading = false;
+    _error = null;
+    if (!_isDisposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _stopLiveListeners();
+    super.dispose();
   }
 }
 

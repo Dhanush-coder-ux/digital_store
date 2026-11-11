@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
+import '../core/auth/auth_provider.dart';
+import '../l10n/app_translations.dart';
 import '../models/providers.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_constants.dart';
+import 'my_orders_page.dart';
+import 'my_return_requests_page.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -14,12 +18,45 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  void _markAllAsRead() {
-    context.read<NotificationsProvider>().markAllAsRead();
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshNotifications();
+    });
   }
 
-  void _markAsRead(String id) {
-    context.read<NotificationsProvider>().markAsRead(id);
+  Future<void> _refreshNotifications() async {
+    final userId = context.read<AuthProvider>().userId;
+    if (userId != null && userId.isNotEmpty) {
+      await context.read<NotificationsProvider>().fetchNotifications(
+        userId,
+        silent: context.read<NotificationsProvider>().notifications.isNotEmpty,
+      );
+    }
+  }
+
+  void _markAllAsRead() {
+    final userId = context.read<AuthProvider>().userId;
+    context.read<NotificationsProvider>().markAllAsRead(userId);
+  }
+
+  void _handleNotificationTap(AppNotification notification) {
+    if (!notification.isRead) {
+      context.read<NotificationsProvider>().markAsRead(notification.id);
+    }
+    final eventType = notification.type.toUpperCase();
+    if (eventType.startsWith('RETURN_REQUEST')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const MyReturnRequestsPage()),
+      );
+    } else if (eventType == 'ORDER_STATUS') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const MyOrdersPage()),
+      );
+    }
   }
 
   @override
@@ -34,9 +71,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
           icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Notifications',
-          style: TextStyle(
+        title: Text(
+          context.tr('notifications'),
+          style: const TextStyle(
             fontFamily: 'Outfit',
             fontSize: 18,
             fontWeight: FontWeight.w700,
@@ -47,9 +84,9 @@ class _NotificationsPageState extends State<NotificationsPage> {
         actions: [
           TextButton(
             onPressed: _markAllAsRead,
-            child: const Text(
-              'Read All',
-              style: TextStyle(
+            child: Text(
+              context.tr('read_all'),
+              style: const TextStyle(
                 fontFamily: 'Outfit',
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -66,19 +103,105 @@ class _NotificationsPageState extends State<NotificationsPage> {
       body: Consumer<NotificationsProvider>(
         builder: (context, notificationsProvider, _) {
           final notifications = notificationsProvider.notifications;
-          if (notifications.isEmpty) return _buildEmptyState();
 
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
-            physics: const BouncingScrollPhysics(),
-            itemCount: notifications.length,
-            itemBuilder: (context, index) {
-              final notification = notifications[index];
-              return FadeInUp(
-                delay: Duration(milliseconds: 50 * index),
-                child: _buildNotificationItem(notification),
-              );
-            },
+          if (notificationsProvider.isLoading && notifications.isEmpty) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppTheme.primaryBlue),
+            );
+          }
+
+          if (notificationsProvider.error != null && notifications.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppTheme.xl),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      LucideIcons.wifiOff,
+                      size: 40,
+                      color: AppTheme.errorRed,
+                    ),
+                    const SizedBox(height: AppTheme.md),
+                    Text(
+                      context.tr('could_not_load_notifications'),
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppTheme.md),
+                    ElevatedButton.icon(
+                      onPressed: _refreshNotifications,
+                      icon: const Icon(LucideIcons.refreshCw, size: 16),
+                      label: Text(context.tr('retry')),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryBlue,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          if (notifications.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: _refreshNotifications,
+              color: AppTheme.primaryBlue,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.65,
+                    child: _buildEmptyState(),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: _refreshNotifications,
+            color: AppTheme.primaryBlue,
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: AppTheme.md),
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              itemCount: notifications.length,
+              itemBuilder: (context, index) {
+                final notification = notifications[index];
+                return Dismissible(
+                  key: ValueKey(notification.id),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: AppTheme.xl,
+                      vertical: AppTheme.sm,
+                    ),
+                    padding: const EdgeInsets.only(right: AppTheme.xl),
+                    decoration: BoxDecoration(
+                      color: AppTheme.errorRed.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+                    ),
+                    child: const Icon(
+                      LucideIcons.trash2,
+                      color: AppTheme.errorRed,
+                    ),
+                  ),
+                  onDismissed: (_) {
+                    context.read<NotificationsProvider>().deleteNotification(
+                      notification.id,
+                    );
+                  },
+                  child: FadeInUp(
+                    delay: Duration(milliseconds: 30 * (index > 10 ? 10 : index)),
+                    child: _buildNotificationItem(notification),
+                  ),
+                );
+              },
+            ),
           );
         },
       ),
@@ -89,7 +212,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final bool isRead = notification.isRead;
 
     return GestureDetector(
-      onTap: () => _markAsRead(notification.id),
+      onTap: () => _handleNotificationTap(notification),
       child: Container(
         margin: const EdgeInsets.symmetric(
           horizontal: AppTheme.xl,
@@ -197,12 +320,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
             ),
             const SizedBox(height: AppTheme.xl),
             Text(
-              'No Notifications Yet',
+              context.tr('no_notifications_title'),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: AppTheme.xs),
             Text(
-              'We will notify you when something arrives.',
+              context.tr('no_notifications_sub'),
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),

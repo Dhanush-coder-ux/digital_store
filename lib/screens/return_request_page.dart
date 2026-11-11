@@ -58,6 +58,7 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
   final Map<int, String> _reasonMap = {};
 
   final TextEditingController _descController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   @override
@@ -74,7 +75,29 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
   @override
   void dispose() {
     _descController.dispose();
+    _phoneController.dispose();
     super.dispose();
+  }
+
+  String _resolveCustomerPhone(AuthProvider auth, ProfileProvider profile) {
+    final candidates = <String?>[
+      _phoneController.text,
+      auth.mobile,
+      widget.order.customerPhone,
+      widget.order.additionalInfos?['customer_phone']?.toString(),
+      widget.order.additionalInfos?['phone']?.toString(),
+      widget.order.deliveryAddress?['phone']?.toString(),
+      profile.defaultAddress?.phone,
+      ...profile.addresses.map((a) => a.phone),
+    ];
+    for (final raw in candidates) {
+      if (raw == null) continue;
+      final trimmed = raw.trim();
+      if (trimmed.isNotEmpty && trimmed.toLowerCase() != 'null') {
+        return trimmed;
+      }
+    }
+    return '';
   }
 
   int get _selectedCount =>
@@ -133,6 +156,16 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
   }
 
   Future<void> _handleSubmit() async {
+    if (widget.order.isCancelledOrRejected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Return requests are not available for cancelled orders.'),
+          backgroundColor: _error,
+        ),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedCount == 0) {
@@ -152,10 +185,10 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
     final customerName = (profile.userName.isNotEmpty ? profile.userName : null) ??
         widget.order.customerName ??
         'Customer';
-    final customerPhone = (auth.mobile != null && auth.mobile!.isNotEmpty ? auth.mobile : null) ??
-        widget.order.customerPhone ??
-        '';
-    final customerEmail = auth.email ?? '';
+    final customerPhone = _resolveCustomerPhone(auth, profile);
+    final customerEmail = (auth.email != null && auth.email!.isNotEmpty)
+        ? auth.email!
+        : (widget.order.additionalInfos?['customer_email']?.toString() ?? '');
     final customerId = auth.userId ?? widget.order.customerId ?? '';
 
     final String paymentMethodKey = _resolvePaymentMethod();
@@ -261,10 +294,13 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
     final customerName = (profile.userName.isNotEmpty ? profile.userName : null) ??
         widget.order.customerName ??
         'Customer';
-    final customerPhone = (auth.mobile != null && auth.mobile!.isNotEmpty ? auth.mobile : null) ??
-        widget.order.customerPhone ??
-        '—';
-    final customerEmail = auth.email ?? '—';
+    final resolvedPhone = _resolveCustomerPhone(auth, profile);
+    final bool showEditablePhone =
+        resolvedPhone.isEmpty || _phoneController.text.isNotEmpty;
+    final customerPhone = resolvedPhone.isNotEmpty ? resolvedPhone : '—';
+    final customerEmail = (auth.email != null && auth.email!.isNotEmpty)
+        ? auth.email!
+        : (widget.order.additionalInfos?['customer_email']?.toString() ?? '—');
 
     return Scaffold(
       backgroundColor: _bg,
@@ -290,7 +326,52 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
           child: Container(color: _border, height: 1),
         ),
       ),
-      body: Form(
+      body: widget.order.isCancelledOrRejected
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: _error.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(LucideIcons.xCircle, size: 40, color: _error),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Return Request Unavailable',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: _textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Return requests cannot be submitted for cancelled or rejected orders.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          color: _textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Go Back'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
@@ -409,7 +490,47 @@ class _ReturnRequestPageState extends State<ReturnRequestPage> {
                 children: [
                   _buildCustomerInfoRow(LucideIcons.user, 'Name', customerName),
                   const Divider(color: _border, height: 16),
-                  _buildCustomerInfoRow(LucideIcons.phone, 'Phone', customerPhone),
+                  if (showEditablePhone)
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.phone, size: 15, color: _textSecondary),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Phone: ',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 13,
+                            color: _textSecondary,
+                          ),
+                        ),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _phoneController,
+                            keyboardType: TextInputType.phone,
+                            textAlign: TextAlign.end,
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _textPrimary,
+                            ),
+                            decoration: const InputDecoration(
+                              hintText: 'Enter mobile number',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13,
+                                color: Color(0xFF94A3B8),
+                              ),
+                              isDense: true,
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    _buildCustomerInfoRow(LucideIcons.phone, 'Phone', customerPhone),
                   const Divider(color: _border, height: 16),
                   _buildCustomerInfoRow(LucideIcons.mail, 'Email', customerEmail),
                 ],

@@ -166,23 +166,56 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
               ),
             ],
           ),
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const NotificationsPage()),
+          Builder(
+            builder: (context) {
+              final unreadCount = context.watch<NotificationsProvider>().unreadCount;
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NotificationsPage()),
+                  );
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSecondary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.veryLightGray),
+                      ),
+                      child: const Icon(LucideIcons.bell, color: AppTheme.textSecondary, size: 18),
+                    ),
+                    if (unreadCount > 0)
+                      Positioned(
+                        top: -3,
+                        right: -3,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.errorRed,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          child: Text(
+                            unreadCount > 99 ? '99+' : '$unreadCount',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               );
             },
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppTheme.bgSecondary,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppTheme.veryLightGray),
-              ),
-              child: const Icon(LucideIcons.bell, color: AppTheme.textSecondary, size: 18),
-            ),
           ),
         ],
       ),

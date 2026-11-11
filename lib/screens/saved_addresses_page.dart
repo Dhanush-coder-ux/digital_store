@@ -12,6 +12,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../models/profile_provider.dart';
+import '../l10n/app_translations.dart';
 import '../core/auth/auth_provider.dart';
 import '../core/models/address_model.dart';
 import '../theme/app_theme.dart';
@@ -53,7 +54,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
     }
   }
 
-  void _showAddAddressModal(BuildContext context) {
+  void _showAddAddressModal(BuildContext context, {AddressModel? existing}) {
     final authProvider = context.read<AuthProvider>();
     if (authProvider.userId == null) return;
 
@@ -61,7 +62,10 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _AddAddressModal(userId: authProvider.userId!),
+      builder: (context) => _AddAddressModal(
+        userId: authProvider.userId!,
+        existingAddress: existing,
+      ),
     );
   }
 
@@ -78,7 +82,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          "Saved Addresses",
+          context.tr('saved_addresses'),
           style: GoogleFonts.outfit(
             fontSize: 20,
             fontWeight: FontWeight.bold,
@@ -287,7 +291,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Row(
               children: [
-                if (!isDefault)
+                if (!isDefault) ...[
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () async {
@@ -296,16 +300,31 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
                         }
                       },
                       icon: const Icon(LucideIcons.star, size: 14),
-                      label: Text('Set Default', style: GoogleFonts.outfit(fontSize: 13)),
+                      label: Text(context.tr('set_default'), style: GoogleFonts.outfit(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.primaryBlue,
                         side: BorderSide(color: AppTheme.primaryBlue.withOpacity(0.4)),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                   ),
-                if (!isDefault) const SizedBox(width: 12),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showAddAddressModal(context, existing: address),
+                    icon: const Icon(LucideIcons.pencil, size: 14),
+                    label: Text(context.tr('edit'), style: GoogleFonts.outfit(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryBlue,
+                      side: BorderSide(color: AppTheme.primaryBlue.withOpacity(0.4)),
+                      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () async {
@@ -318,11 +337,11 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, false),
-                              child: Text('Cancel', style: GoogleFonts.outfit()),
+                              child: Text(context.tr('cancel'), style: GoogleFonts.outfit()),
                             ),
                             TextButton(
                               onPressed: () => Navigator.pop(ctx, true),
-                              child: Text('Delete', style: GoogleFonts.outfit(color: Colors.red)),
+                              child: Text(context.tr('delete'), style: GoogleFonts.outfit(color: Colors.red)),
                             ),
                           ],
                         ),
@@ -332,7 +351,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
                       }
                     },
                     icon: const Icon(LucideIcons.trash2, size: 14),
-                    label: Text('Delete', style: GoogleFonts.outfit(fontSize: 13)),
+                    label: Text(context.tr('delete'), style: GoogleFonts.outfit(fontSize: 13)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       side: BorderSide(color: Colors.red.withOpacity(0.4)),
@@ -371,7 +390,7 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
             const Icon(LucideIcons.plusCircle, color: AppTheme.primaryBlue, size: 20),
             const SizedBox(width: 8),
             Text(
-              "Add New Address",
+              context.tr('add_new_address'),
               style: GoogleFonts.outfit(
                 color: AppTheme.primaryBlue,
                 fontWeight: FontWeight.w600,
@@ -387,7 +406,8 @@ class _SavedAddressesPageState extends State<SavedAddressesPage> {
 
 class _AddAddressModal extends StatefulWidget {
   final String userId;
-  const _AddAddressModal({required this.userId});
+  final AddressModel? existingAddress;
+  const _AddAddressModal({required this.userId, this.existingAddress});
 
   @override
   State<_AddAddressModal> createState() => _AddAddressModalState();
@@ -413,6 +433,24 @@ class _AddAddressModalState extends State<_AddAddressModal> {
 
   double? _latitude;
   double? _longitude;
+
+  bool get _isEditing => widget.existingAddress != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existingAddress;
+    if (existing != null) {
+      _fullAddressCtrl.text = existing.fullAddress ?? '';
+      _cityCtrl.text = existing.city ?? '';
+      _stateCtrl.text = existing.state ?? '';
+      _pincodeCtrl.text = existing.pincode ?? '';
+      _phoneCtrl.text = existing.phone ?? '';
+      _latitude = existing.latitude;
+      _longitude = existing.longitude;
+      _isDefault = existing.isDefault;
+    }
+  }
 
   Future<void> _searchLocation(String query) async {
     if (query.trim().isEmpty) {
@@ -555,7 +593,7 @@ class _AddAddressModalState extends State<_AddAddressModal> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Add New Address',
+                      _isEditing ? 'Edit Address' : 'Add New Address',
                       style: GoogleFonts.outfit(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -772,7 +810,7 @@ class _AddAddressModalState extends State<_AddAddressModal> {
                             ),
                           )
                         : Text(
-                            'Save Address',
+                            _isEditing ? 'Update Address' : 'Save Address',
                             style: GoogleFonts.outfit(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -837,8 +875,11 @@ class _AddAddressModalState extends State<_AddAddressModal> {
       // Check if this is the first address (auto-set as default)
       final isFirstAddress = profileProvider.addresses.isEmpty;
 
+      final existing = widget.existingAddress;
+      final addressId = existing?.addressId ?? const Uuid().v4();
+
       final address = AddressModel(
-        addressId: const Uuid().v4(), // Generate unique ID client-side
+        addressId: addressId,
         phone: _phoneCtrl.text.trim(),
         fullAddress: _fullAddressCtrl.text.trim(),
         city: _cityCtrl.text.trim(),
@@ -846,17 +887,19 @@ class _AddAddressModalState extends State<_AddAddressModal> {
         state: _stateCtrl.text.trim(),
         latitude: _latitude,
         longitude: _longitude,
-        isDefault: _isDefault || isFirstAddress,
+        isDefault: _isDefault || (!_isEditing && isFirstAddress),
       );
 
-      final success = await profileProvider.addAddress(widget.userId, address);
+      final success = _isEditing
+          ? await profileProvider.updateAddress(widget.userId, addressId, address)
+          : await profileProvider.addAddress(widget.userId, address);
 
       if (!mounted) return;
       if (success) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Address saved!', style: GoogleFonts.outfit()),
+            content: Text(_isEditing ? 'Address updated!' : 'Address saved!', style: GoogleFonts.outfit()),
             backgroundColor: AppTheme.successGreen,
             behavior: SnackBarBehavior.floating,
           ),

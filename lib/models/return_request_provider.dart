@@ -187,9 +187,51 @@ class ReturnRequestProvider extends ChangeNotifier {
     }
   }
 
-  /// Fetches return requests for a batch of order IDs (e.g. all user orders).
+  ReturnRequestModel _enrichWithOrder(ReturnRequestModel req, ApiOrder orderObj) {
+    var updated = req;
+    if (updated.orderUiId == null || updated.orderUiId!.trim().isEmpty) {
+      final ui = (orderObj.uiId != null && orderObj.uiId!.trim().isNotEmpty)
+          ? orderObj.uiId!.trim()
+          : orderObj.id;
+      updated = updated.copyWith(orderUiId: ui);
+    }
+    if (updated.items.isNotEmpty && updated.totalRefundAmount == 0 && orderObj.items.isNotEmpty) {
+      final updatedItems = updated.items.map((retItem) {
+        if (retItem.price == 0 && retItem.totalAmount == 0) {
+          final match = orderObj.items.cast<ApiOrderItem?>().firstWhere(
+            (oi) => (oi != null && oi.productId.isNotEmpty && oi.productId == retItem.productId) ||
+                    (oi != null && oi.orderItemId != null && oi.orderItemId == retItem.orderItemId) ||
+                    (oi != null && oi.productName != null && oi.productName!.toLowerCase() == retItem.productName.toLowerCase()),
+            orElse: () => null,
+          );
+          if (match != null) {
+            final price = match.unitPrice;
+            final total = price * retItem.quantity;
+            return ReturnItemDetail(
+              orderItemId: retItem.orderItemId.isNotEmpty ? retItem.orderItemId : (match.orderItemId ?? ''),
+              productId: retItem.productId.isNotEmpty ? retItem.productId : match.productId,
+              productName: retItem.productName != 'Item' ? retItem.productName : (match.productName ?? 'Item'),
+              variantName: retItem.variantName,
+              quantity: retItem.quantity,
+              price: price,
+              totalAmount: total,
+              unit: retItem.unit ?? match.unit,
+              reason: retItem.reason,
+            );
+          }
+        }
+        return retItem;
+      }).toList();
+      updated = updated.copyWith(items: updatedItems);
+    }
+    return updated;
+  }
+
+  /// Fetches return requests for an authenticated user (fast single-endpoint query,
+  /// with parallel per-order fallback and order enrichment).
   Future<void> fetchUserReturnRequests(
     List<String> orderIds, {
+    String? userId,
     List<ApiOrder>? orders,
     bool force = false,
   }) async {
@@ -200,70 +242,68 @@ class ReturnRequestProvider extends ChangeNotifier {
       }
     }
 
-    if (orderIds.isEmpty) return;
+    if ((userId == null || userId.trim().isEmpty) && orderIds.isEmpty) {
+      return;
+    }
 
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
+      final Map<String, ApiOrder> orderLookup = {
+        for (final o in (orders ?? const <ApiOrder>[])) o.id: o,
+      };
       final List<ReturnRequestModel> combined = [];
-      for (final orderId in orderIds) {
-        // Find corresponding shop ID if available
-        final orderObj = orders?.where((o) => o.id == orderId).firstOrNull;
-        final list = await _service.getReturnRequestsByOrder(
-          orderId,
-          shopId: orderObj?.shopId,
-        );
 
-        final enrichedList = list.map((req) {
-          if (orderObj != null) {
-            var updated = req;
-            if (updated.orderUiId == null || updated.orderUiId!.trim().isEmpty) {
-              final ui = (orderObj.uiId != null && orderObj.uiId!.trim().isNotEmpty) ? orderObj.uiId!.trim() : orderObj.id;
-              updated = updated.copyWith(orderUiId: ui);
-            }
-            if (updated.items.isNotEmpty && updated.totalRefundAmount == 0 && orderObj.items.isNotEmpty) {
-              final updatedItems = updated.items.map((retItem) {
-                if (retItem.price == 0 && retItem.totalAmount == 0) {
-                  final match = orderObj.items.cast<ApiOrderItem?>().firstWhere(
-                    (oi) => (oi != null && oi.productId.isNotEmpty && oi.productId == retItem.productId) ||
-                            (oi != null && oi.orderItemId != null && oi.orderItemId == retItem.orderItemId) ||
-                            (oi != null && oi.productName != null && oi.productName!.toLowerCase() == retItem.productName.toLowerCase()),
-                    orElse: () => null,
-                  );
-                  if (match != null) {
-                    final price = match.unitPrice;
-                    final total = price * retItem.quantity;
-                    return ReturnItemDetail(
-                      orderItemId: retItem.orderItemId.isNotEmpty ? retItem.orderItemId : (match.orderItemId ?? ''),
-                      productId: retItem.productId.isNotEmpty ? retItem.productId : match.productId,
-                      productName: retItem.productName != 'Item' ? retItem.productName : (match.productName ?? 'Item'),
-                      variantName: retItem.variantName,
-                      quantity: retItem.quantity,
-                      price: price,
-                      totalAmount: total,
-                      unit: retItem.unit ?? match.unit,
-                      reason: retItem.reason,
-                    );
-                  }
-                }
-                return retItem;
-              }).toList();
-              updated = updated.copyWith(items: updatedItems);
-            }
-            return updated;
-          }
-          return req;
-        }).toList();
-
-        if (enrichedList.isNotEmpty || !_orderRequestsMap.containsKey(orderId)) {
-          _orderRequestsMap[orderId] = enrichedList;
-        }
-        combined.addAll(enrichedList);
+      // 1. Fast path: single aggregated query by userId
+      List<ReturnRequestModel>? directUserList;
+      if (userId != null && userId.trim().isNotEmpty) {
+        directUserList = await _service.getReturnRequestsByUser(userId.trim());
       }
 
-      // Deduplicate by ID
+      if (directUserList != null) {
+        for (final req in directUserList) {
+          final orderObj = orderLookup[req.orderId];
+          final enriched = orderObj != null ? _enrichWithOrder(req, orderObj) : req;
+          combined.add(enriched);
+          final existingForOrder = _orderRequestsMap[req.orderId] ?? [];
+          final idx = existingForOrder.indexWhere((r) => r.id == enriched.id);
+          if (idx >= 0) {
+            existingForOrder[idx] = enriched;
+            _orderRequestsMap[req.orderId] = existingForOrder;
+          } else {
+            _orderRequestsMap[req.orderId] = [...existingForOrder, enriched];
+          }
+        }
+      } else if (orderIds.isNotEmpty) {
+        // 2. Fallback: parallel per-order requests
+        final perOrderResults = await Future.wait(
+          orderIds.map((orderId) async {
+            final orderObj = orderLookup[orderId];
+            final list = await _service.getReturnRequestsByOrder(
+              orderId,
+              shopId: orderObj?.shopId,
+            );
+            final enrichedList = list
+                .map((req) => orderObj != null ? _enrichWithOrder(req, orderObj) : req)
+                .toList();
+            if (enrichedList.isNotEmpty || !_orderRequestsMap.containsKey(orderId)) {
+              _orderRequestsMap[orderId] = enrichedList;
+            }
+            return enrichedList;
+          }),
+        );
+        for (final list in perOrderResults) {
+          combined.addAll(list);
+        }
+      } else {
+        if (_allUserRequests.isEmpty) {
+          _error = 'Failed to load return requests.';
+        }
+      }
+
+      // Deduplicate by ID (prefer newly fetched records over older cache)
       final Map<String, ReturnRequestModel> dedup = {};
       for (final r in _allUserRequests) {
         dedup[r.id] = r;

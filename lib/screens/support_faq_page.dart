@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../theme/app_theme.dart';
+import '../l10n/app_translations.dart';
 
 class SupportFaqPage extends StatefulWidget {
   const SupportFaqPage({super.key});
@@ -61,9 +62,9 @@ class _SupportFaqPageState extends State<SupportFaqPage> {
         backgroundColor: AppTheme.white,
         elevation: 0,
         centerTitle: true,
-        title: const Text(
-          'Support & FAQ',
-          style: TextStyle(
+        title: Text(
+          context.tr('support_faq'),
+          style: const TextStyle(
             fontFamily: 'Outfit',
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.w700,
@@ -82,9 +83,9 @@ class _SupportFaqPageState extends State<SupportFaqPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'How can we help you?',
-                  style: TextStyle(
+                Text(
+                  context.tr('how_can_we_help'),
+                  style: const TextStyle(
                     fontFamily: 'Outfit',
                     fontSize: 22,
                     fontWeight: FontWeight.w800,

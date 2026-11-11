@@ -11,6 +11,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/auth/auth_provider.dart';
+import '../l10n/app_translations.dart';
 import '../theme/app_theme.dart';
 import 'main_screen.dart';
 
@@ -98,14 +99,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         backgroundColor: AppTheme.errorRed,
       ),
-    );
-  }
-
-  /// Skip login and continue as guest.
-  void _continueAsGuest() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => const MainScreen()),
     );
   }
 
@@ -260,7 +253,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     duration: const Duration(milliseconds: 650),
                     delay: const Duration(milliseconds: 280),
                     child: Text(
-                      'Discover local shops, browse products,\nand order with ease.',
+                      context.tr('login_subtitle'),
                       textAlign: TextAlign.center,
                       style: GoogleFonts.outfit(
                         fontSize: 15,
@@ -317,7 +310,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                       ),
                                       const SizedBox(width: 10),
                                       Text(
-                                        'Sign In',
+                                        context.tr('sign_in'),
                                         style: GoogleFonts.outfit(
                                           fontSize: 17,
                                           fontWeight: FontWeight.w700,
@@ -330,34 +323,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           ),
                         );
                       },
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // ── Continue as Guest ────────────────────────────────
-                  FadeInUp(
-                    duration: const Duration(milliseconds: 700),
-                    delay: const Duration(milliseconds: 500),
-                    child: TextButton(
-                      onPressed: _continueAsGuest,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                      ),
-                      child: Text(
-                        'Continue as Guest',
-                        style: GoogleFonts.outfit(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Colors.white.withValues(alpha: 0.85),
-                          decorationThickness: 1.5,
-                        ),
-                      ),
                     ),
                   ),
 

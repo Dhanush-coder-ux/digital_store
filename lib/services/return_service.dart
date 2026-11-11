@@ -165,6 +165,42 @@ class ReturnService {
     return _parseReturnRequest(response, payload);
   }
 
+  /// Fetches ALL return requests belonging to an authenticated customer in one request.
+  /// Tries:
+  ///   1. GET /digitalstore/orders/return-requests/by/user/{user_id}
+  ///   2. GET /orders/return-requests/by/user/{user_id}
+  ///   3. GET /returns/requests/user/{user_id}
+  Future<List<ReturnRequestModel>?> getReturnRequestsByUser(
+    String userId, {
+    int limit = 100,
+    int offset = 1,
+  }) async {
+    final endpoints = [
+      ApiConfig.returnRequestsByUser(userId),
+      ApiConfig.orderReturnRequestsByUser(userId),
+      ApiConfig.returnsByUser(userId),
+    ];
+
+    for (final url in endpoints) {
+      try {
+        final response = await _client.get(
+          url,
+          queryParams: {
+            'limit': limit.toString(),
+            'offset': offset.toString(),
+          },
+          requiresAuth: true,
+        );
+        return _parseReturnRequestList(response);
+      } catch (e) {
+        if (kDebugMode) {
+          print('[ReturnService] getReturnRequestsByUser failed at $url: $e');
+        }
+      }
+    }
+    return null;
+  }
+
   /// Fetches return requests for a specific order.
   /// Primary path: GET /orders/return-requests/{shop_id}?order_id={order_id}
   /// Fallback path: GET /returns/requests/order/{order_id}

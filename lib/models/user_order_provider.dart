@@ -138,6 +138,77 @@ class UserOrderProvider extends ChangeNotifier {
     }
   }
 
+  // ── Cancel Order ───────────────────────────────────────────────
+
+  Future<ApiOrder?> cancelOrder({
+    required String orderId,
+    required String shopId,
+  }) async {
+    _error = null;
+    try {
+      final body = await _service.cancelOrder(
+        orderId: orderId,
+        shopId: shopId,
+      );
+      ApiOrder? updated;
+      if (body is Map<String, dynamic>) {
+        final data = body['data'] is Map<String, dynamic>
+            ? body['data'] as Map<String, dynamic>
+            : (body.containsKey('id') ? body : null);
+        if (data != null) {
+          updated = ApiOrder.fromJson(data);
+        }
+      }
+      updateOrderStatusLocally(orderId, updated?.status ?? 'CANCELED');
+      if (updated != null) {
+        _selectedOrder = updated;
+        final idx = _orders.indexWhere((o) => o.id == orderId);
+        if (idx >= 0) {
+          _orders[idx] = updated;
+        }
+        notifyListeners();
+      }
+      return updated;
+    } catch (e) {
+      _error = e.toString().replaceFirst('Exception: ', '');
+      rethrow;
+    }
+  }
+
+  void updateOrderStatusLocally(String orderId, String newStatus) {
+    final nowIso = DateTime.now().toIso8601String();
+    final isCancel = newStatus.toUpperCase().contains('CANCEL');
+    Map<String, dynamic> mergeCancelInfos(Map<String, dynamic>? existing) {
+      final map = Map<String, dynamic>.from(existing ?? const {});
+      if (isCancel) {
+        map['cancelled_by_source'] = 'DIGITAL_STORE';
+        map['cancelled_by'] = 'Customer';
+        map['cancelled_by_label'] = 'Cancelled by Customer';
+      }
+      return map;
+    }
+
+    bool changed = false;
+    final idx = _orders.indexWhere((o) => o.id == orderId);
+    if (idx >= 0) {
+      _orders[idx] = _orders[idx].copyWith(
+        status: newStatus,
+        updatedAt: nowIso,
+        additionalInfos: mergeCancelInfos(_orders[idx].additionalInfos),
+      );
+      changed = true;
+    }
+    if (_selectedOrder != null && _selectedOrder!.id == orderId) {
+      _selectedOrder = _selectedOrder!.copyWith(
+        status: newStatus,
+        updatedAt: nowIso,
+        additionalInfos: mergeCancelInfos(_selectedOrder!.additionalInfos),
+      );
+      changed = true;
+    }
+    if (changed) notifyListeners();
+  }
+
   // ── Internal: Fetch Order Details ───────────────────────────────
 
   Future<void> _fetchOrderDetails() async {

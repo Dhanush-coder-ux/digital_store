@@ -10,6 +10,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import '../theme/app_theme.dart';
+import '../l10n/app_translations.dart';
 import '../models/api_cart_provider.dart';
 
 class CustomBottomBar extends StatelessWidget {
@@ -59,35 +60,35 @@ class CustomBottomBar extends StatelessWidget {
               _NavItem(
                 index: 0,
                 icon: LucideIcons.home,
-                label: "Home",
+                label: context.tr('home'),
                 currentIndex: currentIndex,
                 onTap: onTap,
               ),
               _NavItem(
                 index: 1,
                 icon: LucideIcons.layoutGrid,
-                label: "Categories",
+                label: context.tr('categories'),
                 currentIndex: currentIndex,
                 onTap: onTap,
               ),
               _NavItem(
                 index: 2,
                 icon: LucideIcons.store,
-                label: "Stores",
+                label: context.tr('stores'),
                 currentIndex: currentIndex,
                 onTap: onTap,
               ),
               _CartNavItem(
                 index: 3,
                 icon: LucideIcons.shoppingBag,
-                label: "Cart",
+                label: context.tr('cart'),
                 currentIndex: currentIndex,
                 onTap: onTap,
               ),
               _NavItem(
                 index: 4,
                 icon: LucideIcons.user,
-                label: "Profile",
+                label: context.tr('profile'),
                 currentIndex: currentIndex,
                 onTap: onTap,
               ),

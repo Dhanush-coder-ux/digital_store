@@ -12,6 +12,7 @@ import '../models/return_request_model.dart';
 import '../models/return_request_provider.dart';
 import '../models/user_order_provider.dart';
 import '../core/auth/auth_provider.dart';
+import '../l10n/app_translations.dart';
 import 'return_request_detail_page.dart';
 
 class MyReturnRequestsPage extends StatefulWidget {
@@ -46,15 +47,24 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
     final orderProvider = context.read<UserOrderProvider>();
     final returnProvider = context.read<ReturnRequestProvider>();
 
-    if (auth.userId != null) {
-      if (orderProvider.orders.isEmpty) {
-        await orderProvider.fetchUserOrders(auth.userId!, force: true);
-      }
-      final orders = orderProvider.orders;
-      final orderIds = orders.map((o) => o.id).toList();
+    if (auth.userId == null || auth.userId!.isEmpty) return;
+
+    await Future.wait([
+      if (orderProvider.orders.isEmpty)
+        orderProvider.fetchUserOrders(auth.userId!, limit: 50, force: true),
+      returnProvider.fetchUserReturnRequests(
+        orderProvider.orders.map((o) => o.id).toList(),
+        userId: auth.userId,
+        orders: orderProvider.orders,
+        force: true,
+      ),
+    ]);
+
+    if (mounted && orderProvider.orders.isNotEmpty && returnProvider.allUserRequests.isEmpty) {
       await returnProvider.fetchUserReturnRequests(
-        orderIds,
-        orders: orders,
+        orderProvider.orders.map((o) => o.id).toList(),
+        userId: auth.userId,
+        orders: orderProvider.orders,
         force: true,
       );
     }
@@ -161,9 +171,9 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
           icon: const Icon(LucideIcons.arrowLeft, color: _textPrimary, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'My Return Requests',
-          style: TextStyle(
+        title: Text(
+          context.tr('my_return_requests'),
+          style: const TextStyle(
             fontFamily: 'Outfit',
             fontSize: 18,
             fontWeight: FontWeight.w700,
@@ -189,13 +199,13 @@ class _MyReturnRequestsPageState extends State<MyReturnRequestsPage> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _buildFilterChip('ALL', 'All'),
+                    _buildFilterChip('ALL', context.tr('all')),
                     const SizedBox(width: 8),
-                    _buildFilterChip('PENDING', 'Pending'),
+                    _buildFilterChip('PENDING', context.tr('pending')),
                     const SizedBox(width: 8),
-                    _buildFilterChip('ACCEPTED', 'Accepted'),
+                    _buildFilterChip('ACCEPTED', context.tr('accepted')),
                     const SizedBox(width: 8),
-                    _buildFilterChip('REJECTED', 'Rejected'),
+                    _buildFilterChip('REJECTED', context.tr('rejected')),
                   ],
                 ),
               ),

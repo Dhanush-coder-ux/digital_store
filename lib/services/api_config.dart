@@ -5,9 +5,9 @@
 //
 
 class ApiConfig {
-  static String get baseIp => '10.39.224.101';
+//   static String get baseIp => '192.168.68.104';
 
-//   static String get gatewayBase => 'http://$baseIp:8000/api';
+//   static String get gatewayBase => 'https://9045-106-51-172-186.ngrok-free.app/api';
   static String get gatewayBase => 'https://marketplace.debuggers.co.in/api';
 
   // ═══════════════════════════════════════════════════════════════════
@@ -193,6 +193,9 @@ class ApiConfig {
   static String get orderBase => '$_dsBase/orders';
   static String get orderCreate => orderBase;
   static String ordersByShop(String shopId) => '$orderBase/$shopId';
+  static String get orderStatusUpdate => '$gatewayBase/orders/status';
+  static String get dsOrderStatusUpdate => '$_dsBase/orders/status';
+  static String get dsOrderCancel => '$_dsBase/orders/cancel';
 
   // ── Customer endpoints ─────────────────────────────────────────
   static String get customerBase => '$gatewayBase/customers';
@@ -206,6 +209,14 @@ class ApiConfig {
   static String get returnRequestCreateAlt => '$gatewayBase/returns/requests';
   static String get returnRequestCreateOrders => '$gatewayBase/orders/return-request';
   static String get returnRequestCreateOrdersDirect => '$gatewayBase/orders/returns/request';
+
+  /// Direct user return requests endpoints (aggregated & fast)
+  static String returnRequestsByUser(String userId) =>
+      '$_dsBase/orders/return-requests/by/user/$userId';
+  static String orderReturnRequestsByUser(String userId) =>
+      '$gatewayBase/orders/return-requests/by/user/$userId';
+  static String returnsByUser(String userId) =>
+      '$gatewayBase/returns/requests/user/$userId';
 
   /// GET /api/orders/return-requests/{shop_id}?order_id={order_id} (Fetch return requests for an order)
   static String returnRequestsByOrder(String orderId, {String? shopId}) {
@@ -228,4 +239,33 @@ class ApiConfig {
   /// PATCH /api/orders/return-requests/{request_id}/status
   static String returnRequestUpdateStatus(String requestId) =>
       '$gatewayBase/orders/return-requests/$requestId/status';
+
+  // ═══════════════════════════════════════════════════════════════════
+  // NOTIFICATIONS SERVICE (via API Gateway -> /notifications)
+  // ═══════════════════════════════════════════════════════════════════
+
+  /// GET /api/notifications/?user_id={userId}&limit=100
+  static String get notificationsList => '$gatewayBase/notifications/';
+
+  /// PATCH /api/notifications/{id}/read
+  static String notificationMarkRead(String notificationId) =>
+      '$gatewayBase/notifications/$notificationId/read';
+
+  /// PATCH /api/notifications/read-all
+  static String get notificationsMarkAllRead => '$gatewayBase/notifications/read-all';
+
+  /// DELETE /api/notifications/{id}
+  static String notificationDelete(String notificationId) =>
+      '$gatewayBase/notifications/$notificationId';
+
+  /// DELETE /api/notifications/clear-all
+  static String get notificationsClearAll => '$gatewayBase/notifications/clear-all';
+
+  /// WS /api/notifications/ws/{userId}
+  static String notificationsWs(String userId) {
+    final wsBase = gatewayBase
+        .replaceFirst('https://', 'wss://')
+        .replaceFirst('http://', 'ws://');
+    return '$wsBase/notifications/ws/$userId';
+  }
 }

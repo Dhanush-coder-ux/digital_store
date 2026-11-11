@@ -468,6 +468,83 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     return 'Standard Home Delivery';
   }
 
+  bool _hasOrderReturn(BuildContext context) {
+    if (_order.hasReturn) return true;
+    final reqs = context.watch<ReturnRequestProvider>().getRequestsForOrder(_order.id);
+    return reqs.any((r) =>
+        ApiOrder.acceptedReturnStatuses.contains(r.status.toUpperCase().trim()));
+  }
+
+  double _itemReturnQty(BuildContext context, ApiOrderItem item) {
+    final directOrOrder = _order.itemReturnedQty(item);
+    final reqs = context.watch<ReturnRequestProvider>().getRequestsForOrder(_order.id);
+    double provQty = 0.0;
+    for (final r in reqs) {
+      if (!ApiOrder.acceptedReturnStatuses.contains(r.status.toUpperCase().trim())) {
+        continue;
+      }
+      for (final ri in r.items) {
+        final matchId = item.orderItemId != null &&
+            item.orderItemId!.isNotEmpty &&
+            ri.orderItemId == item.orderItemId;
+        final matchProd = item.productId.isNotEmpty && ri.productId == item.productId;
+        final matchName = item.productName != null &&
+            ri.productName.trim().toLowerCase() ==
+                item.productName!.trim().toLowerCase();
+        if (matchId || matchProd || matchName) {
+          provQty += ri.quantity;
+        }
+      }
+    }
+    return directOrOrder > provQty ? directOrOrder : provQty;
+  }
+
+  bool _isOrderItemReturned(BuildContext context, ApiOrderItem item) {
+    return item.isReturned || _itemReturnQty(context, item) > 0;
+  }
+
+  bool _isOrderPartiallyReturned(BuildContext context) {
+    if (!_hasOrderReturn(context)) return false;
+    final st = _normalizedStatus;
+    if (st == 'RETURNED' || st == 'REFUNDED' || _order.items.isEmpty) return false;
+    return !_order.items.every((item) {
+      final itemSt = (item.itemStatus ?? '').toUpperCase().trim();
+      if (itemSt == 'RETURNED' || itemSt == 'REFUNDED') return true;
+      return _itemReturnQty(context, item) >= item.qty && item.qty > 0;
+    });
+  }
+
+  Widget _buildReturnTagBadge({bool isPartial = false, String? customLabel}) {
+    const Color bg = Color(0xFFFFF7ED);
+    const Color border = Color(0xFFFED7AA);
+    const Color fg = Color(0xFFC2410C);
+    final label = customLabel ?? (isPartial ? 'Partially Returned' : 'Returned');
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(LucideIcons.rotateCcw, size: 10, color: fg),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final shop = _resolveShop(context);
@@ -608,7 +685,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              _buildStatusBadge(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _buildStatusBadge(),
+                  if (_hasOrderReturn(context)) ...[
+                    const SizedBox(height: 6),
+                    _buildReturnTagBadge(isPartial: _isOrderPartiallyReturned(context)),
+                  ],
+                ],
+              ),
             ],
           ),
           if (shop != null) ...[
@@ -841,7 +927,27 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                       color: _error,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  if (_order.cancelledByDisplay != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _error.withValues(alpha: 0.25)),
+                      ),
+                      child: Text(
+                        _order.cancelledByDisplay!,
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _error,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 6),
                   Text(
                     'This order has been cancelled. If any payment was deducted, it will be refunded to your source account within 3–5 business days.',
                     style: TextStyle(
@@ -1121,6 +1227,16 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                         .firstOrNull
                         ?.primaryImage;
 
+                final bool itemReturned = _isOrderItemReturned(context, item);
+                final double itemRetQty = _itemReturnQty(context, item);
+                final double gstRate = item.effectiveGstRate;
+                final bool hasItemGst = gstRate > 0;
+                final String? retLabel = !itemReturned
+                    ? null
+                    : (itemRetQty > 0 && itemRetQty < item.qty
+                        ? 'Returned (${itemRetQty.toStringAsFixed(itemRetQty.truncateToDouble() == itemRetQty ? 0 : 1)}/${item.qty.toStringAsFixed(item.qty.truncateToDouble() == item.qty ? 0 : 1)})'
+                        : 'Returned');
+
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1143,6 +1259,10 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          if (itemReturned) ...[
+                            const SizedBox(height: 4),
+                            _buildReturnTagBadge(customLabel: retLabel),
+                          ],
                           if (item.unit != null && item.unit!.isNotEmpty) ...[
                             const SizedBox(height: 2),
                             Text(
@@ -1163,6 +1283,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                               color: _textSecondary,
                             ),
                           ),
+                          if (hasItemGst) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Base: ₹${item.lineBasePrice.toStringAsFixed(2)} • GST (${gstRate.toStringAsFixed(gstRate % 1 == 0 ? 0 : 1)}%): ₹${item.lineGstAmount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 11.5,
+                                color: _textSecondary,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1580,6 +1711,32 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           const SizedBox(height: 10),
           const Divider(color: _border, height: 1),
           const SizedBox(height: 10),
+          if (_order.totalGstAmount > 0) ...[
+            _buildPriceRow(
+              'Items Base Price',
+              '₹${_order.baseSubtotal.toStringAsFixed(2)}',
+            ),
+            const SizedBox(height: 8),
+            _buildPriceRow(
+              _order.gstPercentLabel.isNotEmpty
+                  ? 'Total GST (${_order.gstPercentLabel})'
+                  : 'Total GST',
+              '₹${_order.totalGstAmount.toStringAsFixed(2)}',
+            ),
+            const SizedBox(height: 3),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'CGST: ₹${_order.cgstAmount.toStringAsFixed(2)} • SGST: ₹${_order.sgstAmount.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  color: _textMuted,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           // Subtotal
           _buildPriceRow('Items Subtotal', '₹${_subtotal.toStringAsFixed(2)}'),
           const SizedBox(height: 8),
@@ -1689,8 +1846,8 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           const SizedBox(height: 12),
         ],
 
-        // Return Product Action / Current Return Status (only eligible if order is DELIVERED)
-        if (_isDelivered) ...[
+        // Return Product Action / Current Return Status (only eligible if delivered and not cancelled/rejected)
+        if (_isDelivered && !_isCancelled && _normalizedStatus != 'REJECTED') ...[
           Consumer<ReturnRequestProvider>(
             builder: (context, returnProv, _) {
               final activeRequest = returnProv.getLatestRequestForOrder(_order.id);
@@ -1924,93 +2081,141 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
   // ── Action: Cancel Confirmation Dialog ──────────────────────────────
   void _showCancelOrderDialog(Shop? shop) {
+    bool isCancelling = false;
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: _surface,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Cancel Order?',
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            fontWeight: FontWeight.w700,
-            color: _textPrimary,
-          ),
-        ),
-        content: Text(
-          'Are you sure you want to cancel order #${_order.uiId ?? _order.id}? This will notify ${shop?.name ?? 'the shop'} immediately.',
-          style: const TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 14,
-            color: _textSecondary,
-            height: 1.4,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(
-              'Keep Order',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontWeight: FontWeight.w600,
-                color: _textSecondary,
-              ),
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: _surface,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            'Cancel Order?',
+            style: TextStyle(
+              fontFamily: 'Outfit',
+              fontWeight: FontWeight.w700,
+              color: _textPrimary,
             ),
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              // Update status locally with feedback
-              setState(() {
-                _order = ApiOrder(
-                  id: _order.id,
-                  uiId: _order.uiId,
-                  shopId: _order.shopId,
-                  customerId: _order.customerId,
-                  status: 'CANCELLED',
-                  description: _order.description,
-                  totalAmount: _order.totalAmount,
-                  items: _order.items,
-                  calculationInfos: _order.calculationInfos,
-                  paymentInfos: _order.paymentInfos,
-                  createdAt: _order.createdAt,
-                  updatedAt: DateTime.now().toIso8601String(),
-                  otp: null,
-                );
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    'Order cancellation request submitted successfully.',
-                    style: TextStyle(fontFamily: 'Outfit', color: Colors.white),
-                  ),
-                  backgroundColor: _error,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+          content: Text(
+            'Are you sure you want to cancel order #${_order.uiId ?? _order.id}? This will notify ${shop?.name ?? 'the shop'} immediately.',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 14,
+              color: _textSecondary,
+              height: 1.4,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isCancelling ? null : () => Navigator.of(dialogContext).pop(),
+              child: const Text(
+                'Keep Order',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontWeight: FontWeight.w600,
+                  color: _textSecondary,
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _error,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
               ),
             ),
-            child: const Text(
-              'Yes, Cancel',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+            ElevatedButton(
+              onPressed: isCancelling
+                  ? null
+                  : () async {
+                      setDialogState(() => isCancelling = true);
+                      final userOrderProv = context.read<UserOrderProvider>();
+                      final cartProv = context.read<ApiCartProvider>();
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        final updated = await userOrderProv.cancelOrder(
+                          orderId: _order.id,
+                          shopId: _order.shopId,
+                        );
+                        final newStatus = updated?.status ?? 'CANCELED';
+                        cartProv.updateOrderStatusLocally(_order.id, newStatus);
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        }
+                        if (mounted) {
+                          final mergedAdd = Map<String, dynamic>.from(
+                            _order.additionalInfos ?? const {},
+                          )
+                            ..['cancelled_by_source'] = 'DIGITAL_STORE'
+                            ..['cancelled_by'] = 'Customer'
+                            ..['cancelled_by_label'] = 'Cancelled by Customer';
+                          setState(() {
+                            _order = (updated ??
+                                    _order.copyWith(
+                                      status: newStatus,
+                                      updatedAt: DateTime.now().toIso8601String(),
+                                      otp: null,
+                                    ))
+                                .copyWith(additionalInfos: mergedAdd);
+                          });
+                        }
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: const Text(
+                              'Order cancelled successfully.',
+                              style: TextStyle(fontFamily: 'Outfit', color: Colors.white),
+                            ),
+                            backgroundColor: _error,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+                      } catch (e) {
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop();
+                        }
+                        final msg = e.toString().replaceFirst('Exception: ', '').trim();
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              msg.isNotEmpty
+                                  ? 'Failed to cancel order: $msg'
+                                  : 'Failed to cancel order. Please try again.',
+                              style: const TextStyle(fontFamily: 'Outfit', color: Colors.white),
+                            ),
+                            backgroundColor: _error,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _error,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
+              child: isCancelling
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Yes, Cancel',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

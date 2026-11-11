@@ -332,7 +332,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           child: ElevatedButton(
                             onPressed: () {
                               final auth = context.read<AuthProvider>();
-                              _enterApp(auth.isAuthenticated ? false : false);
+                              _enterApp(!auth.isAuthenticated);
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.primaryBlue,

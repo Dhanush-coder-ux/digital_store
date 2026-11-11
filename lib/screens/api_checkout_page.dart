@@ -25,6 +25,7 @@ import '../models/shop_model.dart';
 import '../models/shop_provider.dart';
 import '../models/api_cart_provider.dart';
 import '../models/cart_session_model.dart';
+import '../models/order_model.dart';
 import '../models/profile_provider.dart';
 import '../models/providers.dart';
 import '../core/auth/auth_provider.dart';
@@ -53,6 +54,7 @@ class ApiCheckoutPage extends StatefulWidget {
 class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _phoneFocusNode = FocusNode();
   final _addressController = TextEditingController();
   final _noteController = TextEditingController();
 
@@ -213,12 +215,15 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
   }
 
   void _selectSavedAddress(AddressModel addr) {
+    final authMobile = context.read<AuthProvider>().mobile?.trim() ?? '';
     setState(() {
       _selectedAddress = addr;
       _isManualAddress = false;
       _addressController.text = _formatAddress(addr);
-      if (addr.phone.isNotEmpty) {
-        _phoneController.text = addr.phone;
+      if (addr.phone.trim().isNotEmpty) {
+        _phoneController.text = addr.phone.trim();
+      } else {
+        _phoneController.text = authMobile;
       }
     });
     try {
@@ -244,6 +249,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _phoneFocusNode.dispose();
     _addressController.dispose();
     _noteController.dispose();
     super.dispose();
@@ -317,11 +323,50 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
     if (phone.isEmpty && activeAddress != null && activeAddress.phone.trim().isNotEmpty) {
       phone = activeAddress.phone.trim();
     }
-    if (phone.isEmpty && auth.mobile != null && auth.mobile!.isNotEmpty) {
-      phone = auth.mobile!;
+    if (phone.isEmpty && auth.mobile != null && auth.mobile!.trim().isNotEmpty) {
+      phone = auth.mobile!.trim();
+    }
+    if (phone.isEmpty && selectedOption.isPickup && profileProvider.defaultAddress?.phone.trim().isNotEmpty == true) {
+      phone = profileProvider.defaultAddress!.phone.trim();
     }
 
-    // 1. Minimum order value validation check
+    // 1. Mobile number validation for ONLINE orders
+    final String phoneDigits = phone.replaceAll(RegExp(r'\D'), '');
+    if (phone.isEmpty || phoneDigits.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid 10-digit mobile number for this order'),
+          backgroundColor: _errorRed,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      _phoneFocusNode.requestFocus();
+      return;
+    }
+
+    // Save entered mobile number back to selected saved address if it had no phone
+    if (!selectedOption.isPickup &&
+        !_isManualAddress &&
+        activeAddress != null &&
+        activeAddress.phone.trim().isEmpty &&
+        activeAddress.addressId != null &&
+        auth.userId != null) {
+      final updatedAddr = activeAddress.copyWith(phone: phone);
+      try {
+        final saved = await profileProvider.updateAddress(
+          auth.userId!,
+          activeAddress.addressId!,
+          updatedAddr,
+        );
+        if (saved && mounted) {
+          setState(() => _selectedAddress = updatedAddr);
+        }
+      } catch (_) {}
+      if (!mounted) return;
+    }
+
+    // 2. Minimum order value validation check
     if (selectedOption.minOrderAmount > 0 && cart.subtotal < selectedOption.minOrderAmount) {
       final double diff = selectedOption.minOrderAmount - cart.subtotal;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1361,68 +1406,155 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
   // ── 5. Delivery Address / Store Pickup Location ─────────────────────
 
   Widget _buildPickupInfoSection() {
+    final auth = context.watch<AuthProvider>();
+    final profileProvider = context.watch<ProfileProvider>();
+    final bool hasFallbackPhone = _phoneController.text.trim().isNotEmpty ||
+        (auth.mobile?.trim().isNotEmpty ?? false) ||
+        (profileProvider.defaultAddress?.phone.trim().isNotEmpty ?? false);
+
     return _sectionCard(
       title: 'Store Pickup Location',
       icon: LucideIcons.shoppingBag,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _surfaceSecondary,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _borderSubtle),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: _successBg,
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: const Icon(LucideIcons.store, size: 16, color: _successGreen),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _surfaceSecondary,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _borderSubtle),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.shop.name,
-                    style: const TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _textPrimary,
-                    ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: _successBg,
+                    borderRadius: BorderRadius.circular(7),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.shop.displayAddress.isNotEmpty
-                        ? widget.shop.displayAddress
-                        : 'Collect directly in-store after order confirmation.',
+                  child: const Icon(LucideIcons.store, size: 16, color: _successGreen),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.shop.name,
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: _textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.shop.displayAddress.isNotEmpty
+                            ? widget.shop.displayAddress
+                            : 'Collect directly in-store after order confirmation.',
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 11.5,
+                          color: _textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'No delivery address required for store pickup.',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _successGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!hasFallbackPhone) ...[
+            const SizedBox(height: 10),
+            _buildPhoneInputField(
+              promptMessage: 'Enter a mobile number for pickup confirmation & updates',
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPhoneInputField({String? promptMessage}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (promptMessage != null) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: _amberLight,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _amberBorder),
+            ),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.phone, size: 14, color: _amberPrimary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    promptMessage,
                     style: const TextStyle(
                       fontFamily: 'Outfit',
                       fontSize: 11.5,
-                      color: _textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'No delivery address required for store pickup.',
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: _successGreen,
+                      color: _textPrimary,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
+        ],
+        TextField(
+          controller: _phoneController,
+          focusNode: _phoneFocusNode,
+          keyboardType: TextInputType.phone,
+          style: const TextStyle(
+            fontFamily: 'Outfit',
+            fontSize: 13,
+            color: _textPrimary,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Enter 10-digit mobile number *',
+            hintStyle: const TextStyle(
+              fontFamily: 'Outfit',
+              color: _textTertiary,
+              fontSize: 13,
+            ),
+            prefixIcon: const Icon(LucideIcons.phone, size: 16, color: _amberPrimary),
+            filled: true,
+            fillColor: _surfaceSecondary,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _borderSubtle),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _borderSubtle),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _amberPrimary),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -1544,6 +1676,14 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
               ),
             ),
 
+            // Prompt for mobile number if selected saved address has none
+            if (activeAddress.phone.trim().isEmpty) ...[
+              const SizedBox(height: 10),
+              _buildPhoneInputField(
+                promptMessage: 'Selected address has no mobile number. Please enter your mobile number:',
+              ),
+            ],
+
             // Warning if outside radius
             if (isOutsideRadius) ...[
               const SizedBox(height: 8),
@@ -1642,38 +1782,7 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
               ),
             ),
             const SizedBox(height: 8),
-            TextField(
-              controller: _phoneController,
-              keyboardType: TextInputType.phone,
-              style: const TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 13,
-                color: _textPrimary,
-              ),
-              decoration: InputDecoration(
-                hintText: 'Contact phone number',
-                hintStyle: const TextStyle(
-                  fontFamily: 'Outfit',
-                  color: _textTertiary,
-                  fontSize: 13,
-                ),
-                filled: true,
-                fillColor: _surfaceSecondary,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _borderSubtle),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _borderSubtle),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: _amberPrimary),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              ),
-            ),
+            _buildPhoneInputField(),
             if (addresses.isNotEmpty) ...[
               const SizedBox(height: 6),
               GestureDetector(
@@ -2064,11 +2173,40 @@ class _ApiCheckoutPageState extends State<ApiCheckoutPage> {
     required ShopDeliveryOption selectedOption,
   }) {
     final cart = context.watch<ApiCartProvider>();
+    final double baseSubtotal = cart.baseSubtotal;
+    final double totalGst = cart.totalGstAmount;
+    final double cgst = double.parse((totalGst / 2.0).toStringAsFixed(2));
+    final double sgst = double.parse((totalGst - cgst).toStringAsFixed(2));
+
     return _sectionCard(
       title: 'Order Summary',
       icon: LucideIcons.receipt,
       child: Column(
         children: [
+          if (totalGst > 0) ...[
+            _summaryRow(
+              'Items Base Price',
+              '₹${baseSubtotal.toStringAsFixed(2)}',
+            ),
+            const SizedBox(height: 6),
+            _summaryRow(
+              'Total GST (Incl.)',
+              '₹${totalGst.toStringAsFixed(2)}',
+            ),
+            const SizedBox(height: 2),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                'CGST: ₹${cgst.toStringAsFixed(2)} • SGST: ₹${sgst.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  color: _textTertiary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           _summaryRow(
             'Items Subtotal (${cart.itemCount})',
             '₹${subtotal.toStringAsFixed(2)}',
@@ -2447,14 +2585,14 @@ class _CartItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Determine effective GST rate and pricing split
-    final double rawGstRate = item.gstRate;
-    final double effectiveGstRate = isShopGstRegistered ? rawGstRate : 0.0;
+    // Determine effective GST rate and pricing split (always show product GST breakdown)
+    final double effectiveGstRate = item.gstRate;
     final bool hasGst = effectiveGstRate > 0;
 
     final double unitPrice = item.sellingPrice;
-    final double unitGst = hasGst ? double.parse((unitPrice * (effectiveGstRate / 100.0)).toStringAsFixed(2)) : 0.0;
-    final double unitBasePrice = hasGst ? double.parse((unitPrice - unitGst).toStringAsFixed(2)) : unitPrice;
+    final split = calculateInclusiveTaxSplit(unitPrice, effectiveGstRate);
+    final double unitGst = hasGst ? split.unitGst : 0.0;
+    final double unitBasePrice = hasGst ? split.unitBasePrice : unitPrice;
 
     final double itemSubtotal = item.lineTotal;
     final double lineGst = hasGst ? double.parse((unitGst * item.qty).toStringAsFixed(2)) : 0.0;
@@ -2656,13 +2794,13 @@ class _LocalItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double rawGstRate = entry.gstRate;
-    final double effectiveGstRate = isShopGstRegistered ? rawGstRate : 0.0;
+    final double effectiveGstRate = entry.gstRate;
     final bool hasGst = effectiveGstRate > 0;
 
     final double unitPrice = entry.product.displayPrice;
-    final double unitGst = hasGst ? double.parse((unitPrice * (effectiveGstRate / 100.0)).toStringAsFixed(2)) : 0.0;
-    final double unitBasePrice = hasGst ? double.parse((unitPrice - unitGst).toStringAsFixed(2)) : unitPrice;
+    final split = calculateInclusiveTaxSplit(unitPrice, effectiveGstRate);
+    final double unitGst = hasGst ? split.unitGst : 0.0;
+    final double unitBasePrice = hasGst ? split.unitBasePrice : unitPrice;
 
     final double itemSubtotal = entry.lineTotal;
     final double lineGst = hasGst ? double.parse((unitGst * entry.qty).toStringAsFixed(2)) : 0.0;

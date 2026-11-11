@@ -9,6 +9,7 @@ import '../models/shop_provider.dart';
 import '../models/shop_model.dart';
 import '../models/profile_provider.dart';
 import '../core/auth/auth_provider.dart';
+import '../l10n/app_translations.dart';
 import '../widgets/store_card.dart';
 import '../widgets/location_bottom_sheet.dart';
 import 'api_shop_details_page.dart';
@@ -150,7 +151,12 @@ class _HomePageState extends State<HomePage> {
       builder: (context, profile, _) {
         final auth = context.watch<AuthProvider>();
         final hour = DateTime.now().hour;
-        final greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+        final greetingKey = hour < 12
+            ? 'good_morning'
+            : hour < 17
+                ? 'good_afternoon'
+                : 'good_evening';
+        final greeting = context.tr(greetingKey);
         final name = profile.userName.isNotEmpty
             ? profile.userName.split(' ').first
             : (auth.isAuthenticated ? '' : 'Guest');
@@ -221,6 +227,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildNotificationButton() {
+    final unreadCount = context.watch<NotificationsProvider>().unreadCount;
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -228,15 +235,43 @@ class _HomePageState extends State<HomePage> {
           MaterialPageRoute(builder: (_) => const NotificationsPage()),
         );
       },
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.2),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1),
-        ),
-        child: const Icon(LucideIcons.bell, color: Colors.white, size: 18),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.35), width: 1),
+            ),
+            child: const Icon(LucideIcons.bell, color: Colors.white, size: 18),
+          ),
+          if (unreadCount > 0)
+            Positioned(
+              top: -4,
+              right: -4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorRed,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+                child: Text(
+                  unreadCount > 99 ? '99+' : '$unreadCount',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -275,13 +310,17 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(width: 10),
-          const Text(
-            'Search stores, categories or items...',
-            style: TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 14,
-              color: AppTheme.secondaryText,
-              fontWeight: FontWeight.w400,
+          Expanded(
+            child: Text(
+              context.tr('search_home_hint'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 14,
+                color: AppTheme.secondaryText,
+                fontWeight: FontWeight.w400,
+              ),
             ),
           ),
         ]),
@@ -293,7 +332,11 @@ class _HomePageState extends State<HomePage> {
   // Discovery scope — compact chip row
   // ─────────────────────────────────────────────────────────────────
   Widget _buildDiscoveryScope() {
-    final labels = ['Near you', 'Across city', 'Nationwide'];
+    final labels = [
+      context.tr('near_you'),
+      context.tr('across_city'),
+      context.tr('nationwide'),
+    ];
     final icons  = [LucideIcons.mapPin, LucideIcons.building2, LucideIcons.globe];
 
     return Row(children: List.generate(3, (i) {
@@ -351,10 +394,10 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('Categories', style: Theme.of(context).textTheme.titleMedium),
+              Text(context.tr('categories'), style: Theme.of(context).textTheme.titleMedium),
               GestureDetector(
                 onTap: () => MainScreen.pageIndexNotifier.value = 1,
-                child: Text('See all',
+                child: Text(context.tr('see_all'),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppTheme.primary, fontWeight: FontWeight.w600)),
               ),
@@ -392,14 +435,17 @@ class _HomePageState extends State<HomePage> {
         final count = sp.shops.length;
         return Row(children: [
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Nearby Stores', style: Theme.of(context).textTheme.titleMedium),
+            Text(context.tr('nearby_stores'), style: Theme.of(context).textTheme.titleMedium),
             if (count > 0)
-              Text('$count store${count != 1 ? "s" : ""} available',
+              Text(
+                count == 1
+                    ? context.tr('store_available_one')
+                    : context.tr('stores_available', args: {'count': '$count'}),
                 style: Theme.of(context).textTheme.bodySmall),
           ])),
           GestureDetector(
             onTap: () => MainScreen.pageIndexNotifier.value = 2,
-            child: Text('See all',
+            child: Text(context.tr('see_all'),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppTheme.primary, fontWeight: FontWeight.w600)),
           ),

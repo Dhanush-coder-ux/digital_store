@@ -383,6 +383,35 @@ class DigitalStoreService {
     return await _client.get(ApiConfig.dsOrderById(shopId, id));
   }
 
+  /// Cancels an order on the backend (sets status to CANCELED).
+  /// Tries direct Order Service route first, falling back to DigitalStore proxy.
+  Future<dynamic> cancelOrder({
+    required String orderId,
+    required String shopId,
+  }) async {
+    final payload = {
+      'id': orderId,
+      'shop_id': shopId,
+      'status': 'CANCELED',
+      'additional_infos': {
+        'cancelled_by_source': 'DIGITAL_STORE',
+        'cancelled_by': 'Customer',
+        'cancelled_by_label': 'Cancelled by Customer',
+      },
+    };
+    try {
+      return await _client.put(
+        ApiConfig.orderStatusUpdate,
+        body: payload,
+      );
+    } catch (_) {
+      return await _client.post(
+        ApiConfig.dsOrderCancel,
+        body: payload,
+      );
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // AGGREGATED — CART
   // ═══════════════════════════════════════════════════════════════════

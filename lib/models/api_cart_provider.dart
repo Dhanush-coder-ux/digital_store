@@ -91,6 +91,32 @@ class ApiCartProvider extends ChangeNotifier {
         .fold(0.0, (sum, e) => sum + (e.product.displayPrice * e.qty));
   }
 
+  double get baseSubtotal {
+    if (_items.isNotEmpty) {
+      return double.parse(
+        _items.fold(0.0, (sum, i) => sum + i.lineBasePrice).toStringAsFixed(2),
+      );
+    }
+    return double.parse(
+      _localMirror.values
+          .fold(0.0, (sum, e) => sum + e.lineBasePrice)
+          .toStringAsFixed(2),
+    );
+  }
+
+  double get totalGstAmount {
+    if (_items.isNotEmpty) {
+      return double.parse(
+        _items.fold(0.0, (sum, i) => sum + i.lineGstAmount).toStringAsFixed(2),
+      );
+    }
+    return double.parse(
+      _localMirror.values
+          .fold(0.0, (sum, e) => sum + e.lineGstAmount)
+          .toStringAsFixed(2),
+    );
+  }
+
   // Local mirror items for fast UI before backend sync
   List<LocalCartEntry> get localItems => _localMirror.values.toList();
 
@@ -685,13 +711,113 @@ class ApiCartProvider extends ChangeNotifier {
       final String? finalPincode = pincode ?? deliveryAddress?['pincode']?.toString();
       final String? finalState = state ?? deliveryAddress?['state']?.toString();
 
+      final List<Map<String, dynamic>> calcItems = [];
+      final Map<double, Map<String, double>> taxGroupsMap = {};
+      double calcBaseTotal = 0.0;
+      double calcGstTotal = 0.0;
+
+      void accumulateItem({
+        required String productId,
+        required String name,
+        String? variantName,
+        required double qty,
+        String? unit,
+        required double sellingPrice,
+        required double gstRate,
+        required double lineTotal,
+      }) {
+        final unitSplit = calculateInclusiveTaxSplit(sellingPrice, gstRate);
+        final lineTaxable = double.parse((unitSplit.unitBasePrice * qty).toStringAsFixed(2));
+        final lineGst = double.parse((unitSplit.unitGst * qty).toStringAsFixed(2));
+        final lineCgst = double.parse((lineGst / 2.0).toStringAsFixed(2));
+        final lineSgst = double.parse((lineGst - lineCgst).toStringAsFixed(2));
+
+        calcBaseTotal += lineTaxable;
+        calcGstTotal += lineGst;
+
+        if (gstRate > 0) {
+          final bucket = taxGroupsMap.putIfAbsent(
+            gstRate,
+            () => {'taxableValue': 0.0, 'totalTax': 0.0, 'cgst': 0.0, 'sgst': 0.0},
+          );
+          bucket['taxableValue'] = (bucket['taxableValue'] ?? 0.0) + lineTaxable;
+          bucket['totalTax'] = (bucket['totalTax'] ?? 0.0) + lineGst;
+          bucket['cgst'] = (bucket['cgst'] ?? 0.0) + lineCgst;
+          bucket['sgst'] = (bucket['sgst'] ?? 0.0) + lineSgst;
+        }
+
+        calcItems.add({
+          'product_id': productId,
+          'name': name,
+          'variant_name': ?variantName,
+          'qty': qty,
+          'unit': ?unit,
+          'price': sellingPrice,
+          'gst_rate': gstRate,
+          'taxable_value': lineTaxable,
+          'gst_amount': lineGst,
+          'cgst': lineCgst,
+          'sgst': lineSgst,
+          'final_inclusive': lineTotal,
+        });
+      }
+
+      if (_items.isNotEmpty) {
+        for (final cartItem in _items) {
+          accumulateItem(
+            productId: cartItem.productId,
+            name: cartItem.productName,
+            variantName: cartItem.variantName,
+            qty: cartItem.qty,
+            unit: cartItem.unit,
+            sellingPrice: cartItem.sellingPrice,
+            gstRate: cartItem.gstRate,
+            lineTotal: cartItem.lineTotal,
+          );
+        }
+      } else {
+        for (final localEntry in _localMirror.values) {
+          accumulateItem(
+            productId: localEntry.product.id,
+            name: localEntry.product.name,
+            qty: localEntry.qty.toDouble(),
+            sellingPrice: localEntry.product.displayPrice,
+            gstRate: localEntry.gstRate,
+            lineTotal: localEntry.lineTotal,
+          );
+        }
+      }
+
+      calcGstTotal = double.parse(calcGstTotal.toStringAsFixed(2));
+      calcBaseTotal = calcBaseTotal > 0
+          ? double.parse(calcBaseTotal.toStringAsFixed(2))
+          : double.parse((currentTotal - calcGstTotal).clamp(0.0, double.infinity).toStringAsFixed(2));
+      final double calcCgstTotal = double.parse((calcGstTotal / 2.0).toStringAsFixed(2));
+      final double calcSgstTotal = double.parse((calcGstTotal - calcCgstTotal).toStringAsFixed(2));
+      final taxGroupsList = taxGroupsMap.entries
+          .map((e) => {
+                'gstRate': e.key,
+                'taxableValue': double.parse((e.value['taxableValue'] ?? 0.0).toStringAsFixed(2)),
+                'cgst': double.parse((e.value['cgst'] ?? 0.0).toStringAsFixed(2)),
+                'sgst': double.parse((e.value['sgst'] ?? 0.0).toStringAsFixed(2)),
+                'totalTax': double.parse((e.value['totalTax'] ?? 0.0).toStringAsFixed(2)),
+              })
+          .toList();
+
       final Map<String, dynamic> calculationInfos = {
         'subtotal': currentTotal,
+        'taxable_amount': calcBaseTotal,
+        'base_subtotal': calcBaseTotal,
+        'gst_amount': calcGstTotal,
+        'cgst': calcCgstTotal,
+        'sgst': calcSgstTotal,
+        if (taxGroupsList.isNotEmpty) 'tax_groups': taxGroupsList,
+        if (calcItems.isNotEmpty) 'items': calcItems,
         'delivery_fee': deliveryFee,
         'total': finalTotal,
         'grand_total': finalTotal,
-        if (finalFullAddress != null) 'full_address': finalFullAddress,
-        if (deliveryAddress != null) 'delivery_address': deliveryAddress,
+        'full_address': ?finalFullAddress,
+        'delivery_address': ?deliveryAddress,
       };
 
       final Map<String, dynamic> chargesInfos = {
@@ -757,17 +883,7 @@ class ApiCartProvider extends ChangeNotifier {
         if (item.imageUrl == null) {
           final matched = orderItems.where((c) => c.productId == item.productId).firstOrNull;
           if (matched?.imageUrl != null) {
-            return ApiOrderItem(
-              productId: item.productId,
-              variantId: item.variantId,
-              batchId: item.batchId,
-              qty: item.qty,
-              unit: item.unit,
-              unitPrice: item.unitPrice,
-              lineTotal: item.lineTotal,
-              productName: item.productName,
-              imageUrl: matched!.imageUrl,
-            );
+            return item.copyWith(imageUrl: matched!.imageUrl);
           }
         }
         return item;
@@ -960,6 +1076,17 @@ class ApiCartProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  void updateOrderStatusLocally(String orderId, String newStatus) {
+    final idx = _myOrders.indexWhere((o) => o.id == orderId);
+    if (idx >= 0) {
+      _myOrders[idx] = _myOrders[idx].copyWith(
+        status: newStatus,
+        updatedAt: DateTime.now().toIso8601String(),
+      );
+      notifyListeners();
+    }
   }
 
   // ── Refresh Orders ──────────────────────────────────────────────────

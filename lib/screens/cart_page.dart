@@ -5,6 +5,7 @@ import 'package:animate_do/animate_do.dart';
 import '../models/api_cart_provider.dart';
 import '../models/shop_provider.dart';
 import '../models/shop_model.dart';
+import '../l10n/app_translations.dart';
 import '../theme/app_theme.dart';
 import 'api_checkout_page.dart';
 import 'main_screen.dart';
@@ -32,9 +33,9 @@ class CartPage extends StatelessWidget {
               backgroundColor: AppTheme.white,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
-              title: const Text(
-                'My Cart',
-                style: TextStyle(
+              title: Text(
+                context.tr('my_cart'),
+                style: const TextStyle(
                   fontFamily: 'Outfit',
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -72,9 +73,9 @@ class CartPage extends StatelessWidget {
                     const SizedBox(height: 24),
                     FadeIn(
                       duration: const Duration(milliseconds: 500),
-                      child: const Text(
-                        'Your cart is empty',
-                        style: TextStyle(
+                      child: Text(
+                        context.tr('cart_empty'),
+                        style: const TextStyle(
                           fontFamily: 'Outfit',
                           fontSize: 20,
                           fontWeight: FontWeight.w700,
@@ -85,10 +86,10 @@ class CartPage extends StatelessWidget {
                     const SizedBox(height: 8),
                     FadeIn(
                       duration: const Duration(milliseconds: 600),
-                      child: const Text(
-                        'Looks like you haven\'t added any items yet. Explore nearby stores to start shopping!',
+                      child: Text(
+                        context.tr('cart_empty_desc'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontFamily: 'Outfit',
                           fontSize: 14,
                           color: AppTheme.textSecondary,
@@ -107,9 +108,9 @@ class CartPage extends StatelessWidget {
                             MainScreen.pageIndexNotifier.value = 0;
                           },
                           icon: const Icon(LucideIcons.arrowLeft, size: 18),
-                          label: const Text(
-                            'Start Shopping',
-                            style: TextStyle(
+                          label: Text(
+                            context.tr('start_shopping'),
+                            style: const TextStyle(
                               fontFamily: 'Outfit',
                               fontSize: 15,
                               fontWeight: FontWeight.w600,

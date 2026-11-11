@@ -15,7 +15,9 @@ import 'saved_addresses_page.dart';
 import 'package:provider/provider.dart';
 import '../models/profile_provider.dart';
 import '../models/favorites_api_provider.dart';
+import '../models/providers.dart';
 import '../core/auth/auth_provider.dart';
+import '../l10n/app_translations.dart';
 import '../models/language_provider.dart';
 import 'support_faq_page.dart';
 import 'terms_of_service_page.dart';
@@ -158,15 +160,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: AppTheme.xl),
                 _buildStatsRow(context),
                 const SizedBox(height: AppTheme.xxl),
-                _buildSectionLabel(context, 'ACCOUNT'),
+                _buildSectionLabel(context, context.tr('account')),
                 const SizedBox(height: AppTheme.sm),
                 _buildAccountSection(context),
                 const SizedBox(height: AppTheme.xxl),
-                _buildSectionLabel(context, 'GENERAL'),
+                _buildSectionLabel(context, context.tr('general')),
                 const SizedBox(height: AppTheme.sm),
                 _buildGeneralSection(context),
                 const SizedBox(height: AppTheme.xxl),
-                _buildSectionLabel(context, 'PREFERENCES'),
+                _buildSectionLabel(context, context.tr('preferences')),
                 const SizedBox(height: AppTheme.sm),
                 _buildPreferencesSection(context),
                 const SizedBox(height: AppTheme.xxl),
@@ -289,11 +291,11 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           child: Row(
             children: [
-              _buildStat(context, '12', 'Orders', LucideIcons.shoppingBag),
+              _buildStat(context, '12', context.tr('orders_stat'), LucideIcons.shoppingBag),
               _buildStatDivider(),
-              _buildStat(context, '5', 'Reviews', LucideIcons.star),
+              _buildStat(context, '5', context.tr('reviews_stat'), LucideIcons.star),
               _buildStatDivider(),
-              _buildStat(context, '8', 'Favorites', LucideIcons.heart),
+              _buildStat(context, '8', context.tr('favorites_stat'), LucideIcons.heart),
             ],
           ),
         ),
@@ -368,8 +370,8 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: LucideIcons.receipt,
               iconBg: AppTheme.lightBlue,
               iconColor: AppTheme.primaryBlue,
-              title: 'My Orders',
-              subtitle: 'Track & reorder',
+              title: context.tr('my_orders'),
+              subtitle: context.tr('my_orders_sub'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const MyOrdersPage()),
@@ -381,8 +383,8 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: LucideIcons.rotateCcw,
               iconBg: const Color(0xFFFEF3C7),
               iconColor: const Color(0xFFD97706),
-              title: 'Return Requests',
-              subtitle: 'Track returns & refunds',
+              title: context.tr('return_requests'),
+              subtitle: context.tr('return_requests_sub'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const MyReturnRequestsPage()),
@@ -394,8 +396,8 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: LucideIcons.mapPin,
               iconBg: AppTheme.lightBlue,
               iconColor: AppTheme.primaryBlue,
-              title: 'Saved Addresses',
-              subtitle: 'Home, Office, Parents',
+              title: context.tr('saved_addresses'),
+              subtitle: context.tr('saved_addresses_sub'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const SavedAddressesPage()),
@@ -424,13 +426,15 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: LucideIcons.bell,
               iconBg: AppTheme.bgSecondary,
               iconColor: AppTheme.textPrimary,
-              title: 'Notifications',
-              subtitle: 'Deals, order updates',
-              trailing: Switch(
-                value: true,
-                onChanged: (_) {},
-                activeColor: AppTheme.primaryBlue,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              title: context.tr('notifications'),
+              subtitle: context.tr('notifications_sub'),
+              trailing: Consumer<NotificationsProvider>(
+                builder: (context, notifProvider, _) => Switch(
+                  value: notifProvider.notificationsEnabled,
+                  onChanged: (val) => notifProvider.setNotificationsEnabled(val),
+                  activeColor: AppTheme.primaryBlue,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
             ),
             _buildDivider(),
@@ -439,8 +443,8 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: LucideIcons.heart,
               iconBg: AppTheme.lightBlue,
               iconColor: AppTheme.primaryBlue,
-              title: 'Favorites',
-              subtitle: 'Liked stores & items',
+              title: context.tr('favorites'),
+              subtitle: context.tr('favorites_sub'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const FavoritesPage()),
@@ -452,8 +456,8 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: LucideIcons.headphones,
               iconBg: AppTheme.bgSecondary,
               iconColor: AppTheme.textPrimary,
-              title: 'Support & FAQ',
-              subtitle: 'Help center, chat',
+              title: context.tr('support_faq'),
+              subtitle: context.tr('support_faq_sub'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const SupportFaqPage()),
@@ -465,8 +469,8 @@ class _ProfilePageState extends State<ProfilePage> {
               icon: LucideIcons.fileText,
               iconBg: AppTheme.bgSecondary,
               iconColor: AppTheme.textPrimary,
-              title: 'Terms of Service',
-              subtitle: 'ShopiQ terms & privacy policy',
+              title: context.tr('terms_of_service'),
+              subtitle: context.tr('terms_of_service_sub'),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const TermsOfServicePage()),
@@ -497,7 +501,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: LucideIcons.globe,
                   iconBg: AppTheme.bgSecondary,
                   iconColor: AppTheme.textPrimary,
-                  title: 'Language',
+                  title: context.tr('language'),
                   subtitle: languageProvider.currentLanguageName,
                   onTap: () => _showLanguageSelector(context, languageProvider),
                 ),
@@ -510,58 +514,190 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _showLanguageSelector(BuildContext context, LanguageProvider provider) {
+    final searchController = TextEditingController();
+    String query = '';
+
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppTheme.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppTheme.lg),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Select Language',
-                  style: TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: AppTheme.md),
-                const Divider(color: AppTheme.veryLightGray),
-                ...LanguageProvider.supportedLanguages.map((lang) {
-                  final isSelected = provider.currentLocale.languageCode == lang['code'];
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
-                    title: Text(
-                      lang['name']!,
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 16,
-                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected ? AppTheme.primaryBlue : AppTheme.textPrimary,
+      builder: (BuildContext sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredLanguages = LanguageProvider.supportedLanguages.where((lang) {
+              if (query.isEmpty) return true;
+              final q = query.toLowerCase();
+              final name = (lang['name'] ?? '').toLowerCase();
+              final english = (lang['englishName'] ?? '').toLowerCase();
+              final code = (lang['code'] ?? '').toLowerCase();
+              return name.contains(q) || english.contains(q) || code.contains(q);
+            }).toList();
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.72,
+              minChildSize: 0.45,
+              maxChildSize: 0.9,
+              expand: false,
+              builder: (context, scrollController) {
+                return SafeArea(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: AppTheme.sm),
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppTheme.veryLightGray,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
-                    ),
-                    trailing: isSelected
-                        ? const Icon(LucideIcons.check, color: AppTheme.primaryBlue)
-                        : null,
-                    onTap: () {
-                      provider.setLanguage(lang['code']!);
-                      Navigator.pop(context);
-                    },
-                  );
-                }),
-              ],
-            ),
-          ),
+                      const SizedBox(height: AppTheme.md),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
+                        child: Text(
+                          provider.tr('select_language'),
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.md),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
+                        child: TextField(
+                          controller: searchController,
+                          onChanged: (value) {
+                            setModalState(() {
+                              query = value.trim();
+                            });
+                          },
+                          decoration: InputDecoration(
+                            hintText: provider.tr('search_languages'),
+                            hintStyle: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 14,
+                              color: AppTheme.textTertiary,
+                            ),
+                            prefixIcon: const Icon(
+                              LucideIcons.search,
+                              size: 18,
+                              color: AppTheme.textSecondary,
+                            ),
+                            suffixIcon: query.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(
+                                      LucideIcons.x,
+                                      size: 16,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                    onPressed: () {
+                                      searchController.clear();
+                                      setModalState(() {
+                                        query = '';
+                                      });
+                                    },
+                                  )
+                                : null,
+                            filled: true,
+                            fillColor: AppTheme.bgSecondary,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: AppTheme.md,
+                              vertical: 10,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.md),
+                      const Divider(height: 1, color: AppTheme.veryLightGray),
+                      Expanded(
+                        child: filteredLanguages.isEmpty
+                            ? Center(
+                                child: Text(
+                                  provider.tr('no_languages_found'),
+                                  style: const TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 14,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                controller: scrollController,
+                                itemCount: filteredLanguages.length,
+                                separatorBuilder: (_, __) => const Divider(
+                                  height: 1,
+                                  indent: AppTheme.xl,
+                                  endIndent: AppTheme.xl,
+                                  color: AppTheme.veryLightGray,
+                                ),
+                                itemBuilder: (context, index) {
+                                  final lang = filteredLanguages[index];
+                                  final code = lang['code']!;
+                                  final nativeName = lang['name']!;
+                                  final englishName = lang['englishName'] ?? nativeName;
+                                  final isSelected =
+                                      provider.currentLocale.languageCode == code;
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: AppTheme.xl,
+                                      vertical: 2,
+                                    ),
+                                    title: Text(
+                                      nativeName,
+                                      style: TextStyle(
+                                        fontFamily: 'Outfit',
+                                        fontSize: 16,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: isSelected
+                                            ? AppTheme.primaryBlue
+                                            : AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    subtitle: englishName != nativeName
+                                        ? Text(
+                                            englishName,
+                                            style: const TextStyle(
+                                              fontFamily: 'Outfit',
+                                              fontSize: 12,
+                                              color: AppTheme.textSecondary,
+                                            ),
+                                          )
+                                        : null,
+                                    trailing: isSelected
+                                        ? const Icon(
+                                            LucideIcons.check,
+                                            color: AppTheme.primaryBlue,
+                                          )
+                                        : null,
+                                    onTap: () {
+                                      provider.setLanguage(code);
+                                      Navigator.pop(sheetContext);
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         );
       },
-    );
+    ).whenComplete(searchController.dispose);
   }
 
   Widget _buildLogoutButton(BuildContext context) {
@@ -572,9 +708,10 @@ class _ProfilePageState extends State<ProfilePage> {
           // Reset user-specific providers before logging out
           context.read<ProfileProvider>().reset();
           context.read<FavoritesApiProvider>().reset();
+          context.read<NotificationsProvider>().reset();
           await context.read<AuthProvider>().logout();
           if (context.mounted) {
-            Navigator.of(context).pushReplacementNamed('/login');
+            Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
           }
         },
         child: Container(
@@ -594,7 +731,7 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
               const SizedBox(width: AppTheme.sm),
               Text(
-                'Log Out',
+                context.tr('log_out'),
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: AppTheme.errorRed,
                   fontWeight: FontWeight.w700,

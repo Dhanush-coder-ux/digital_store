@@ -9,6 +9,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import '../theme/app_theme.dart';
+import '../l10n/app_translations.dart';
 import '../models/shop_provider.dart';
 import '../models/category_model.dart';
 import '../widgets/category_widget.dart';
@@ -63,7 +64,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Categories',
+                        context.tr('categories'),
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: AppTheme.primaryText,
@@ -79,7 +80,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                               .toList();
                           final allItems = CategoryCatalog.getAllCategories(dynamicCats);
                           return Text(
-                            '${allItems.length} categories available',
+                            context.tr('categories_available', args: {'count': '${allItems.length}'}),
                             style: const TextStyle(
                               fontFamily: 'Outfit',
                               fontSize: 13,
@@ -135,7 +136,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
                     color: AppTheme.primaryText,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Search categories (fruits, bakery, dairy...)',
+                    hintText: context.tr('search_categories_hint'),
                     hintStyle: const TextStyle(
                       fontFamily: 'Outfit',
                       fontSize: 13,

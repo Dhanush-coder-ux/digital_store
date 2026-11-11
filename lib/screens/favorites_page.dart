@@ -9,6 +9,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../l10n/app_translations.dart';
 import '../core/auth/auth_provider.dart';
 import '../models/favorites_api_provider.dart';
 import '../models/shop_provider.dart';
@@ -64,9 +65,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
             icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text(
-            'Favorites',
-            style: TextStyle(
+          title: Text(
+            context.tr('favorites'),
+            style: const TextStyle(
               fontFamily: 'Outfit',
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -106,9 +107,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   fontSize: 13,
                 ),
                 labelPadding: EdgeInsets.zero,
-                tabs: const [
-                  Tab(text: 'Stores'),
-                  Tab(text: 'Products'),
+                tabs: [
+                  Tab(text: context.tr('liked_stores')),
+                  Tab(text: context.tr('liked_items')),
                 ],
               ),
             ),

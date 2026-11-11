@@ -1,24 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../l10n/app_translations.dart';
 
 class LanguageProvider extends ChangeNotifier {
   static const String _languageKey = 'selected_language';
-  
-  // App-supported languages
-  static const List<Map<String, String>> supportedLanguages = [
-    {'code': 'en', 'name': 'English (US)'},
-    {'code': 'es', 'name': 'Español'},
-    {'code': 'fr', 'name': 'Français'},
-    {'code': 'hi', 'name': 'हिन्दी'},
-    {'code': 'ta', 'name': 'தமிழ்'},
-  ];
+
+  // Full list of app-supported languages
+  static List<Map<String, String>> get supportedLanguages =>
+      AppTranslations.supportedLanguages;
+
+  // MaterialApp locale whitelist (only locales backed by GlobalMaterialLocalizations)
+  static List<Locale> get materialSupportedLocales {
+    final locales = supportedLanguages
+        .map((l) => Locale(l['code']!))
+        .where((loc) => GlobalMaterialLocalizations.delegate.isSupported(loc))
+        .toList();
+    if (!locales.any((l) => l.languageCode == 'en')) {
+      locales.insert(0, const Locale('en'));
+    }
+    return locales;
+  }
 
   Locale _currentLocale = const Locale('en');
   bool _isLoaded = false;
 
   Locale get currentLocale => _currentLocale;
   bool get isLoaded => _isLoaded;
-  
+
+  /// Safe locale passed to MaterialApp so unsupported Material scripts do not crash widgets.
+  Locale get materialLocale {
+    if (GlobalMaterialLocalizations.delegate.isSupported(_currentLocale)) {
+      return _currentLocale;
+    }
+    return const Locale('en');
+  }
+
+  String tr(String key, {Map<String, String>? args}) =>
+      AppTranslations.translate(_currentLocale.languageCode, key, args: args);
+
   String get currentLanguageName {
     final lang = supportedLanguages.firstWhere(
       (l) => l['code'] == _currentLocale.languageCode,
