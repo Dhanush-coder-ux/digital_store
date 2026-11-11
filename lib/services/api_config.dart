@@ -9,6 +9,7 @@ class ApiConfig {
 
 //   static String get gatewayBase => 'https://9045-106-51-172-186.ngrok-free.app/api';
   static String get gatewayBase => 'https://marketplace.debuggers.co.in/api';
+  static String get baseIp => Uri.tryParse(gatewayBase)?.host ?? '';
 
   // ═══════════════════════════════════════════════════════════════════
   // AUTHENTICATION ENDPOINTS
