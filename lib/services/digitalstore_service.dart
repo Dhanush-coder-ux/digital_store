@@ -52,6 +52,19 @@ class DigitalStoreService {
     return body is Map<String, dynamic> ? body : {};
   }
 
+  /// DELETE /digitalstore/users/profile/{user_id}
+  Future<bool> deleteProfile(String userId) async {
+    try {
+      await _client.delete(
+        ApiConfig.profileDelete(userId),
+        requiresAuth: true,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // ADDRESS
   // ═══════════════════════════════════════════════════════════════════
@@ -230,6 +243,17 @@ class DigitalStoreService {
           .toList();
     }
     return [];
+  }
+
+  /// GET /digitalstore/users/reviews/shop/{shop_id}/summary
+  Future<ShopReviewSummary?> getShopReviewSummary(String shopId) async {
+    try {
+      final body = await _client.get(ApiConfig.shopReviewSummaryGet(shopId));
+      if (body is Map<String, dynamic>) {
+        return ShopReviewSummary.fromJson(body);
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// GET /digitalstore/users/reviews/user/{user_id}?limit=&offset=

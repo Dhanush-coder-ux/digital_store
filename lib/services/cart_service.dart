@@ -4,6 +4,7 @@
 // Uses ApiClient for standardized requests.
 //
 
+import 'package:flutter/foundation.dart';
 import '../core/network/api_client.dart';
 import '../core/network/api_exceptions.dart';
 import 'api_config.dart';
@@ -153,7 +154,7 @@ class CartService {
                 }
               }
             } catch (e) {
-              print('Fallback product fetch failed: $e');
+              if (kDebugMode) print('Fallback product fetch failed: $e');
             }
           }));
         }

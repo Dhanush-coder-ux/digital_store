@@ -515,6 +515,8 @@ class _HomePageState extends State<HomePage> {
       isOpen: shop.visibleOnline,
       isVerified: false,
       heroTag: 'home-shop-${shop.id}',
+      initialRating: shop.rating,
+      initialReviewCount: shop.reviewCount,
       onTap: () {
         Navigator.push(
           context,

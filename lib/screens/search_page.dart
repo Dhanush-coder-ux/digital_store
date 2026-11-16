@@ -1,7 +1,8 @@
 // lib/screens/search_page.dart
 //
 // Global search page for products and shops.
-// Features debounced search, recent history, and tabbed results.
+// Features debounced search, recent history, tabbed results,
+// product-term matched shop tagging, and resolved shop branding.
 //
 
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import 'api_product_detail_page.dart';
 import 'notifications_page.dart';
 import '../models/shop_provider.dart';
 import '../models/shop_model.dart';
+import '../models/review_provider.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -40,11 +42,20 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     });
     _focusNode.requestFocus();
 
-    // Load search history
-    final userId = context.read<AuthProvider>().userId;
-    if (userId != null) {
-      context.read<SearchProvider>().loadSearchHistory(userId);
-    }
+    // Seed shop cache with already loaded shops from ShopProvider
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final shopList = context.read<ShopProvider>().shops;
+      if (shopList.isNotEmpty) {
+        context.read<SearchProvider>().seedShopCache(shopList);
+      }
+
+      // Load search history if user is logged in
+      final userId = context.read<AuthProvider>().userId;
+      if (userId != null) {
+        context.read<SearchProvider>().loadSearchHistory(userId);
+      }
+    });
   }
 
   @override
@@ -58,21 +69,50 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
   void _onSearchChanged(String query) {
     if (mounted) setState(() {});
     final userId = context.read<AuthProvider>().userId;
-    context.read<SearchProvider>().search(query, userId: userId);
+    final cachedShops = context.read<ShopProvider>().shops;
+    context.read<SearchProvider>().search(
+      query,
+      userId: userId,
+      cachedShops: cachedShops,
+    );
+  }
+
+  void _onSubmitted(String query) {
+    if (query.trim().isEmpty) return;
+    _focusNode.unfocus();
+    final userId = context.read<AuthProvider>().userId;
+    final cachedShops = context.read<ShopProvider>().shops;
+    context.read<SearchProvider>().executeSearchNow(
+      query: query,
+      userId: userId,
+      cachedShops: cachedShops,
+    );
   }
 
   void _onRecentTap(String term) {
     _searchController.text = term;
-    _onSearchChanged(term);
+    _searchController.selection = TextSelection.fromPosition(
+      TextPosition(offset: term.length),
+    );
+    _focusNode.unfocus();
+    if (mounted) setState(() {});
+    final userId = context.read<AuthProvider>().userId;
+    final cachedShops = context.read<ShopProvider>().shops;
+    context.read<SearchProvider>().executeSearchNow(
+      query: term,
+      userId: userId,
+      cachedShops: cachedShops,
+    );
   }
 
   Future<void> _onRefresh() async {
     final search = context.read<SearchProvider>();
     final userId = context.read<AuthProvider>().userId;
+    final cachedShops = context.read<ShopProvider>().shops;
     if (search.query.isEmpty && userId != null) {
       await search.loadSearchHistory(userId);
     } else {
-      await search.executeSearchNow(userId: userId);
+      await search.executeSearchNow(userId: userId, cachedShops: cachedShops);
     }
   }
 
@@ -90,18 +130,13 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
               child: Consumer<SearchProvider>(
                 builder: (context, search, _) {
                   if (search.query.isEmpty) {
-                    return _buildPopularSearches(search);
+                    return _buildEmptyQueryContent(search);
                   }
-                  if (search.isSearching) {
-                    return const Center(
-                      child: CircularProgressIndicator(
-                        color: AppTheme.primaryBlue,
-                        strokeWidth: 2.5,
-                      ),
-                    );
+                  if (search.isSearching && !search.hasResults) {
+                    return _buildSearchingState(search);
                   }
-                  if (!search.hasResults) {
-                    return EmptyStateWidget.noSearchResults();
+                  if (!search.isSearching && !search.hasResults) {
+                    return _buildNoResultsState(search);
                   }
                   return _buildResults(search);
                 },
@@ -288,6 +323,8 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                       controller: _searchController,
                       focusNode: _focusNode,
                       onChanged: _onSearchChanged,
+                      onSubmitted: _onSubmitted,
+                      textInputAction: TextInputAction.search,
                       cursorColor: AppTheme.primary,
                       cursorWidth: 2.0,
                       cursorRadius: const Radius.circular(2),
@@ -363,33 +400,152 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildPopularSearches(SearchProvider search) {
-    final popular = ['Homemade soap', 'Birthday cake', 'Fresh juice', 'Organic groceries', 'Madurai sweets'];
-    
-    return Container(
-      width: double.infinity,
-      color: AppTheme.bgPrimary,
+  Widget _buildEmptyQueryContent(SearchProvider search) {
+    final userId = context.read<AuthProvider>().userId;
+    final recent = search.recentSearches;
+    final popular = [
+      'Fresh milk',
+      'Birthday cake',
+      'Organic groceries',
+      'Homemade soap',
+      'Fresh juice',
+      'Madurai sweets',
+      'Cotton shirts',
+      'Bakery snacks',
+    ];
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'POPULAR SEARCHES',
-            style: TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.textSecondary,
-              letterSpacing: 0.5,
+          // ── Recent Searches ───────────────────────────────────────
+          if (search.isLoadingHistory)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.primaryBlue,
+                  ),
+                ),
+              ),
+            )
+          else if (recent.isNotEmpty) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(LucideIcons.history, size: 14, color: AppTheme.textSecondary),
+                    SizedBox(width: 6),
+                    Text(
+                      'RECENT SEARCHES',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textSecondary,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: () => search.clearSearchHistory(userId),
+                  child: const Text(
+                    'Clear all',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.primaryBlue,
+                    ),
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: recent.map((entry) {
+                return _buildRecentChip(entry.searchTerm, search);
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+          ],
+
+          // ── Popular Searches ──────────────────────────────────────
+          const Row(
+            children: [
+              Icon(LucideIcons.trendingUp, size: 14, color: AppTheme.textSecondary),
+              SizedBox(width: 6),
+              Text(
+                'POPULAR SEARCHES',
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textSecondary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Wrap(
             spacing: 10,
-            runSpacing: 12,
+            runSpacing: 10,
             children: popular.map((term) => _buildPopularChip(term)).toList(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRecentChip(String text, SearchProvider search) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.veryLightGray),
+        boxShadow: AppTheme.shadowSmall,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => _onRecentTap(text),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.clock, size: 13, color: AppTheme.textTertiary),
+                const SizedBox(width: 6),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => search.removeRecentSearchLocally(text),
+                  child: const Icon(LucideIcons.x, size: 12, color: AppTheme.textTertiary),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -408,7 +564,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(LucideIcons.trendingUp, size: 14, color: AppTheme.textSecondary),
+            const Icon(LucideIcons.sparkles, size: 13, color: AppTheme.primaryBlue),
             const SizedBox(width: 6),
             Text(
               text,
@@ -425,9 +581,121 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildSearchingState(SearchProvider search) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(
+              color: AppTheme.primaryBlue,
+              strokeWidth: 2.5,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Searching stores & products...',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Looking for "${search.query}"',
+            style: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 12,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoResultsState(SearchProvider search) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.searchX, size: 30, color: AppTheme.primaryBlue),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No matches found for "${search.query}"',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'We couldn\'t find any stores or items. Try searching for generic items like milk, bread, cake, or groceries.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                _searchController.clear();
+                search.clearResults();
+                if (mounted) setState(() {});
+              },
+              icon: const Icon(LucideIcons.rotateCcw, size: 14),
+              label: const Text('Clear Search'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                textStyle: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildResults(SearchProvider search) {
     return Column(
       children: [
+        if (search.isSearching)
+          const LinearProgressIndicator(
+            minHeight: 2.5,
+            backgroundColor: Colors.transparent,
+            valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primary),
+          ),
+        // ── Summary Banner ──────────────────────────────────────────
+        _buildSummaryBanner(search),
+
+        // ── Tabs with Counts ────────────────────────────────────────
         Container(
           color: AppTheme.white,
           child: TabBar(
@@ -435,18 +703,44 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
             labelColor: AppTheme.primaryBlue,
             unselectedLabelColor: AppTheme.textTertiary,
             indicatorColor: AppTheme.primaryBlue,
-            indicatorSize: TabBarIndicatorSize.label,
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicatorWeight: 3,
             labelStyle: const TextStyle(
               fontFamily: 'Outfit',
               fontSize: 14,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
+            ),
+            unselectedLabelStyle: const TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
             tabs: [
-              Tab(text: 'Shops (${search.shopResults.length})'),
-              Tab(text: 'Products (${search.productResults.length})'),
+              Tab(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.store, size: 16),
+                    const SizedBox(width: 8),
+                    Text('Shops (${search.shopResults.length})'),
+                  ],
+                ),
+              ),
+              Tab(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.package2, size: 16),
+                    const SizedBox(width: 8),
+                    Text('Products (${search.productResults.length})'),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
+
+        // ── Tab Views ───────────────────────────────────────────────
         Expanded(
           child: TabBarView(
             controller: _tabController,
@@ -460,11 +754,84 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildSummaryBanner(SearchProvider search) {
+    final shopCount = search.shopResults.length;
+    final productCount = search.productResults.length;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryBlue.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppTheme.primaryBlue.withValues(alpha: 0.18),
+          width: 1.0,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              LucideIcons.sparkles,
+              size: 14,
+              color: AppTheme.primaryBlue,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 13,
+                  color: AppTheme.textPrimary,
+                ),
+                children: [
+                  const TextSpan(text: 'Found '),
+                  TextSpan(
+                    text: '$shopCount ${shopCount == 1 ? 'shop' : 'shops'}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.primaryBlue,
+                    ),
+                  ),
+                  const TextSpan(text: ' and '),
+                  TextSpan(
+                    text: '$productCount ${productCount == 1 ? 'product' : 'products'}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.primaryBlue,
+                    ),
+                  ),
+                  const TextSpan(text: ' for '),
+                  TextSpan(
+                    text: '"${search.query}"',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildShopResults(SearchProvider search) {
     if (search.shopResults.isEmpty) {
       return const EmptyStateWidget(
         icon: LucideIcons.store,
         title: 'No shops found',
+        subtitle: 'No shops sell items matching this query.',
       );
     }
 
@@ -477,16 +844,19 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         itemCount: search.shopResults.length,
         itemBuilder: (context, index) {
           final shop = search.shopResults[index];
+          final hasMatchedProducts = search.isShopMatchedViaProduct(shop.id);
+          final matchedProductSummary = search.getMatchedProductSummary(shop.id);
+
           return FadeInUp(
-            duration: const Duration(milliseconds: 300),
-            delay: Duration(milliseconds: index * 50),
+            duration: const Duration(milliseconds: 250),
+            delay: Duration(milliseconds: index * 40),
             child: Card(
               margin: const EdgeInsets.only(bottom: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               elevation: 0,
               color: AppTheme.white,
               child: ListTile(
-                contentPadding: const EdgeInsets.all(12),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 leading: Container(
                   width: 52,
                   height: 52,
@@ -517,15 +887,96 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                     fontSize: 15,
                   ),
                 ),
-                subtitle: Text(
-                  shop.displayAddress.isNotEmpty ? shop.displayAddress : 'Local shop',
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 2),
+                    Text(
+                      shop.displayAddress.isNotEmpty ? shop.displayAddress : 'Local shop',
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Consumer<ReviewProvider>(
+                      builder: (context, reviewProv, _) {
+                        final provRating = reviewProv.averageRatingForShop(shop.id);
+                        final provCount = reviewProv.reviewCountForShop(shop.id);
+                        final rating = provCount > 0 ? provRating : (shop.rating ?? provRating);
+                        final count = provCount > 0 ? provCount : (shop.reviewCount ?? provCount);
+                        if (count == 0 && rating <= 0) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideIcons.star, color: Color(0xFFF59E0B), size: 13),
+                              const SizedBox(width: 3),
+                              Text(
+                                rating > 0 ? rating.toStringAsFixed(1) : '0.0',
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              if (count > 0) ...[
+                                const SizedBox(width: 3),
+                                Text(
+                                  '($count reviews)',
+                                  style: const TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppTheme.textTertiary,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    // Product Term Matched Tag / Badge
+                    if (hasMatchedProducts && matchedProductSummary != null)
+                      Container(
+                        margin: const EdgeInsets.only(top: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFA5D6A7), width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              LucideIcons.packageCheck,
+                              size: 12,
+                              color: Color(0xFF2E7D32),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                matchedProductSummary,
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF2E7D32),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
                 trailing: const Icon(LucideIcons.chevronRight, size: 18, color: AppTheme.textTertiary),
                 onTap: () => Navigator.push(
@@ -545,8 +996,11 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
       return const EmptyStateWidget(
         icon: LucideIcons.package2,
         title: 'No products found',
+        subtitle: 'No items match your search query.',
       );
     }
+
+    final shopProvider = context.read<ShopProvider>();
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
@@ -556,27 +1010,39 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          childAspectRatio: 0.75,
+          childAspectRatio: 0.72,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
         itemCount: search.productResults.length,
         itemBuilder: (context, index) {
           final product = search.productResults[index];
+
+          // Resolve real shop branding from cache or provider
+          final shop = search.getShop(product.shopId) ??
+              shopProvider.shops.cast<Shop?>().firstWhere(
+                (s) => s?.id == product.shopId,
+                orElse: () => null,
+              );
+          final shopName = shop?.name ?? search.getShopName(product.shopId);
+          final shopLogo = shop?.logoUrl;
+
           return FadeInUp(
-            duration: const Duration(milliseconds: 300),
-            delay: Duration(milliseconds: index * 50),
+            duration: const Duration(milliseconds: 250),
+            delay: Duration(milliseconds: index * 40),
             child: GestureDetector(
               onTap: () {
-                final shopList = context.read<ShopProvider>().shops;
-                final foundShop = shopList.firstWhere(
-                  (s) => s.id == product.shopId, 
-                  orElse: () => Shop(id: product.shopId, name: 'Unknown Shop', categories: [])
-                );
+                final resolvedShop = shop ??
+                    Shop(
+                      id: product.shopId,
+                      name: shopName,
+                      categories: const [],
+                      visibleOnline: true,
+                    );
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ApiProductDetailPage(product: product, shop: foundShop),
+                    builder: (_) => ApiProductDetailPage(product: product, shop: resolvedShop),
                   ),
                 );
               },
@@ -628,7 +1094,7 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                     Expanded(
                       flex: 2,
                       child: Padding(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -643,17 +1109,39 @@ class _SearchPageState extends State<SearchPage> with SingleTickerProviderStateM
                               overflow: TextOverflow.ellipsis,
                             ),
                             const Spacer(),
+                            // Resolved Real Shop Name & Logo
                             Row(
                               children: [
-                                const Icon(LucideIcons.store, size: 12, color: AppTheme.textTertiary),
-                                const SizedBox(width: 4),
+                                if (shopLogo != null && shopLogo.isNotEmpty)
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: Image.network(
+                                      shopLogo,
+                                      width: 14,
+                                      height: 14,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => const Icon(
+                                        LucideIcons.store,
+                                        size: 13,
+                                        color: AppTheme.textTertiary,
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  const Icon(
+                                    LucideIcons.store,
+                                    size: 13,
+                                    color: AppTheme.textTertiary,
+                                  ),
+                                const SizedBox(width: 5),
                                 Expanded(
                                   child: Text(
-                                    'Shop ID: ${product.shopId.substring(0, 4)}...',
+                                    shopName,
                                     style: const TextStyle(
                                       fontFamily: 'Outfit',
-                                      fontSize: 10,
-                                      color: AppTheme.textTertiary,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppTheme.textSecondary,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,

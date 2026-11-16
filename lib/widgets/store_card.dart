@@ -15,6 +15,8 @@ class StoreCard extends StatefulWidget {
   final bool isVerified;
   final VoidCallback? onTap;
   final String? heroTag;
+  final double? initialRating;
+  final int? initialReviewCount;
 
   const StoreCard({
     super.key,
@@ -28,6 +30,8 @@ class StoreCard extends StatefulWidget {
     this.isVerified = false,
     this.onTap,
     this.heroTag,
+    this.initialRating,
+    this.initialReviewCount,
   });
 
   @override
@@ -48,6 +52,11 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
     _scaleAnim = Tween<double>(begin: 1.0, end: 0.98).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.shopId.isNotEmpty) {
+        context.read<ReviewProvider>().fetchShopReviews(widget.shopId);
+      }
+    });
   }
 
   @override
@@ -182,7 +191,7 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
     return Image.network(
       widget.imageUrl,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
+      errorBuilder: (context, error, stackTrace) => Container(
         color: AppTheme.veryLightGray,
         child: const Center(
           child: Icon(
@@ -224,10 +233,13 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
   Widget _buildRatingChip(BuildContext context) {
     return Consumer<ReviewProvider>(
       builder: (context, provider, child) {
-        final rating = provider.averageRatingForShop(widget.shopId);
-        final count = provider.reviewCountForShop(widget.shopId);
+        final provRating = provider.averageRatingForShop(widget.shopId);
+        final provCount = provider.reviewCountForShop(widget.shopId);
         
-        if (count == 0) return const SizedBox.shrink();
+        final rating = provCount > 0 ? provRating : (widget.initialRating ?? provRating);
+        final count = provCount > 0 ? provCount : (widget.initialReviewCount ?? provCount);
+
+        if (count == 0 && rating <= 0) return const SizedBox.shrink();
 
         return Container(
           padding: const EdgeInsets.symmetric(
@@ -235,17 +247,17 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
             vertical: AppTheme.xs,
           ),
           decoration: BoxDecoration(
-            color: AppTheme.softPeach,
+            color: const Color(0xFFFFF6EB),
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(color: AppTheme.border),
+            border: Border.all(color: const Color(0xFFF4EBE1)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.star_rounded, color: AppTheme.primary, size: 14),
+              const Icon(LucideIcons.star, color: Color(0xFFF59E0B), size: 14),
               const SizedBox(width: 3),
               Text(
-                rating.toStringAsFixed(1),
+                rating > 0 ? rating.toStringAsFixed(1) : '0.0',
                 style: const TextStyle(
                   fontFamily: 'Outfit',
                   fontSize: 12,
@@ -253,16 +265,18 @@ class _StoreCardState extends State<StoreCard> with SingleTickerProviderStateMix
                   color: AppTheme.primaryText,
                 ),
               ),
-              const SizedBox(width: 3),
-              Text(
-                '($count)',
-                style: const TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.secondaryText,
+              if (count > 0) ...[
+                const SizedBox(width: 3),
+                Text(
+                  '($count)',
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.secondaryText,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         );

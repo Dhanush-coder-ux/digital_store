@@ -21,6 +21,8 @@ class Shop {
   final String? createdAt;
   final String? updatedAt;
   final double? distance;
+  final double? rating;
+  final int? reviewCount;
 
   const Shop({
     required this.id,
@@ -40,6 +42,8 @@ class Shop {
     this.createdAt,
     this.updatedAt,
     this.distance,
+    this.rating,
+    this.reviewCount,
   });
 
   factory Shop.fromJson(Map<String, dynamic> json) {
@@ -85,6 +89,12 @@ class Shop {
       distance: json['distance'] != null
           ? double.tryParse(json['distance'].toString())
           : (json['distance_km'] != null ? double.tryParse(json['distance_km'].toString()) : null),
+      rating: json['rating'] != null
+          ? double.tryParse(json['rating'].toString())
+          : (json['avg_rating'] != null ? double.tryParse(json['avg_rating'].toString()) : null),
+      reviewCount: json['review_count'] != null
+          ? int.tryParse(json['review_count'].toString())
+          : (json['reviews_count'] != null ? int.tryParse(json['reviews_count'].toString()) : null),
     );
   }
 
@@ -179,6 +189,8 @@ class Shop {
         'created_at': createdAt,
         'updated_at': updatedAt,
         'distance': distance,
+        if (rating != null) 'rating': rating,
+        if (reviewCount != null) 'review_count': reviewCount,
       };
 }
 

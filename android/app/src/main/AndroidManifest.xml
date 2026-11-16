@@ -1,16 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network Access -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Hyperlocal store discovery and delivery address detection (Foreground only) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:label="ShopiQ"
         android:name="${applicationName}"
-        android:usesCleartextTraffic="true"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:allowBackup="false"
+        android:fullBackupContent="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -29,21 +35,24 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             
-            <!-- Deep linking for authentication callbacks -->
+            <!-- 1. Verified Android App Links (Domain Verification via assetlinks.json) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                
-                <!-- Custom Scheme -->
+                <data android:scheme="https" android:host="shopiq.inventq.in" />
+            </intent-filter>
+            
+            <!-- 2. Custom URI Schemes for OAuth Redirection (Separated from autoVerify) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="shopiq" android:host="callback" />
+                <data android:scheme="shopiq" />
+                <data android:scheme="shopiq" android:host="auth" android:pathPrefix="/callback" />
+                <data android:scheme="shopiq" android:host="shopiq.inventq.in" android:pathPrefix="/callback" />
                 <data android:scheme="hyperlocal-app" android:host="auth" android:pathPrefix="/callback" />
-                
-                <!-- HTTPS Scheme (App Links) -->
-                <data android:scheme="https" android:host="auth.hyperlocal.com" android:pathPrefix="/callback" />
-                
-                <!-- Intercept Gateway Callbacks that get redirected to localhost by DAuth -->
-                <data android:scheme="http" android:host="127.0.0.1" android:port="8000" android:pathPrefix="/api/auth/callback" />
-                <data android:scheme="http" android:host="10.39.224.101" android:port="8000" android:pathPrefix="/api/auth/callback" />
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

@@ -51,30 +51,30 @@ class ShopProvider extends ChangeNotifier {
       double? finalLng = lng;
 
       if (finalLat == null || finalLng == null) {
-        print('ShopProvider: Fetching current location...');
+        if (kDebugMode) print('ShopProvider: Fetching current location...');
         final position = await _locationService.getCurrentLocation();
         finalLat = position.latitude;
         finalLng = position.longitude;
       }
 
-      print('ShopProvider: Fetching all shops...');
+      if (kDebugMode) print('ShopProvider: Fetching all shops...');
       _shops = await _service.fetchAllShops(lat: finalLat, lng: finalLng, deliveryType: deliveryType ?? _selectedDeliveryType);
-      print('ShopProvider: Successfully fetched ${_shops.length} shops');
+      if (kDebugMode) print('ShopProvider: Successfully fetched ${_shops.length} shops');
       _hasFetched = true;
     } on LocationPermissionException catch (e) {
-      print('ShopProvider: LocationPermissionException - ${e.message}');
+      if (kDebugMode) print('ShopProvider: LocationPermissionException - ${e.message}');
       _error = e.message;
       _shops = [];
     } on LocationServiceDisabledException catch (e) {
-      print('ShopProvider: LocationServiceDisabledException - ${e.message}');
+      if (kDebugMode) print('ShopProvider: LocationServiceDisabledException - ${e.message}');
       _error = e.message;
       _shops = [];
     } on ApiException catch (e) {
-      print('ShopProvider: ApiException - ${e.message}');
+      if (kDebugMode) print('ShopProvider: ApiException - ${e.message}');
       _error = e.message;
       _shops = [];
     } catch (e, stacktrace) {
-      print('ShopProvider: General Exception - $e\n$stacktrace');
+      if (kDebugMode) print('ShopProvider: General Exception - $e\n$stacktrace');
       _error = 'Could not connect to server. Check your network and API config.';
       _shops = [];
     } finally {

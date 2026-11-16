@@ -1,0 +1,14 @@
+# Google Play Store Release Keystore Configuration
+#
+# IMPORTANT:
+# 1. Copy this file to "key.properties" (in the android/ directory).
+# 2. Never commit "key.properties", "*.keystore", or "*.jks" files to version control.
+# 3. Store your release keystore file securely (e.g. in a secure secrets manager / vault).
+#
+# Generate a new release keystore using keytool:
+# keytool -genkey -v -keystore app-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias shopiq-key
+
+storePassword=YOUR_KEYSTORE_PASSWORD_HERE
+keyPassword=YOUR_KEY_PASSWORD_HERE
+keyAlias=shopiq-key
+storeFile=../app-release.jks

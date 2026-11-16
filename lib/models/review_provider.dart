@@ -1,6 +1,6 @@
 // lib/models/review_provider.dart
 //
-// Manages shop review state: submit, fetch shop reviews, fetch user reviews.
+// Manages shop review state: submit, fetch shop reviews, fetch user reviews, review summaries.
 // Integrates with DigitalStore Reviews API.
 //
 
@@ -13,6 +13,7 @@ class ReviewProvider extends ChangeNotifier {
 
   // Reviews keyed by shop_id for caching
   final Map<String, List<ShopReview>> _shopReviews = {};
+  final Map<String, ShopReviewSummary> _summaries = {};
   final Map<String, bool> _loadingByShop = {};
   List<ShopReview> _userReviews = [];
   bool _isSubmitting = false;
@@ -32,12 +33,55 @@ class ReviewProvider extends ChangeNotifier {
 
   double averageRatingForShop(String shopId) {
     final reviews = _shopReviews[shopId];
-    if (reviews == null || reviews.isEmpty) return 0;
-    final total = reviews.fold(0.0, (sum, r) => sum + r.rating);
-    return total / reviews.length;
+    if (reviews != null && reviews.isNotEmpty) {
+      final total = reviews.fold(0.0, (sum, r) => sum + r.rating);
+      return total / reviews.length;
+    }
+    if (_summaries.containsKey(shopId)) {
+      return _summaries[shopId]!.averageRating;
+    }
+    return 0.0;
   }
 
-  int reviewCountForShop(String shopId) => _shopReviews[shopId]?.length ?? 0;
+  int reviewCountForShop(String shopId) {
+    final reviews = _shopReviews[shopId];
+    if (reviews != null && reviews.isNotEmpty) {
+      return reviews.length;
+    }
+    if (_summaries.containsKey(shopId)) {
+      return _summaries[shopId]!.reviewCount;
+    }
+    return 0;
+  }
+
+  Map<int, int> starBreakdownForShop(String shopId) {
+    return summaryForShop(shopId).starCounts;
+  }
+
+  ShopReviewSummary summaryForShop(String shopId) {
+    final reviews = _shopReviews[shopId];
+    if (reviews != null && reviews.isNotEmpty) {
+      final counts = <int, int>{5: 0, 4: 0, 3: 0, 2: 0, 1: 0};
+      double total = 0.0;
+      for (final r in reviews) {
+        total += r.rating;
+        final star = r.rating.round().clamp(1, 5);
+        counts[star] = (counts[star] ?? 0) + 1;
+      }
+      return ShopReviewSummary(
+        shopId: shopId,
+        averageRating: total / reviews.length,
+        reviewCount: reviews.length,
+        starCounts: counts,
+      );
+    }
+    return _summaries[shopId] ?? ShopReviewSummary(
+      shopId: shopId,
+      averageRating: 0.0,
+      reviewCount: 0,
+      starCounts: const {5: 0, 4: 0, 3: 0, 2: 0, 1: 0},
+    );
+  }
 
   // ── Submit Review ───────────────────────────────────────────────
 
@@ -65,6 +109,8 @@ class ReviewProvider extends ChangeNotifier {
       } else {
         _shopReviews[review.shopId]!.insert(0, review);
       }
+      // Re-derive summary
+      _summaries[review.shopId] = summaryForShop(review.shopId);
       return true;
     } catch (e) {
       _error = 'Failed to submit review.';
@@ -75,7 +121,7 @@ class ReviewProvider extends ChangeNotifier {
     }
   }
 
-  // ── Fetch Shop Reviews ──────────────────────────────────────────
+  // ── Fetch Shop Reviews & Summary ─────────────────────────────────
 
   Future<void> fetchShopReviews(
     String shopId, {
@@ -93,12 +139,24 @@ class ReviewProvider extends ChangeNotifier {
         shopId, limit: limit, offset: offset,
       );
       _shopReviews[shopId] = reviews;
+      _summaries[shopId] = summaryForShop(shopId);
     } catch (e) {
       _error = 'Failed to load reviews.';
     } finally {
       _loadingByShop[shopId] = false;
       notifyListeners();
     }
+  }
+
+  Future<void> fetchShopReviewSummary(String shopId, {bool force = false}) async {
+    if (!force && _summaries.containsKey(shopId)) return;
+    try {
+      final summary = await _service.getShopReviewSummary(shopId);
+      if (summary != null) {
+        _summaries[shopId] = summary;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   // ── Fetch User Reviews ──────────────────────────────────────────
@@ -130,6 +188,7 @@ class ReviewProvider extends ChangeNotifier {
 
   void reset() {
     _shopReviews.clear();
+    _summaries.clear();
     _loadingByShop.clear();
     _userReviews = [];
     _isSubmitting = false;

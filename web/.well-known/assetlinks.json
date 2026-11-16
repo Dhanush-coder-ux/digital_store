@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.inventq.shopiq",
+      "sha256_cert_fingerprints": [
+        "02:C6:AB:D1:54:03:9E:92:B8:88:0D:3A:25:FD:24:9E:56:A1:C2:70:D4:11:DF:ED:41:01:80:27:4D:17:22:D5"
+      ]
+    }
+  }
+]

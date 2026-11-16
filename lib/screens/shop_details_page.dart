@@ -13,6 +13,10 @@ import '../widgets/product_bottom_sheet.dart';
 import '../models/category_model.dart';
 import '../widgets/category_widget.dart';
 import 'product_detail_page.dart';
+import '../models/review_provider.dart';
+import '../core/models/review_model.dart';
+import '../models/profile_provider.dart';
+import '../models/auth_provider.dart';
 
 class ShopDetailsPage extends StatefulWidget {
   final Map<String, dynamic> store;
@@ -30,7 +34,10 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
   int _selectedCategory = 0;
 
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _reviewSearchController = TextEditingController();
   String _searchQuery = '';
+  String _reviewSearchQuery = '';
+  int? _selectedStarFilter;
   String? _expandedCategoryTitle;
   late List<String> _storeImages;
   int _currentImageIndex = 0;
@@ -64,6 +71,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _checkAndShowPopups(context);
+        context.read<ReviewProvider>().fetchShopReviews(_storeId);
       }
     });
   }
@@ -73,6 +81,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
     _imageTimer?.cancel();
     _cartBarTimer?.cancel();
     _searchController.dispose();
+    _reviewSearchController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -167,7 +176,9 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
           slivers: [
             _buildSliverAppBar(context),
             _buildShopInfoSliver(context),
+            _buildTopRatingSummaryBanner(context),
             _buildBrowseProductsActionCard(context),
+            _buildReviewsSection(context),
             const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
@@ -283,6 +294,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
       slivers: [
         _buildSliverAppBar(context),
         _buildShopInfoSliver(context),
+        _buildTopRatingSummaryBanner(context),
         SliverAppBar(
           pinned: true,
           toolbarHeight: 160,
@@ -302,6 +314,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
           ),
         ),
         _buildProductSliver(context),
+        _buildReviewsSection(context),
         const SliverToBoxAdapter(child: SizedBox(height: 120)),
       ],
     );
@@ -397,6 +410,819 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  // ── Top Rating Summary Banner ──────────────────────────────────────────
+
+  Widget _buildTopRatingSummaryBanner(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Consumer<ReviewProvider>(
+        builder: (context, reviewProvider, _) {
+          final provRating = reviewProvider.averageRatingForShop(_storeId);
+          final provCount = reviewProvider.reviewCountForShop(_storeId);
+          final fallbackRating = double.tryParse(_storeRating) ?? 0.0;
+          final rating = provCount > 0 ? provRating : fallbackRating;
+          final reviewCount = provCount > 0 ? provCount : 0;
+          final starBreakdown = reviewProvider.starBreakdownForShop(_storeId);
+
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: AppTheme.xl, vertical: AppTheme.sm),
+            padding: const EdgeInsets.all(AppTheme.lg),
+            decoration: BoxDecoration(
+              color: AppTheme.white,
+              borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+              border: Border.all(color: AppTheme.veryLightGray),
+              boxShadow: AppTheme.shadowSmall,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(LucideIcons.star, color: Color(0xFFF59E0B), size: 18),
+                        SizedBox(width: 6),
+                        Text(
+                          'Store Ratings & Reviews',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    TextButton.icon(
+                      onPressed: _showReviewModal,
+                      icon: const Icon(LucideIcons.edit3, size: 13, color: AppTheme.textPrimary),
+                      label: const Text(
+                        'Write a Review',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        backgroundColor: AppTheme.bgPrimary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: AppTheme.veryLightGray),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Left: Score & Stars
+                    Container(
+                      width: 110,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            rating > 0 ? rating.toStringAsFixed(1) : '0.0',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.textPrimary,
+                              height: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(5, (index) {
+                              return Icon(
+                                LucideIcons.star,
+                                color: index < rating.round() ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
+                                size: 16,
+                              );
+                            }),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            reviewCount > 0 ? '$reviewCount reviews' : 'No reviews yet',
+                            style: const TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 11.5,
+                              color: AppTheme.textTertiary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Divider
+                    Container(
+                      width: 1,
+                      height: 80,
+                      color: AppTheme.veryLightGray,
+                    ),
+                    const SizedBox(width: 12),
+                    // Right: Star breakdown bars (5 to 1)
+                    Expanded(
+                      child: Column(
+                        children: [5, 4, 3, 2, 1].map((star) {
+                          final count = starBreakdown[star] ?? 0;
+                          final pct = reviewCount > 0 ? (count / reviewCount).clamp(0.0, 1.0) : 0.0;
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 1.5),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 24,
+                                  child: Text(
+                                    '$star★',
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: pct,
+                                      minHeight: 6,
+                                      backgroundColor: AppTheme.bgPrimary,
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 20,
+                                  child: Text(
+                                    count.toString(),
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 10,
+                                      color: AppTheme.textTertiary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Ratings & Reviews Section (Bottom of Page) ─────────────────────
+
+  Widget _buildReviewsSection(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Consumer2<ReviewProvider, AuthProvider>(
+        builder: (context, reviewProvider, authProvider, _) {
+          final reviews = reviewProvider.reviewsForShop(_storeId);
+          final avgRating = reviewProvider.averageRatingForShop(_storeId);
+          final reviewCount = reviewProvider.reviewCountForShop(_storeId);
+          final userId = authProvider.userId;
+          final hasReviewed = userId != null && reviews.any((r) => r.userId == userId);
+
+          // Live filter based on search query and star filter
+          final filteredReviews = reviews.where((r) {
+            if (_selectedStarFilter != null && r.rating.round() != _selectedStarFilter) {
+              return false;
+            }
+            if (_reviewSearchQuery.trim().isNotEmpty) {
+              final q = _reviewSearchQuery.trim().toLowerCase();
+              final comment = (r.reviewText ?? '').toLowerCase();
+              final author = (r.userName ?? '').toLowerCase();
+              if (!comment.contains(q) && !author.contains(q)) {
+                return false;
+              }
+            }
+            return true;
+          }).toList();
+
+          return Container(
+            color: AppTheme.white,
+            margin: const EdgeInsets.only(top: AppTheme.md),
+            padding: const EdgeInsets.all(AppTheme.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Customer Reviews',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        if (reviewCount > 0)
+                          Row(
+                            children: [
+                              const Icon(LucideIcons.star, color: Color(0xFFF59E0B), size: 16),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${avgRating.toStringAsFixed(1)} / 5.0 ($reviewCount ${reviewCount == 1 ? "review" : "reviews"})',
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 13,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          const Text(
+                            'No reviews yet',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 13,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
+                      ],
+                    ),
+                    TextButton.icon(
+                      onPressed: _showReviewModal,
+                      icon: Icon(hasReviewed ? LucideIcons.check : LucideIcons.edit3, size: 14, color: AppTheme.textPrimary),
+                      label: Text(
+                        hasReviewed ? 'Update Review' : 'Write a Review',
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        backgroundColor: AppTheme.bgPrimary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: AppTheme.veryLightGray),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (reviews.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  // Search within reviews
+                  Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgPrimary,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppTheme.veryLightGray),
+                    ),
+                    child: TextField(
+                      controller: _reviewSearchController,
+                      onChanged: (val) => setState(() => _reviewSearchQuery = val),
+                      style: const TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 13,
+                        color: AppTheme.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Search reviews...',
+                        hintStyle: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          color: AppTheme.textTertiary,
+                        ),
+                        prefixIcon: const Icon(LucideIcons.search, size: 16, color: AppTheme.textTertiary),
+                        suffixIcon: _reviewSearchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(LucideIcons.x, size: 14, color: AppTheme.textTertiary),
+                                onPressed: () {
+                                  _reviewSearchController.clear();
+                                  setState(() => _reviewSearchQuery = '');
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Rating filter chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildReviewFilterChip(
+                          label: 'All',
+                          isSelected: _selectedStarFilter == null,
+                          onTap: () => setState(() => _selectedStarFilter = null),
+                        ),
+                        const SizedBox(width: 8),
+                        ...[5, 4, 3, 2, 1].map((star) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: _buildReviewFilterChip(
+                              label: '$star★',
+                              isSelected: _selectedStarFilter == star,
+                              onTap: () => setState(() {
+                                _selectedStarFilter = _selectedStarFilter == star ? null : star;
+                              }),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                if (reviews.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgPrimary,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.veryLightGray),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(LucideIcons.messageSquare, color: AppTheme.textTertiary, size: 36),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No reviews yet',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Be the first to share your experience with this store!',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 12.5,
+                            color: AppTheme.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: _showReviewModal,
+                          icon: const Icon(LucideIcons.edit3, size: 14),
+                          label: const Text(
+                            'Write the First Review',
+                            style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.w600, fontSize: 13),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.textPrimary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (filteredReviews.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgPrimary,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.veryLightGray),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(LucideIcons.searchX, color: AppTheme.textTertiary, size: 32),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'No matching reviews',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Try adjusting your search terms or star rating filter.',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 12.5,
+                            color: AppTheme.textSecondary,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: () {
+                            _reviewSearchController.clear();
+                            setState(() {
+                              _reviewSearchQuery = '';
+                              _selectedStarFilter = null;
+                            });
+                          },
+                          child: const Text('Reset Filters'),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: filteredReviews.length,
+                    separatorBuilder: (context, index) => const Divider(height: 24, color: AppTheme.veryLightGray),
+                    itemBuilder: (context, index) {
+                      final r = filteredReviews[index];
+                      final author = r.userName?.trim().isNotEmpty == true ? r.userName!.trim() : 'Customer';
+                      final initial = author.isNotEmpty ? author[0].toUpperCase() : 'C';
+                      final dateStr = _formatReviewDate(r.timestamp);
+
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgPrimary,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.veryLightGray),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                                  child: Text(
+                                    initial,
+                                    style: const TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.primaryBlue,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        author,
+                                        style: const TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                      if (dateStr.isNotEmpty)
+                                        Text(
+                                          dateStr,
+                                          style: const TextStyle(
+                                            fontFamily: 'Outfit',
+                                            fontSize: 11,
+                                            color: AppTheme.textTertiary,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Row(
+                                  children: List.generate(5, (i) {
+                                    return Icon(
+                                      LucideIcons.star,
+                                      color: i < r.rating.round() ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0),
+                                      size: 15,
+                                    );
+                                  }),
+                                ),
+                              ],
+                            ),
+                            if (r.reviewText?.isNotEmpty == true) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                r.reviewText!,
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 13,
+                                  color: AppTheme.textPrimary,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildReviewFilterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? AppTheme.textPrimary : AppTheme.bgPrimary,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppTheme.textPrimary : AppTheme.veryLightGray,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'Outfit',
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected ? Colors.white : AppTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatReviewDate(DateTime? dt) {
+    if (dt == null) return '';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
+  }
+
+  void _showReviewModal() {
+    final authProvider = context.read<AuthProvider>();
+    final userId = authProvider.userId ?? 'guest_customer';
+    final profileName = context.read<ProfileProvider>().userName;
+
+    final existingReviews = context.read<ReviewProvider>().reviewsForShop(_storeId);
+    final myReview = existingReviews.where((r) => r.userId == userId).firstOrNull;
+
+    double rating = myReview?.rating ?? 5.0;
+    final nameController = TextEditingController(
+      text: myReview?.userName ?? (profileName.isNotEmpty ? profileName : ''),
+    );
+    final textController = TextEditingController(text: myReview?.reviewText ?? '');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final starLabels = {
+              1.0: '1.0 - Poor',
+              2.0: '2.0 - Fair',
+              3.0: '3.0 - Average',
+              4.0: '4.0 - Good',
+              5.0: '5.0 - Excellent',
+            };
+
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppTheme.veryLightGray,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                myReview != null ? 'Edit Your Review' : 'Write a Review',
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _storeName,
+                                style: const TextStyle(
+                                  fontFamily: 'Outfit',
+                                  fontSize: 13,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            icon: const Icon(LucideIcons.x, size: 20),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      // Rating selection
+                      Center(
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(5, (index) {
+                                final starVal = index + 1.0;
+                                return IconButton(
+                                  onPressed: () => setModalState(() => rating = starVal),
+                                  icon: Icon(
+                                    LucideIcons.star,
+                                    color: starVal <= rating ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                                    size: 34,
+                                  ),
+                                );
+                              }),
+                            ),
+                            Text(
+                              starLabels[rating] ?? '${rating.toStringAsFixed(1)} Stars',
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFF59E0B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      // Name input
+                      const Text(
+                        'Your Name (Optional)',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: nameController,
+                        decoration: InputDecoration(
+                          hintText: 'e.g. John Doe',
+                          hintStyle: const TextStyle(fontFamily: 'Outfit', color: AppTheme.textTertiary, fontSize: 13.5),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.veryLightGray)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.veryLightGray)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.textPrimary)),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // Feedback text input
+                      const Text(
+                        'Review Comments',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: textController,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          hintText: 'Share your experience with this store and products...',
+                          hintStyle: const TextStyle(fontFamily: 'Outfit', color: AppTheme.textTertiary, fontSize: 13.5),
+                          contentPadding: const EdgeInsets.all(14),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.veryLightGray)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.veryLightGray)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.textPrimary)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Submit button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: Consumer<ReviewProvider>(
+                          builder: (context, reviewProvider, _) {
+                            final isSubmitting = reviewProvider.isSubmitting;
+                            return ElevatedButton(
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () async {
+                                      final authorName = nameController.text.trim().isNotEmpty
+                                          ? nameController.text.trim()
+                                          : (profileName.isNotEmpty ? profileName : 'Customer');
+                                      final review = ShopReview(
+                                        userId: userId,
+                                        shopId: _storeId,
+                                        rating: rating,
+                                        reviewText: textController.text.trim().isEmpty ? null : textController.text.trim(),
+                                        userName: authorName,
+                                        timestamp: DateTime.now(),
+                                      );
+                                      final success = await reviewProvider.submitReview(review);
+                                      if (success && context.mounted) {
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Review submitted successfully! Thank you for your feedback.'),
+                                            behavior: SnackBarBehavior.floating,
+                                            backgroundColor: Color(0xFF2E7D32),
+                                          ),
+                                        );
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.textPrimary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              child: isSubmitting
+                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : Text(
+                                      myReview != null ? 'Update Review' : 'Submit Review',
+                                      style: const TextStyle(fontFamily: 'Outfit', fontSize: 15, fontWeight: FontWeight.w700),
+                                    ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -608,7 +1434,7 @@ class _ShopDetailsPageState extends State<ShopDetailsPage> {
                   const SizedBox(height: AppTheme.md),
                   Row(
                     children: [
-                      _buildInfoPill(Icons.star_rounded, _storeRating, const Color(0xFFF59E0B)),
+                      _buildInfoPill(LucideIcons.star, _storeRating, const Color(0xFFF59E0B)),
                       const SizedBox(width: AppTheme.sm),
                       _buildInfoPill(LucideIcons.clock, _storeTime, AppTheme.white),
                       const SizedBox(width: AppTheme.sm),

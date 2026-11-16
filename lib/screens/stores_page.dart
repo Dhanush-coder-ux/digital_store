@@ -228,11 +228,13 @@ class _StoresPageState extends State<StoresPage> {
                     isOpen: shop.visibleOnline,
                     isVerified: false,
                     heroTag: 'stores-shop-${shop.id}',
+                    initialRating: shop.rating,
+                    initialReviewCount: shop.reviewCount,
                     onTap: () => Navigator.push(
                       context,
                       PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => ApiShopDetailsPage(shop: shop),
-                        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+                        pageBuilder: (context, anim1, anim2) => ApiShopDetailsPage(shop: shop),
+                        transitionsBuilder: (context, anim, secAnim, child) => FadeTransition(opacity: anim, child: child),
                         transitionDuration: const Duration(milliseconds: 250),
                       ),
                     ),

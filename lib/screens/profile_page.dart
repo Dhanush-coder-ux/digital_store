@@ -21,6 +21,8 @@ import '../l10n/app_translations.dart';
 import '../models/language_provider.dart';
 import 'support_faq_page.dart';
 import 'terms_of_service_page.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/api_config.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -473,8 +475,31 @@ class _ProfilePageState extends State<ProfilePage> {
               subtitle: context.tr('terms_of_service_sub'),
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const TermsOfServicePage()),
+                MaterialPageRoute(builder: (_) => const TermsOfServicePage(initialIndex: 0)),
               ),
+            ),
+            _buildDivider(),
+            _buildListTile(
+              context,
+              icon: LucideIcons.shieldCheck,
+              iconBg: AppTheme.lightBlue,
+              iconColor: AppTheme.primaryBlue,
+              title: context.tr('privacy_policy'),
+              subtitle: context.tr('privacy_policy_sub'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TermsOfServicePage(initialIndex: 1)),
+              ),
+            ),
+            _buildDivider(),
+            _buildListTile(
+              context,
+              icon: LucideIcons.trash2,
+              iconBg: AppTheme.errorRed.withOpacity(0.08),
+              iconColor: AppTheme.errorRed,
+              title: context.tr('delete_account'),
+              subtitle: context.tr('delete_account_sub'),
+              onTap: () => _showDeleteAccountDialog(context),
             ),
           ],
         ),
@@ -742,6 +767,219 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       ),
     );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.errorRed.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                LucideIcons.alertTriangle,
+                color: AppTheme.errorRed,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: AppTheme.md),
+            Expanded(
+              child: Text(
+                context.tr('delete_account_confirm_title'),
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                context.tr('delete_account_confirm_msg'),
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 14,
+                  color: AppTheme.textPrimary,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: AppTheme.md),
+              Container(
+                padding: const EdgeInsets.all(AppTheme.md),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSecondary,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(color: AppTheme.veryLightGray),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '• Data to be deleted immediately:',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      '  Profile data, saved delivery addresses, search history, favorites & active session tokens.',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    SizedBox(height: 8),
+                    Text(
+                      '• Data retained for statutory compliance:',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      '  Order transaction records and invoices retained as mandated by tax and commercial regulations.',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppTheme.md),
+              InkWell(
+                onTap: () async {
+                  final uri = Uri.parse(ApiConfig.accountDeletionUrl);
+                  try {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } catch (_) {}
+                },
+                child: const Text(
+                  'Web deletion portal: https://shopiq.inventq.in/account-deletion',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 12,
+                    color: AppTheme.primaryBlue,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(
+              context.tr('delete_account_cancel_btn'),
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorRed,
+              foregroundColor: AppTheme.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+            ),
+            onPressed: () async {
+              Navigator.pop(dialogCtx);
+              await _handleDeleteAccount();
+            },
+            child: Text(
+              context.tr('delete_account_confirm_btn'),
+              style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleDeleteAccount() async {
+    final authProvider = context.read<AuthProvider>();
+    final profileProvider = context.read<ProfileProvider>();
+    final userId = authProvider.userId;
+
+    // Show loading progress overlay
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppTheme.errorRed),
+      ),
+    );
+
+    try {
+      if (userId != null) {
+        await profileProvider.deleteProfile(userId);
+      }
+      if (mounted) {
+        context.read<FavoritesApiProvider>().reset();
+        context.read<NotificationsProvider>().reset();
+        profileProvider.reset();
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_profileImagePathKey);
+
+      await authProvider.deleteAccount();
+
+      if (mounted) {
+        // Dismiss loading dialog
+        Navigator.of(context, rootNavigator: true).pop();
+        // Return to login screen
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(context.tr('delete_account_success')),
+            backgroundColor: AppTheme.textPrimary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to complete account deletion: $e'),
+            backgroundColor: AppTheme.errorRed,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildListTile(

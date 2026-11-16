@@ -2,8 +2,11 @@
 //
 // Handles incoming deep links for OAuth callback.
 // Listens for:
+//   - shopiq://callback?token_id=...&flow=signin
+//   - shopiq://auth/callback?token_id=...
+//   - https://shopiq.inventq.in/callback?token_id=...&flow=signin
+//   - https://shopiq.inventq.in/auth/callback?token_id=...
 //   - hyperlocal-app://auth/callback?token_id=...
-//   - https://auth.hyperlocal.com/callback?token_id=...
 //
 // Parses the token_id and triggers token exchange via AuthProvider.
 //
@@ -52,25 +55,121 @@ class DeepLinkHandler {
 
     // Match auth callback paths
     final isAuthCallback = _isAuthCallbackUri(uri);
-    if (!isAuthCallback) return;
+    if (!isAuthCallback) {
+      if (kDebugMode) print('[DeepLinkHandler] URI is not an auth callback, skipping.');
+      return;
+    }
 
-    final tokenId = uri.queryParameters['token_id'];
+    final tokenId = _extractTokenId(uri);
+    final flow = _extractFlow(uri);
+
     if (tokenId != null && tokenId.isNotEmpty) {
-      if (kDebugMode) print('[DeepLinkHandler] Auth callback with token_id: $tokenId');
+      if (kDebugMode) {
+        print('[DeepLinkHandler] Auth callback with token_id: $tokenId (flow: ${flow ?? "unspecified"})');
+      }
       onAuthCallback?.call(tokenId);
     } else {
       if (kDebugMode) print('[DeepLinkHandler] Auth callback without token_id, ignoring');
     }
   }
 
+  /// Extracts the token_id regardless of whether it was passed in query parameters,
+  /// URL fragment/hash, or embedded in intent URI.
+  String? _extractTokenId(Uri uri) {
+    // 1. Direct query parameters
+    String? token = uri.queryParameters['token_id'] ??
+        uri.queryParameters['tokenId'] ??
+        uri.queryParameters['token'];
+    if (token != null && token.isNotEmpty) return token;
+
+    // 2. Check within uri.fragment if present
+    if (uri.hasFragment && uri.fragment.isNotEmpty) {
+      final fragmentMatch = RegExp(r'(?:^|[?&#])token_id=([^&;#\s]+)').firstMatch(uri.fragment);
+      if (fragmentMatch != null) {
+        return Uri.decodeComponent(fragmentMatch.group(1)!);
+      }
+    }
+
+    // 3. Fallback: regex search across the raw URI string
+    final rawString = uri.toString();
+    final rawMatch = RegExp(r'[?&#]token_id=([^&;#\s]+)').firstMatch(rawString);
+    if (rawMatch != null) {
+      return Uri.decodeComponent(rawMatch.group(1)!);
+    }
+
+    return null;
+  }
+
+  /// Extracts the optional auth flow parameter (e.g. "signin", "signup").
+  String? _extractFlow(Uri uri) {
+    String? flow = uri.queryParameters['flow'];
+    if (flow != null && flow.isNotEmpty) return flow;
+
+    if (uri.hasFragment && uri.fragment.isNotEmpty) {
+      final match = RegExp(r'(?:^|[?&#])flow=([^&;#\s]+)').firstMatch(uri.fragment);
+      if (match != null) {
+        return Uri.decodeComponent(match.group(1)!);
+      }
+    }
+
+    final rawMatch = RegExp(r'[?&#]flow=([^&;#\s]+)').firstMatch(uri.toString());
+    if (rawMatch != null) {
+      return Uri.decodeComponent(rawMatch.group(1)!);
+    }
+
+    return null;
+  }
+
   bool _isAuthCallbackUri(Uri uri) {
-    // hyperlocal://auth/callback OR hyperlocal-app://auth/callback OR http://localhost:5173/auth/callback
-    final isCustomScheme = (uri.scheme == 'hyperlocal' || uri.scheme == 'hyperlocal-app') && uri.host == 'auth' && uri.path.startsWith('/callback');
-    final isWebScheme = (uri.scheme == 'http' || uri.scheme == 'https') && uri.path.startsWith('/auth/callback');
-    // We also support intercepting the gateway URL if needed
-    final isGatewayCallback = (uri.host == ApiConfig.baseIp || uri.host == '10.39.224.101' || uri.host == '127.0.0.1' || uri.host == 'localhost') && uri.path.startsWith('/api/auth/callback');
-    
-    return isCustomScheme || isWebScheme || isGatewayCallback;
+    final scheme = uri.scheme.toLowerCase();
+    final host = uri.host.toLowerCase();
+    final path = uri.path.toLowerCase();
+
+    // 1. Custom Schemes: shopiq://, hyperlocal://, hyperlocal-app://
+    if (scheme == 'shopiq' || scheme == 'hyperlocal' || scheme == 'hyperlocal-app') {
+      // Handles:
+      // shopiq://callback?token_id=...
+      // shopiq://auth/callback?token_id=...
+      // shopiq:///callback?token_id=...
+      // shopiq://shopiq.inventq.in/callback?token_id=...
+      if (host == 'callback' ||
+          host == 'auth' ||
+          host == 'shopiq.inventq.in' ||
+          host.isEmpty ||
+          path.startsWith('/callback') ||
+          path.startsWith('/auth/callback') ||
+          path.contains('callback')) {
+        return true;
+      }
+    }
+
+    // 2. Verified App Links / Universal Links (HTTPS / HTTP)
+    if (scheme == 'http' || scheme == 'https') {
+      // Allowed hosts: shopiq.inventq.in, localhost, baseIp
+      final isShopiqDomain = (host == 'shopiq.inventq.in');
+      final isGatewayCallback = (host == ApiConfig.baseIp ||
+          host == '10.39.224.101' ||
+          host == '127.0.0.1' ||
+          host == 'localhost' ||
+          host.isEmpty);
+
+      final isCallbackPath = path.startsWith('/callback') ||
+          path.startsWith('/auth/callback') ||
+          path.startsWith('/api/auth/callback') ||
+          path.contains('callback');
+
+      if ((isShopiqDomain || isGatewayCallback) && isCallbackPath) {
+        return true;
+      }
+    }
+
+    // 3. Robust fallback: Any URI that contains a token_id and has "callback" in host or path
+    if ((host.contains('callback') || path.contains('callback')) &&
+        (uri.queryParameters.containsKey('token_id') || uri.toString().contains('token_id='))) {
+      return true;
+    }
+
+    return false;
   }
   
   /// Starts a local HTTP server to intercept the localhost redirect from the browser.
@@ -82,7 +181,7 @@ class DeepLinkHandler {
       
       _localAuthServer?.listen((HttpRequest request) {
         if (request.uri.path == '/auth/callback' || request.uri.path == '/api/auth/callback') {
-          final tokenId = request.uri.queryParameters['token_id'];
+          final tokenId = _extractTokenId(request.uri);
           
           // Respond to the browser
           request.response
@@ -124,6 +223,15 @@ class DeepLinkHandler {
       if (kDebugMode) print('[DeepLinkHandler] Failed to start local server: $e');
     }
   }
+
+  @visibleForTesting
+  bool isAuthCallbackUri(Uri uri) => _isAuthCallbackUri(uri);
+
+  @visibleForTesting
+  String? extractTokenId(Uri uri) => _extractTokenId(uri);
+
+  @visibleForTesting
+  String? extractFlow(Uri uri) => _extractFlow(uri);
 
   void dispose() {
     _subscription?.cancel();

@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_markdown/flutter_markdown.dart';
-import '../theme/app_theme.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../services/api_config.dart';
+import '../theme/app_theme.dart';
 
 class TermsOfServicePage extends StatefulWidget {
-  const TermsOfServicePage({super.key});
+  final int initialIndex;
+
+  const TermsOfServicePage({
+    super.key,
+    this.initialIndex = 0,
+  });
 
   @override
   State<TermsOfServicePage> createState() => _TermsOfServicePageState();
@@ -21,7 +29,14 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialIndex.clamp(0, 1),
+    );
+    _tabController.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadTerms();
   }
 
@@ -36,7 +51,7 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
       final String fullContent =
           await rootBundle.loadString('assets/legal/terms.md');
 
-      // Markers for shopper documents only:
+      // Markers for consumer legal documents:
       // Document 3: ShopQ Terms of Use
       // Document 4: ShopQ Privacy Policy
       final doc3Start =
@@ -68,6 +83,17 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
         }
       }
 
+      // Clean up internal draft headers and placeholder labels for production display
+      doc3 = doc3
+          .replaceAll('# DOCUMENT 3 — ShopQ Terms of Use', '# ShopiQ Terms of Use')
+          .replaceAll('[SHOPPER APP NAME]', 'ShopiQ')
+          .replaceAll('[DATE]', 'November 2026');
+
+      doc4 = doc4
+          .replaceAll('# DOCUMENT 4 — ShopQ Privacy Policy', '# ShopiQ Privacy Policy')
+          .replaceAll('[SHOPPER APP NAME]', 'ShopiQ')
+          .replaceAll('[DATE]', 'November 2026');
+
       if (mounted) {
         setState(() {
           _doc3Content = doc3.isNotEmpty ? doc3 : fullContent;
@@ -86,6 +112,17 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
     }
   }
 
+  Future<void> _launchExternalLegal() async {
+    final isPrivacy = _tabController.index == 1;
+    final url = isPrivacy ? ApiConfig.privacyPolicyUrl : ApiConfig.termsOfServiceUrl;
+    final uri = Uri.parse(url);
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // In case device has no web browser installed
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,15 +136,22 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
           icon: const Icon(LucideIcons.arrowLeft, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'ShopiQ Legal',
-          style: TextStyle(
+        title: Text(
+          _tabController.index == 1 ? 'Privacy Policy' : 'Terms of Service',
+          style: const TextStyle(
             fontFamily: 'Outfit',
             fontSize: 18,
             fontWeight: FontWeight.w700,
             color: AppTheme.textPrimary,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(LucideIcons.externalLink, color: AppTheme.primaryBlue, size: 20),
+            tooltip: 'Open in browser',
+            onPressed: _launchExternalLegal,
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Container(
@@ -139,8 +183,8 @@ class _TermsOfServicePageState extends State<TermsOfServicePage>
                 fontWeight: FontWeight.w500,
               ),
               tabs: const [
-                Tab(text: 'Terms of Use (Doc 3)'),
-                Tab(text: 'Privacy Policy (Doc 4)'),
+                Tab(text: 'Terms of Use'),
+                Tab(text: 'Privacy Policy'),
               ],
             ),
           ),

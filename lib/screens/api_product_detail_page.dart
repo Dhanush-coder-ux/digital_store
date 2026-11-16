@@ -657,7 +657,7 @@ class _ApiProductDetailPageState extends State<ApiProductDetailPage> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.star_rounded, size: 14, color: Color(0xFFF59E0B)),
+                            const Icon(LucideIcons.star, size: 14, color: Color(0xFFF59E0B)),
                             const SizedBox(width: 3),
                             Text(
                               rating.toStringAsFixed(1),

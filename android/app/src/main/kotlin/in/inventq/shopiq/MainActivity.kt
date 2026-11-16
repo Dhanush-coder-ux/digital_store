@@ -1,4 +1,4 @@
-package com.example.digital_app
+package `in`.inventq.shopiq
 
 import io.flutter.embedding.android.FlutterActivity
 

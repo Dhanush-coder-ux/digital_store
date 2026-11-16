@@ -4,6 +4,7 @@
 // Uses ApiClient for authenticated/standardized requests.
 //
 
+import 'package:flutter/foundation.dart';
 import '../core/network/api_client.dart';
 import 'api_config.dart';
 import '../models/shop_model.dart';
@@ -67,7 +68,7 @@ class ShopService {
             .toList();
       }
     } catch (e) {
-      print('ShopService: fetchShopDeliveryOptions error: $e');
+      if (kDebugMode) print('ShopService: fetchShopDeliveryOptions error: $e');
     }
     return [];
   }
@@ -91,9 +92,11 @@ class ShopService {
   // ── Parsers ────────────────────────────────────────────────────────
 
   List<Shop> _parseShopList(dynamic body) {
-    print('ShopService: parseShopList received body of type ${body.runtimeType}');
-    if (body is Map<String, dynamic>) {
-      print('ShopService: body keys = ${body.keys.toList()}');
+    if (kDebugMode) {
+      print('ShopService: parseShopList received body of type ${body.runtimeType}');
+      if (body is Map<String, dynamic>) {
+        print('ShopService: body keys = ${body.keys.toList()}');
+      }
     }
     if (body is List) {
       final parsedShops = body

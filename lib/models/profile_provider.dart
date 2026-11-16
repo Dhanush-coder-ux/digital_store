@@ -98,6 +98,27 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
+  // ── Account Deletion ────────────────────────────────────────────
+
+  Future<bool> deleteProfile(String userId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final success = await _service.deleteProfile(userId);
+      _profile = null;
+      _hasFetched = false;
+      return success;
+    } catch (e) {
+      _error = 'Failed to delete profile: $e';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // ── Address Management ──────────────────────────────────────────
 
   Future<bool> addAddress(String userId, AddressModel address) async {

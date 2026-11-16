@@ -7,6 +7,7 @@
 //
 
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
 
@@ -86,15 +87,16 @@ class AuthService {
   Future<LoginUrlResponse> getLoginUrl({
     String service = 'HYPERLOCAL_APP',
     String version = '1',
+    String redirectUrl = ApiConfig.appDeepLink,
   }) async {
     final baseUri = Uri.parse(ApiConfig.authLoginUrl);
     final queryParams = Map<String, String>.from(baseUri.queryParameters);
     queryParams['service'] = service;
     queryParams['version'] = version;
-    queryParams['redirect_url'] = 'hyperlocal-app://auth/callback';
+    queryParams['redirect_url'] = redirectUrl;
     
     final uri = baseUri.replace(queryParameters: queryParams);
-    print('DEBUG: Requesting login URL: $uri');
+    if (kDebugMode) print('[AuthService] Requesting login URL: ${uri.origin}${uri.path}');
 
     final response = await http.get(uri, headers: _headers).timeout(_timeout);
 
@@ -132,7 +134,7 @@ class AuthService {
       var request = http.Request('GET', uri)..headers.addAll(_headers);
       request.followRedirects = false; // Prevent Dart from blindly following the redirect to localhost:5173
       
-      print('DEBUG: Exchanging token at $uri');
+      if (kDebugMode) print('[AuthService] Initiating token exchange...');
       
       http.StreamedResponse? streamedResponse;
       for (int i = 0; i < 3; i++) {
@@ -140,7 +142,7 @@ class AuthService {
           streamedResponse = await client.send(request).timeout(_timeout);
           break; // Success
         } catch (e) {
-          print('DEBUG: Attempt ${i + 1} failed: $e');
+          if (kDebugMode) print('[AuthService] Attempt ${i + 1} failed: $e');
           if (i == 2) rethrow; // Out of retries
           await Future.delayed(const Duration(seconds: 1));
           // Need to recreate the request because it can't be sent twice
@@ -150,7 +152,7 @@ class AuthService {
       }
       
       final response = await http.Response.fromStream(streamedResponse!);
-      print('DEBUG: Exchange token response status: ${response.statusCode}');
+      if (kDebugMode) print('[AuthService] Exchange token response status: ${response.statusCode}');
 
       // The backend will return a 307 Redirect to FRONTEND_URL (localhost:5173) with the new login_id
       if (response.statusCode >= 300 && response.statusCode < 400) {
@@ -172,10 +174,10 @@ class AuthService {
             final secondRequest = http.Request('GET', secondUri)..headers.addAll(_headers);
             secondRequest.followRedirects = false;
             
-            print('DEBUG: Second exchange token at $secondUri');
+            if (kDebugMode) print('[AuthService] Completing final token exchange...');
             final secondStream = await client.send(secondRequest).timeout(_timeout);
             final secondResponse = await http.Response.fromStream(secondStream);
-            print('DEBUG: Second exchange response status: ${secondResponse.statusCode}');
+            if (kDebugMode) print('[AuthService] Second exchange status: ${secondResponse.statusCode}');
             
             if (secondResponse.statusCode == 200) {
               final body = jsonDecode(secondResponse.body);

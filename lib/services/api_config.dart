@@ -7,9 +7,20 @@
 class ApiConfig {
 //   static String get baseIp => '192.168.68.104';
 
-//   static String get gatewayBase => 'https://9045-106-51-172-186.ngrok-free.app/api';
-  static String get gatewayBase => 'https://marketplace.debuggers.co.in/api';
+//   static String get gatewayBase => 'https://8b2a-106-51-173-89.ngrok-free.app/api';
+  static String get gatewayBase => 'https://dev.gateway.inventq.in/api';
+//   static String get gatewayBase => 'https://gateway.inventq.in/api';
   static String get baseIp => Uri.tryParse(gatewayBase)?.host ?? '';
+
+  // Deep Link Configuration
+  static const String appDeepLinkDomain = 'shopiq.inventq.in';
+  static const String appDeepLink = 'https://shopiq.inventq.in/callback';
+  static const String appDeepLinkAuthCallback = 'https://shopiq.inventq.in/auth/callback';
+
+  // Legal & Compliance URLs (Google Play Policy)
+  static const String privacyPolicyUrl = 'https://shopiq.inventq.in/privacy-policy';
+  static const String accountDeletionUrl = 'https://shopiq.inventq.in/account-deletion';
+  static const String termsOfServiceUrl = 'https://shopiq.inventq.in/terms';
 
   // ═══════════════════════════════════════════════════════════════════
   // AUTHENTICATION ENDPOINTS
@@ -43,6 +54,9 @@ class ApiConfig {
 
   /// PUT /api/digitalstore/users/profile/{user_id}
   static String profileUpdate(String userId) => '$_dsBase/users/profile/$userId';
+
+  /// DELETE /api/digitalstore/users/profile/{user_id}
+  static String profileDelete(String userId) => '$_dsBase/users/profile/$userId';
 
   // ── Address ─────────────────────────────────────────────────────
 
@@ -97,6 +111,10 @@ class ApiConfig {
   /// GET /api/digitalstore/users/reviews/shop/{shop_id}?limit=&offset=
   static String shopReviewsGet(String shopId) =>
       '$_dsBase/users/reviews/shop/$shopId';
+
+  /// GET /api/digitalstore/users/reviews/shop/{shop_id}/summary
+  static String shopReviewSummaryGet(String shopId) =>
+      '$_dsBase/users/reviews/shop/$shopId/summary';
 
   /// GET /api/digitalstore/users/reviews/user/{user_id}?limit=&offset=
   static String userReviewsGet(String userId) =>
