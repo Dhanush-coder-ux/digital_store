@@ -5,6 +5,7 @@
 // session restoration, auto-refresh, and logout.
 //
 
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'auth_service.dart';
 import 'token_storage.dart';
@@ -30,6 +31,13 @@ class AuthProvider extends ChangeNotifier {
   String? _error;
   String? _pendingLoginUrl;
 
+  // Polling state
+  String? _currentTempId;
+  Timer? _pollTimer;
+  int _pollAttempts = 0;
+  static const int maxPollAttempts = 60; // 60 attempts * 5 sec = 300 sec (5 minutes)
+  static const Duration pollInterval = Duration(seconds: 5);
+
   AuthProvider({
     AuthService? authService,
     TokenStorage? tokenStorage,
@@ -44,8 +52,11 @@ class AuthProvider extends ChangeNotifier {
   String? get mobile => _mobile;
   String? get error => _error;
   String? get pendingLoginUrl => _pendingLoginUrl;
+  String? get currentTempId => _currentTempId;
+  bool get hasPendingLogin => _currentTempId != null && _currentTempId!.isNotEmpty;
   bool get isAuthenticated => _state == AuthState.authenticated;
   bool get isLoading => _state == AuthState.loading;
+  bool get isPolling => _pollTimer != null && _pollTimer!.isActive;
   TokenStorage get tokenStorage => _tokenStorage;
 
   // ── Initialize ──────────────────────────────────────────────────────
@@ -66,10 +77,17 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Also restore any active tempId from storage if not in memory
+      _currentTempId ??= await _tokenStorage.getTempId();
+
       final hasSession = await _tokenStorage.hasStoredSession();
       if (!hasSession) {
         _state = AuthState.unauthenticated;
         notifyListeners();
+        // If we have a pending tempId from a previous launch, start polling
+        if (_currentTempId != null && _currentTempId!.isNotEmpty && _pollTimer == null) {
+          startPolling(_currentTempId!);
+        }
         return;
       }
 
@@ -108,6 +126,7 @@ class AuthProvider extends ChangeNotifier {
   // ── Login Flow ──────────────────────────────────────────────────────
 
   /// Step 1: Fetches the login URL to open in the browser.
+  /// Also starts background polling for the generated tempId every 5 seconds.
   /// Returns the URL string to be opened via url_launcher.
   Future<String?> getLoginUrl() async {
     _state = AuthState.loading;
@@ -116,12 +135,20 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final response = await _authService.getLoginUrl(
-        service: 'HYPERLOCAL-APP',
+        service: 'HYPERLOCAL_APP',
         version: '1',
       );
       _pendingLoginUrl = response.loginUrl;
+      _currentTempId = response.tempId;
+      await _tokenStorage.saveTempId(_currentTempId);
       _state = AuthState.unauthenticated;
       notifyListeners();
+
+      // Automatically start 5-second polling if tempId is present
+      if (_currentTempId != null && _currentTempId!.isNotEmpty) {
+        startPolling(_currentTempId!);
+      }
+
       return _pendingLoginUrl;
     } catch (e) {
       if (kDebugMode) print('[AuthProvider] getLoginUrl error: $e');
@@ -132,9 +159,139 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Starts polling the backend every 5 seconds using tempId.
+  /// When authentication completes in the external browser, automatically saves
+  /// tokens and signs the user in.
+  void startPolling(String tempId) {
+    stopPolling();
+    _currentTempId = tempId;
+    _pollAttempts = 0;
+
+    if (kDebugMode) {
+      print('[AuthProvider] Starting auth polling for tempId: $tempId (interval: 5s, timeout: 5m)');
+    }
+
+    _pollTimer = Timer.periodic(pollInterval, (timer) async {
+      // If already authenticated, stop polling
+      if (_state == AuthState.authenticated) {
+        timer.cancel();
+        _pollTimer = null;
+        return;
+      }
+
+      _pollAttempts++;
+      if (_pollAttempts >= maxPollAttempts) {
+        if (kDebugMode) print('[AuthProvider] Auth polling expired after 5 minutes.');
+        timer.cancel();
+        _pollTimer = null;
+        return;
+      }
+
+      try {
+        final pollRes = await _authService.pollAuthStatus(tempId);
+        if (kDebugMode) print('[AuthProvider] Poll tick #$_pollAttempts for $tempId: status=${pollRes.status}');
+
+        if (pollRes.isAuthenticated && pollRes.tokenResponse != null) {
+          timer.cancel();
+          _pollTimer = null;
+          final tokens = pollRes.tokenResponse!;
+
+          await _tokenStorage.saveTokens(
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken ?? '',
+            expiresIn: tokens.expiresIn,
+          );
+          await _tokenStorage.saveTempId(null);
+
+          await _loadUserInfo();
+          _state = AuthState.authenticated;
+          _pendingLoginUrl = null;
+          _currentTempId = null;
+          notifyListeners();
+          if (kDebugMode) print('[AuthProvider] Polling authentication successful! Automatically logged in.');
+        } else if (pollRes.isExpired) {
+          timer.cancel();
+          _pollTimer = null;
+          _currentTempId = null;
+          await _tokenStorage.saveTempId(null);
+          notifyListeners();
+          if (kDebugMode) print('[AuthProvider] Auth polling session expired on backend.');
+        }
+      } catch (e) {
+        if (kDebugMode) print('[AuthProvider] Polling tick error: $e');
+      }
+    });
+  }
+
+  /// Stops and cancels the active polling timer.
+  void stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  /// Manually checks auth status immediately (e.g. when user clicks 'Tap to verify' / 'Refresh').
+  /// If authentication is verified, logs in immediately.
+  /// If still pending and polling had stopped, restarts polling.
+  Future<bool> checkAuthStatusNow() async {
+    String? tempId = _currentTempId;
+    if (tempId == null || tempId.isEmpty) {
+      tempId = await _tokenStorage.getTempId();
+      _currentTempId = tempId;
+    }
+    if (tempId == null || tempId.isEmpty) {
+      return false;
+    }
+
+    try {
+      final pollRes = await _authService.pollAuthStatus(tempId);
+      if (kDebugMode) {
+        print('[AuthProvider] Manual status check for $tempId: status=${pollRes.status}');
+      }
+
+      if (pollRes.isAuthenticated && pollRes.tokenResponse != null) {
+        stopPolling();
+        final tokens = pollRes.tokenResponse!;
+
+        await _tokenStorage.saveTokens(
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken ?? '',
+          expiresIn: tokens.expiresIn,
+        );
+        await _tokenStorage.saveTempId(null);
+
+        await _loadUserInfo();
+        _state = AuthState.authenticated;
+        _pendingLoginUrl = null;
+        _currentTempId = null;
+        notifyListeners();
+        return true;
+      } else if (pollRes.isExpired) {
+        stopPolling();
+        _currentTempId = null;
+        await _tokenStorage.saveTempId(null);
+        notifyListeners();
+      } else {
+        // If not authenticated and polling timer had stopped, restart polling
+        if (_pollTimer == null && !pollRes.isExpired) {
+          startPolling(tempId);
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('[AuthProvider] Manual status check error: $e');
+    }
+    return false;
+  }
+
   /// Step 2: Called when the deep link callback is received with a token_id.
   /// Exchanges the token_id for JWT tokens and completes login.
   Future<bool> handleAuthCallback(String tokenId) async {
+    // If polling has already authenticated the user, stop polling and return success
+    if (_state == AuthState.authenticated) {
+      stopPolling();
+      return true;
+    }
+
+    stopPolling();
     _state = AuthState.loading;
     _error = null;
     notifyListeners();
@@ -142,7 +299,7 @@ class AuthProvider extends ChangeNotifier {
     try {
       final tokenResponse = await _authService.exchangeToken(
         tokenId,
-        service: 'HYPERLOCAL-APP',
+        service: 'HYPERLOCAL_APP',
         version: '1',
       );
 
@@ -156,10 +313,12 @@ class AuthProvider extends ChangeNotifier {
         refreshToken: tokenResponse.refreshToken ?? '',
         expiresIn: tokenResponse.expiresIn,
       );
+      await _tokenStorage.saveTempId(null);
 
       await _loadUserInfo();
       _state = AuthState.authenticated;
       _pendingLoginUrl = null;
+      _currentTempId = null;
       notifyListeners();
       return true;
     } catch (e) {
@@ -203,6 +362,9 @@ class AuthProvider extends ChangeNotifier {
 
   /// Logs out the user: revokes tokens, clears storage, resets state.
   Future<void> logout() async {
+    stopPolling();
+    _currentTempId = null;
+    await _tokenStorage.saveTempId(null);
     try {
       // Best-effort revoke both tokens
       final accessToken = await _tokenStorage.getAccessToken();
@@ -224,11 +386,53 @@ class AuthProvider extends ChangeNotifier {
     _mobile = null;
     _error = null;
     _pendingLoginUrl = null;
+    _currentTempId = null;
     _state = AuthState.unauthenticated;
     notifyListeners();
   }
 
-  // ── Account Deletion (Google Play Compliance) ──────────────────────
+  @override
+  void dispose() {
+    stopPolling();
+    super.dispose();
+  }
+
+  // ── Account Deletion with OTP Verification ─────────────────────────
+
+  /// Step 1: Requests a 6-digit verification code sent to the user's Gmail.
+  Future<Map<String, dynamic>> requestDeleteAccountOtp() async {
+    if (_userId == null && (_email == null || _email!.isEmpty)) {
+      throw const AuthException('No active user logged in.');
+    }
+    final res = await _authService.requestDeleteAccountOtp(
+      userId: _userId ?? '',
+      email: _email,
+    );
+    if (res['user_id'] != null) {
+      _userId = res['user_id'].toString();
+    }
+    return res;
+  }
+
+  /// Step 2: Verifies the entered OTP, soft-deletes the account, and terminates session.
+  Future<bool> verifyDeleteAccountOtp(String otp) async {
+    _state = AuthState.loading;
+    notifyListeners();
+
+    try {
+      await _authService.verifyDeleteAccountOtp(
+        userId: _userId ?? '',
+        email: _email,
+        otp: otp.trim(),
+      );
+      await logout();
+      return true;
+    } catch (e) {
+      _state = AuthState.authenticated;
+      notifyListeners();
+      rethrow;
+    }
+  }
 
   /// Permanently deletes the user account, clears tokens, and resets session state.
   Future<bool> deleteAccount({Future<void> Function(String userId)? onServerDelete}) async {

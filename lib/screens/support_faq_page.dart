@@ -37,7 +37,7 @@ class _SupportFaqPageState extends State<SupportFaqPage> {
     },
     {
       'question': 'How do I contact customer support?',
-      'answer': 'You can reach out to our support team via email at support@digistore.com or call us at 1-800-123-4567.'
+      'answer': 'You can reach out to our support team via email at supportshopiq@gmail.com or call us at +91 93449 72468.'
     },
   ];
 

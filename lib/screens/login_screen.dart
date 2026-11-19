@@ -5,6 +5,7 @@
 //
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -14,6 +15,7 @@ import '../core/auth/auth_provider.dart';
 import '../l10n/app_translations.dart';
 import '../theme/app_theme.dart';
 import 'main_screen.dart';
+import 'terms_of_service_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,14 +24,23 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   bool _isLaunching = false;
+  bool _isManualChecking = false;
+
   late AnimationController _pinController;
   late Animation<double> _pinBobAnimation;
+  late final TapGestureRecognizer _termsRecognizer;
+  late final TapGestureRecognizer _privacyRecognizer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _termsRecognizer = TapGestureRecognizer()..onTap = _openTerms;
+    _privacyRecognizer = TapGestureRecognizer()..onTap = _openPrivacy;
+
     // Gentle floating animation for the location pin
     _pinController = AnimationController(
       vsync: this,
@@ -40,11 +51,60 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       CurvedAnimation(parent: _pinController, curve: Curves.easeInOut),
     );
 
-    // Listen for auth state changes (deep link callback)
+    // Listen for auth state changes (deep link callback) and check if already authenticated
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final authProvider = context.read<AuthProvider>();
+      if (authProvider.isAuthenticated) {
+        _navigateToHome();
+        return;
+      }
       authProvider.addListener(_onAuthStateChanged);
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkStatusOnResume();
+    }
+  }
+
+  /// Automatically checks auth when user returns from browser to the app
+  Future<void> _checkStatusOnResume() async {
+    if (!mounted) return;
+    final authProvider = context.read<AuthProvider>();
+
+    if (authProvider.isAuthenticated) {
+      _navigateToHome();
+      return;
+    }
+
+    try {
+      // 1. Check if tokens or session already exist
+      await authProvider.checkSession();
+      if (!mounted) return;
+      if (authProvider.isAuthenticated) {
+        _navigateToHome();
+        return;
+      }
+
+      // 2. If there's an ongoing or pending tempId, verify backend immediately!
+      if (authProvider.currentTempId != null || authProvider.isPolling) {
+        final verified = await authProvider.checkAuthStatusNow();
+        if (!mounted) return;
+        if (verified && authProvider.isAuthenticated) {
+          _navigateToHome();
+        }
+      }
+    } catch (e) {
+      // Ignore background check errors
+    }
+  }
+
+  void _navigateToHome() {
+    if (!mounted) return;
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
   }
 
   void _onAuthStateChanged() {
@@ -58,11 +118,72 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
     if (authProvider.isAuthenticated) {
       authProvider.removeListener(_onAuthStateChanged);
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MainScreen()),
-      );
+      _navigateToHome();
     }
+  }
+
+  Future<void> _handleManualVerify() async {
+    if (_isManualChecking) return;
+    setState(() => _isManualChecking = true);
+
+    try {
+      final authProvider = context.read<AuthProvider>();
+
+      // 1. Check stored session
+      await authProvider.checkSession();
+      if (!mounted) return;
+      if (authProvider.isAuthenticated) {
+        _navigateToHome();
+        return;
+      }
+
+      // 2. Check pending tempId if any
+      final success = await authProvider.checkAuthStatusNow();
+      if (!mounted) return;
+      if (success && authProvider.isAuthenticated) {
+        _navigateToHome();
+        return;
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Sign-in not completed yet. Please finish signing in in your browser and tap to verify.',
+              style: TextStyle(fontFamily: 'Outfit'),
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            backgroundColor: AppTheme.textPrimary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Could not verify status: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isManualChecking = false);
+    }
+  }
+
+  void _openTerms() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const TermsOfServicePage(initialIndex: 0),
+      ),
+    );
+  }
+
+  void _openPrivacy() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const TermsOfServicePage(initialIndex: 1),
+      ),
+    );
   }
 
   Future<void> _handleSignIn() async {
@@ -104,10 +225,14 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   @override
   void dispose() {
-    _pinController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _termsRecognizer.dispose();
+    _privacyRecognizer.dispose();
     try {
       context.read<AuthProvider>().removeListener(_onAuthStateChanged);
     } catch (_) {}
+    _pinController.stop();
+    _pinController.dispose();
     super.dispose();
   }
 
@@ -274,59 +399,222 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                     child: Consumer<AuthProvider>(
                       builder: (context, auth, _) {
                         final loading = _isLaunching || auth.isLoading;
-                        return SizedBox(
-                          width: double.infinity,
-                          height: 58,
-                          child: ElevatedButton(
-                            onPressed: loading ? null : _handleSignIn,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: AppTheme.primaryBlue,
-                              disabledBackgroundColor: Colors.white.withValues(alpha: 0.8),
-                              elevation: 4,
-                              shadowColor: AppTheme.textPrimary.withValues(alpha: 0.1),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                side: const BorderSide(color: AppTheme.veryLightGray),
-                              ),
-                              padding: EdgeInsets.zero,
-                            ),
-                            child: loading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: AppTheme.primaryBlue,
-                                    ),
-                                  )
-                                : Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(
-                                        LucideIcons.logIn,
-                                        size: 20,
-                                        color: AppTheme.primaryBlue,
+                        final isPolling = auth.isPolling;
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              height: 58,
+                              child: ElevatedButton(
+                                onPressed: (loading || isPolling) ? null : _handleSignIn,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: AppTheme.primaryBlue,
+                                  disabledBackgroundColor: Colors.white.withValues(alpha: 0.8),
+                                  elevation: 4,
+                                  shadowColor: AppTheme.textPrimary.withValues(alpha: 0.1),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    side: const BorderSide(color: AppTheme.veryLightGray),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                                child: (loading || isPolling)
+                                    ? Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2.5,
+                                              color: AppTheme.primaryBlue,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            isPolling ? 'Waiting for sign in...' : 'Launching sign in...',
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppTheme.primaryBlue,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(
+                                            LucideIcons.logIn,
+                                            size: 20,
+                                            color: AppTheme.primaryBlue,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            context.tr('sign_in'),
+                                            style: GoogleFonts.outfit(
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppTheme.primaryBlue,
+                                              letterSpacing: -0.2,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 10),
+                              ),
+                            ),
+                            if (isPolling || auth.currentTempId != null) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Sign in in your browser. The app will open automatically once verified.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: Colors.white.withValues(alpha: 0.95),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: _isManualChecking ? null : _handleManualVerify,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.22),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.45),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _isManualChecking
+                                          ? const SizedBox(
+                                              width: 13,
+                                              height: 13,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              LucideIcons.refreshCw,
+                                              size: 13,
+                                              color: Colors.white,
+                                            ),
+                                      const SizedBox(width: 7),
                                       Text(
-                                        context.tr('sign_in'),
+                                        _isManualChecking
+                                            ? 'Checking status...'
+                                            : 'Already signed in? Tap to verify',
                                         style: GoogleFonts.outfit(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.primaryBlue,
-                                          letterSpacing: -0.2,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                          letterSpacing: 0.1,
                                         ),
                                       ),
                                     ],
                                   ),
-                          ),
+                                ),
+                              ),
+                            ] else ...[
+                              const SizedBox(height: 10),
+                              GestureDetector(
+                                onTap: _isManualChecking ? null : _handleManualVerify,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.35),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _isManualChecking
+                                          ? const SizedBox(
+                                              width: 13,
+                                              height: 13,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              LucideIcons.refreshCw,
+                                              size: 13,
+                                              color: Colors.white,
+                                            ),
+                                      const SizedBox(width: 7),
+                                      Text(
+                                        _isManualChecking
+                                            ? 'Checking status...'
+                                            : 'Already signed in? Tap to verify',
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white,
+                                          letterSpacing: 0.1,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 14),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text.rich(
+                                TextSpan(
+                                  text: 'By continuing, you agree to our ',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w400,
+                                    color: Colors.white.withValues(alpha: 0.92),
+                                    height: 1.45,
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: 'Terms of Service',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: Colors.white,
+                                        color: Colors.white,
+                                      ),
+                                      recognizer: _termsRecognizer,
+                                    ),
+                                    const TextSpan(text: ' and '),
+                                    TextSpan(
+                                      text: 'Privacy Policy',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        decoration: TextDecoration.underline,
+                                        decorationColor: Colors.white,
+                                        color: Colors.white,
+                                      ),
+                                      recognizer: _privacyRecognizer,
+                                    ),
+                                  ],
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ],
                         );
                       },
                     ),
                   ),
 
-                  SizedBox(height: size.height * 0.035),
+                  SizedBox(height: size.height * 0.025),
                 ],
               ),
             ),

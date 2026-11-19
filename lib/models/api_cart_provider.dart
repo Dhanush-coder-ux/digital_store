@@ -207,6 +207,19 @@ class ApiCartProvider extends ChangeNotifier {
 
   // ── Reset for different shop ───────────────────────────────────────
 
+  /// Clears in-memory cart, session ID, local mirror, and cached customer orders.
+  void clearCart() {
+    _sessionId = null;
+    _shopId = null;
+    _lastCustomerId = null;
+    _items.clear();
+    _localMirror.clear();
+    _myOrders.clear();
+    _state = CartState.idle;
+    _error = null;
+    notifyListeners();
+  }
+
   Future<void> resetForShop(String shopId) async {
     if (_sessionId != null) {
       try {

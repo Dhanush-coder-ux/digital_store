@@ -16,6 +16,25 @@ class TokenStorage {
   static const _mobileKey = 'hl_mobile';
   static const _tokenVersionKey = 'hl_token_version';
   static const _expiresAtKey = 'hl_expires_at';
+  static const _tempIdKey = 'hl_temp_id';
+
+  // ── Temp ID (Polling Recovery) ──────────────────────────────────────
+
+  /// Persists the temporary ticket/session ID for polling verification across app pauses/restarts.
+  Future<void> saveTempId(String? tempId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (tempId != null && tempId.isNotEmpty) {
+      await prefs.setString(_tempIdKey, tempId);
+    } else {
+      await prefs.remove(_tempIdKey);
+    }
+  }
+
+  /// Retrieves the persisted temp ID, if any.
+  Future<String?> getTempId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_tempIdKey);
+  }
 
   // ── Save Tokens ─────────────────────────────────────────────────────
 
@@ -145,6 +164,7 @@ class TokenStorage {
     await prefs.remove(_mobileKey);
     await prefs.remove(_tokenVersionKey);
     await prefs.remove(_expiresAtKey);
+    await prefs.remove(_tempIdKey);
   }
 
   // ── JWT Decode Helper ───────────────────────────────────────────────

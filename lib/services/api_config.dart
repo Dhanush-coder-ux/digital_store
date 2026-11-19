@@ -7,7 +7,7 @@
 class ApiConfig {
 //   static String get baseIp => '192.168.68.104';
 
-//   static String get gatewayBase => 'https://8b2a-106-51-173-89.ngrok-free.app/api';
+//   static String get gatewayBase => 'https://7464-106-51-169-8.ngrok-free.app/api';
   static String get gatewayBase => 'https://dev.gateway.inventq.in/api';
 //   static String get gatewayBase => 'https://gateway.inventq.in/api';
   static String get baseIp => Uri.tryParse(gatewayBase)?.host ?? '';
@@ -29,6 +29,9 @@ class ApiConfig {
   /// GET /api/auth/login-url?service=&version=
   static String get authLoginUrl => '$gatewayBase/auth/login-url?entity_name=HYPERLOCAL&entity_type=app&service=HYPERLOCAL_APP';
 
+  /// GET /api/auth/poll-status?temp_id={tempId}
+  static String authPollStatus(String tempId) => '$gatewayBase/auth/poll-status?temp_id=$tempId';
+
   /// GET /api/auth/callback?token_id=&service=&version=
   static String get authCallback => '$gatewayBase/auth/callback';
 
@@ -37,6 +40,12 @@ class ApiConfig {
 
   /// POST /api/auth/revoke  body: {token}
   static String get authRevoke => '$gatewayBase/auth/revoke';
+
+  /// POST /api/auth/account-deletion/request-otp
+  static String get authDeleteAccountRequestOtp => '$gatewayBase/auth/account-deletion/request-otp';
+
+  /// POST /api/auth/account-deletion/verify-otp
+  static String get authDeleteAccountVerifyOtp => '$gatewayBase/auth/account-deletion/verify-otp';
 
   // ═══════════════════════════════════════════════════════════════════
   // DIGITALSTORE USER ENDPOINTS (OpenAPI: DigiStore.json)

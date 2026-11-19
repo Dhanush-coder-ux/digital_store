@@ -187,9 +187,13 @@ class _MyAppState extends State<MyApp> {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: widget.authProvider.isAuthenticated
-                ? const MainScreen()
-                : const LoginScreen(),
+            home: Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                return auth.isAuthenticated
+                    ? const MainScreen()
+                    : const LoginScreen();
+              },
+            ),
             routes: {
               '/home': (context) => const MainScreen(),
               '/login': (context) => const LoginScreen(),

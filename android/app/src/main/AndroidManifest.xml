@@ -40,7 +40,9 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="shopiq.inventq.in" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:host="shopiq.inventq.in" />
             </intent-filter>
             
             <!-- 2. Custom URI Schemes for OAuth Redirection (Separated from autoVerify) -->

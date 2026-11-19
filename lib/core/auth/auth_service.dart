@@ -11,6 +11,17 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../services/api_config.dart';
 
+/// Thrown when an authentication or authorization operation fails.
+class AuthException implements Exception {
+  final String message;
+  final int? statusCode;
+
+  const AuthException(this.message, {this.statusCode});
+
+  @override
+  String toString() => message;
+}
+
 /// Response from the token exchange or refresh endpoint.
 class AuthTokenResponse {
   final String accessToken;
@@ -43,6 +54,14 @@ class LoginUrlResponse {
 
   const LoginUrlResponse({required this.rawData});
 
+  /// The unique temporary ticket ID for polling verification until authentication completes.
+  String? get tempId {
+    if (rawData.containsKey('temp_id')) return rawData['temp_id']?.toString();
+    if (rawData.containsKey('ticket_id')) return rawData['ticket_id']?.toString();
+    if (rawData.containsKey('session_id')) return rawData['session_id']?.toString();
+    return null;
+  }
+
   /// The primary login URL to open in the browser.
   /// The Debugger Auth service typically returns a map with auth URLs.
   String? get loginUrl {
@@ -67,6 +86,39 @@ class LoginUrlResponse {
       }
     }
     return null;
+  }
+}
+
+/// Response from the auth polling endpoint.
+class PollStatusResponse {
+  final String status;
+  final String? tempId;
+  final String? message;
+  final AuthTokenResponse? tokenResponse;
+
+  const PollStatusResponse({
+    required this.status,
+    this.tempId,
+    this.message,
+    this.tokenResponse,
+  });
+
+  bool get isPending => status == 'pending';
+  bool get isAuthenticated => status == 'authenticated';
+  bool get isExpired => status == 'expired';
+
+  factory PollStatusResponse.fromJson(Map<String, dynamic> json) {
+    final status = json['status']?.toString().toLowerCase() ?? 'pending';
+    AuthTokenResponse? tokens;
+    if (status == 'authenticated' && json['access_token'] != null) {
+      tokens = AuthTokenResponse.fromJson(json);
+    }
+    return PollStatusResponse(
+      status: status,
+      tempId: json['temp_id']?.toString(),
+      message: json['message']?.toString(),
+      tokenResponse: tokens,
+    );
   }
 }
 
@@ -108,6 +160,27 @@ class AuthService {
       throw Exception('Unexpected login URL response format');
     } else {
       throw Exception('Failed to get login URL (${response.statusCode}): ${response.body}');
+    }
+  }
+
+  // ── Poll Auth Status ───────────────────────────────────────────────
+
+  /// Polls the backend auth service by temp_id every 5 seconds until signin completes.
+  /// GET /api/auth/poll-status?temp_id={tempId}
+  Future<PollStatusResponse> pollAuthStatus(String tempId) async {
+    final uri = Uri.parse(ApiConfig.authPollStatus(tempId));
+    try {
+      final response = await http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body is Map<String, dynamic>) {
+          return PollStatusResponse.fromJson(body);
+        }
+      }
+      return const PollStatusResponse(status: 'pending');
+    } catch (e) {
+      if (kDebugMode) print('[AuthService] Poll error for $tempId: $e');
+      return const PollStatusResponse(status: 'pending');
     }
   }
 
@@ -247,6 +320,62 @@ class AuthService {
     } catch (_) {
       // Revocation failure is non-critical — token will expire anyway
     }
+  }
+
+  // ── Account Deletion with OTP ──────────────────────────────────────
+
+  /// Requests a 6-digit verification code sent to the user's Gmail.
+  /// POST /api/auth/account-deletion/request-otp
+  Future<Map<String, dynamic>> requestDeleteAccountOtp({
+    required String userId,
+    String? email,
+  }) async {
+    final response = await http.post(
+      Uri.parse(ApiConfig.authDeleteAccountRequestOtp),
+      headers: _headers,
+      body: jsonEncode({
+        'user_id': userId,
+        if (email != null && email.isNotEmpty) 'email': email,
+        'scope': 'shopiq',
+      }),
+    ).timeout(_timeout);
+ 
+    final data = jsonDecode(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return data is Map<String, dynamic> ? data : {'success': true};
+    }
+    throw AuthException(
+      data['detail']?.toString() ?? 'Failed to send verification code.',
+      statusCode: response.statusCode,
+    );
+  }
+ 
+  /// Verifies the OTP and triggers a soft delete on backend.
+  /// POST /api/auth/account-deletion/verify-otp
+  Future<Map<String, dynamic>> verifyDeleteAccountOtp({
+    required String userId,
+    String? email,
+    required String otp,
+  }) async {
+    final response = await http.post(
+      Uri.parse(ApiConfig.authDeleteAccountVerifyOtp),
+      headers: _headers,
+      body: jsonEncode({
+        if (userId.isNotEmpty) 'user_id': userId,
+        if (email != null && email.isNotEmpty) 'email': email,
+        'otp': otp,
+        'scope': 'shopiq',
+      }),
+    ).timeout(_timeout);
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return data is Map<String, dynamic> ? data : {'success': true};
+    }
+    throw AuthException(
+      data['detail']?.toString() ?? 'Invalid verification code.',
+      statusCode: response.statusCode,
+    );
   }
 
   // ── Helper ────────────────────────────────────────────────────────

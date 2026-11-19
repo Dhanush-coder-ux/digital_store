@@ -45,6 +45,7 @@ class AppTheme {
   static const Color textPrimary   = primaryText;
   static const Color textSecondary = secondaryText;
   static const Color textTertiary  = Color(0xFFAFA293);
+  static const Color textMuted     = secondaryText;
   static const Color textInverse   = surface;
 
   // Neutrals

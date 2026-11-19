@@ -23,6 +23,9 @@ import 'support_faq_page.dart';
 import 'terms_of_service_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_config.dart';
+import '../models/user_order_provider.dart';
+import '../models/api_cart_provider.dart';
+import '../models/review_provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -49,14 +52,26 @@ class _ProfilePageState extends State<ProfilePage> {
       final authProvider = context.read<AuthProvider>();
       final profileProvider = context.read<ProfileProvider>();
       final userId = authProvider.userId;
-      if (userId != null && !profileProvider.hasFetched) {
-        profileProvider.fetchProfile(userId).then((_) {
-          // Auto-create profile if it doesn't exist yet
-          if (profileProvider.profile == null && profileProvider.error == null) {
-            final displayName = authProvider.email?.split('@').first ?? 'User';
-            profileProvider.createProfile(userId, displayName);
-          }
-        });
+      if (userId != null) {
+        if (!profileProvider.hasFetched) {
+          profileProvider.fetchProfile(userId).then((_) {
+            // Auto-create profile if it doesn't exist yet
+            if (profileProvider.profile == null && profileProvider.error == null) {
+              final displayName = authProvider.email?.split('@').first ?? 'User';
+              profileProvider.createProfile(userId, displayName);
+            }
+          });
+        }
+        final orderProvider = context.read<UserOrderProvider>();
+        if (!orderProvider.hasFetched) {
+          orderProvider.fetchUserOrders(userId);
+        }
+        final favProvider = context.read<FavoritesApiProvider>();
+        if (!favProvider.hasFetched) {
+          favProvider.fetchFavorites(userId);
+        }
+        final reviewProvider = context.read<ReviewProvider>();
+        reviewProvider.fetchUserReviews(userId);
       }
     });
   }
@@ -140,7 +155,12 @@ class _ProfilePageState extends State<ProfilePage> {
     final authProvider = context.read<AuthProvider>();
     final userId = authProvider.userId;
     if (userId != null) {
-      await context.read<ProfileProvider>().fetchProfile(userId, force: true);
+      await Future.wait([
+        context.read<ProfileProvider>().fetchProfile(userId, force: true),
+        context.read<UserOrderProvider>().fetchUserOrders(userId, force: true),
+        context.read<FavoritesApiProvider>().fetchFavorites(userId, force: true),
+        context.read<ReviewProvider>().fetchUserReviews(userId),
+      ]);
     }
   }
 
@@ -280,6 +300,16 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildStatsRow(BuildContext context) {
+    final orderProvider = context.watch<UserOrderProvider>();
+    final reviewProvider = context.watch<ReviewProvider>();
+    final favoritesProvider = context.watch<FavoritesApiProvider>();
+
+    final ordersCount = orderProvider.orders.length.toString();
+    final reviewsCount = reviewProvider.userReviews.length.toString();
+    final favoritesCount = (favoritesProvider.favoriteProductIds.length +
+            favoritesProvider.favoriteShopIds.length)
+        .toString();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
       child: FadeInUp(
@@ -293,11 +323,38 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
           child: Row(
             children: [
-              _buildStat(context, '12', context.tr('orders_stat'), LucideIcons.shoppingBag),
+              _buildStat(
+                context,
+                ordersCount,
+                context.tr('orders_stat'),
+                LucideIcons.shoppingBag,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const MyOrdersPage()),
+                  );
+                },
+              ),
               _buildStatDivider(),
-              _buildStat(context, '5', context.tr('reviews_stat'), LucideIcons.star),
+              _buildStat(
+                context,
+                reviewsCount,
+                context.tr('reviews_stat'),
+                LucideIcons.star,
+              ),
               _buildStatDivider(),
-              _buildStat(context, '8', context.tr('favorites_stat'), LucideIcons.heart),
+              _buildStat(
+                context,
+                favoritesCount,
+                context.tr('favorites_stat'),
+                LucideIcons.heart,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const FavoritesPage()),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -309,31 +366,43 @@ class _ProfilePageState extends State<ProfilePage> {
     BuildContext context,
     String value,
     String label,
-    IconData icon,
-  ) {
+    IconData icon, {
+    VoidCallback? onTap,
+  }) {
+    final content = Column(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppTheme.primaryBlue.withOpacity(0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 18, color: AppTheme.primaryBlue),
+        ),
+        const SizedBox(height: AppTheme.sm),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ],
+    );
+
     return Expanded(
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppTheme.primaryBlue.withOpacity(0.08),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, size: 18, color: AppTheme.primaryBlue),
-          ),
-          const SizedBox(height: AppTheme.sm),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          Text(label, style: Theme.of(context).textTheme.bodySmall),
-        ],
-      ),
+      child: onTap != null
+          ? InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: content,
+              ),
+            )
+          : content,
     );
   }
 
@@ -538,191 +607,23 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _showLanguageSelector(BuildContext context, LanguageProvider provider) {
-    final searchController = TextEditingController();
-    String query = '';
-
-    showModalBottomSheet(
+  Future<void> _showLanguageSelector(BuildContext context, LanguageProvider provider) async {
+    final selectedCode = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (BuildContext sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final filteredLanguages = LanguageProvider.supportedLanguages.where((lang) {
-              if (query.isEmpty) return true;
-              final q = query.toLowerCase();
-              final name = (lang['name'] ?? '').toLowerCase();
-              final english = (lang['englishName'] ?? '').toLowerCase();
-              final code = (lang['code'] ?? '').toLowerCase();
-              return name.contains(q) || english.contains(q) || code.contains(q);
-            }).toList();
-
-            return DraggableScrollableSheet(
-              initialChildSize: 0.72,
-              minChildSize: 0.45,
-              maxChildSize: 0.9,
-              expand: false,
-              builder: (context, scrollController) {
-                return SafeArea(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: AppTheme.sm),
-                      Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppTheme.veryLightGray,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                      const SizedBox(height: AppTheme.md),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
-                        child: Text(
-                          provider.tr('select_language'),
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppTheme.md),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
-                        child: TextField(
-                          controller: searchController,
-                          onChanged: (value) {
-                            setModalState(() {
-                              query = value.trim();
-                            });
-                          },
-                          decoration: InputDecoration(
-                            hintText: provider.tr('search_languages'),
-                            hintStyle: const TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 14,
-                              color: AppTheme.textTertiary,
-                            ),
-                            prefixIcon: const Icon(
-                              LucideIcons.search,
-                              size: 18,
-                              color: AppTheme.textSecondary,
-                            ),
-                            suffixIcon: query.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(
-                                      LucideIcons.x,
-                                      size: 16,
-                                      color: AppTheme.textSecondary,
-                                    ),
-                                    onPressed: () {
-                                      searchController.clear();
-                                      setModalState(() {
-                                        query = '';
-                                      });
-                                    },
-                                  )
-                                : null,
-                            filled: true,
-                            fillColor: AppTheme.bgSecondary,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: AppTheme.md,
-                              vertical: 10,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(14),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: AppTheme.md),
-                      const Divider(height: 1, color: AppTheme.veryLightGray),
-                      Expanded(
-                        child: filteredLanguages.isEmpty
-                            ? Center(
-                                child: Text(
-                                  provider.tr('no_languages_found'),
-                                  style: const TextStyle(
-                                    fontFamily: 'Outfit',
-                                    fontSize: 14,
-                                    color: AppTheme.textSecondary,
-                                  ),
-                                ),
-                              )
-                            : ListView.separated(
-                                controller: scrollController,
-                                itemCount: filteredLanguages.length,
-                                separatorBuilder: (_, __) => const Divider(
-                                  height: 1,
-                                  indent: AppTheme.xl,
-                                  endIndent: AppTheme.xl,
-                                  color: AppTheme.veryLightGray,
-                                ),
-                                itemBuilder: (context, index) {
-                                  final lang = filteredLanguages[index];
-                                  final code = lang['code']!;
-                                  final nativeName = lang['name']!;
-                                  final englishName = lang['englishName'] ?? nativeName;
-                                  final isSelected =
-                                      provider.currentLocale.languageCode == code;
-                                  return ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: AppTheme.xl,
-                                      vertical: 2,
-                                    ),
-                                    title: Text(
-                                      nativeName,
-                                      style: TextStyle(
-                                        fontFamily: 'Outfit',
-                                        fontSize: 16,
-                                        fontWeight: isSelected
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: isSelected
-                                            ? AppTheme.primaryBlue
-                                            : AppTheme.textPrimary,
-                                      ),
-                                    ),
-                                    subtitle: englishName != nativeName
-                                        ? Text(
-                                            englishName,
-                                            style: const TextStyle(
-                                              fontFamily: 'Outfit',
-                                              fontSize: 12,
-                                              color: AppTheme.textSecondary,
-                                            ),
-                                          )
-                                        : null,
-                                    trailing: isSelected
-                                        ? const Icon(
-                                            LucideIcons.check,
-                                            color: AppTheme.primaryBlue,
-                                          )
-                                        : null,
-                                    onTap: () {
-                                      provider.setLanguage(code);
-                                      Navigator.pop(sheetContext);
-                                    },
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
-        );
+        return _LanguageSelectionSheet(provider: provider);
       },
-    ).whenComplete(searchController.dispose);
+    );
+
+    if (selectedCode != null && selectedCode != provider.currentLocale.languageCode) {
+      // Ensure the bottom sheet pop animation finishes and unmounts before rebuilding MaterialApp
+      await Future.delayed(const Duration(milliseconds: 320));
+      if (mounted) {
+        await provider.setLanguage(selectedCode);
+      }
+    }
   }
 
   Widget _buildLogoutButton(BuildContext context) {
@@ -734,6 +635,9 @@ class _ProfilePageState extends State<ProfilePage> {
           context.read<ProfileProvider>().reset();
           context.read<FavoritesApiProvider>().reset();
           context.read<NotificationsProvider>().reset();
+          context.read<UserOrderProvider>().reset();
+          context.read<ApiCartProvider>().clearCart();
+          context.read<ReviewProvider>().reset();
           await context.read<AuthProvider>().logout();
           if (context.mounted) {
             Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
@@ -911,9 +815,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
               ),
             ),
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(dialogCtx);
-              await _handleDeleteAccount();
+              _initiateAccountDeletionFlow();
             },
             child: Text(
               context.tr('delete_account_confirm_btn'),
@@ -928,58 +832,140 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Future<void> _handleDeleteAccount() async {
+  Future<void> _initiateAccountDeletionFlow() async {
     final authProvider = context.read<AuthProvider>();
-    final profileProvider = context.read<ProfileProvider>();
     final userId = authProvider.userId;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please log in again to delete your account.'),
+          backgroundColor: AppTheme.errorRed,
+        ),
+      );
+      return;
+    }
 
-    // Show loading progress overlay
+    // Show loading progress overlay while generating & sending OTP
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(
-        child: CircularProgressIndicator(color: AppTheme.errorRed),
+      builder: (_) => Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          margin: const EdgeInsets.symmetric(horizontal: 32),
+          decoration: BoxDecoration(
+            color: AppTheme.white,
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            boxShadow: AppTheme.shadowMedium,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppTheme.errorRed,
+                ),
+              ),
+              SizedBox(width: AppTheme.md),
+              Expanded(
+                child: Text(
+                  'Sending verification code to Gmail...',
+                  style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
 
     try {
-      if (userId != null) {
-        await profileProvider.deleteProfile(userId);
-      }
-      if (mounted) {
-        context.read<FavoritesApiProvider>().reset();
-        context.read<NotificationsProvider>().reset();
-        profileProvider.reset();
-      }
+      final res = await authProvider.requestDeleteAccountOtp();
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_profileImagePathKey);
+      final maskedEmail = (res['email'] as String?) ??
+          (authProvider.email != null
+              ? '${authProvider.email!.substring(0, 2)}***@${authProvider.email!.split("@").last}'
+              : 'your registered Gmail');
 
-      await authProvider.deleteAccount();
-
-      if (mounted) {
-        // Dismiss loading dialog
-        Navigator.of(context, rootNavigator: true).pop();
-        // Return to login screen
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.tr('delete_account_success')),
-            backgroundColor: AppTheme.textPrimary,
-          ),
-        );
-      }
+      _showOtpVerificationModal(maskedEmail);
     } catch (e) {
       if (mounted) {
-        Navigator.of(context, rootNavigator: true).pop();
+        Navigator.of(context, rootNavigator: true).pop(); // Dismiss loading
+        final errorMsg = e.toString().replaceAll('Exception: ', '').replaceAll('AuthException: ', '');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to complete account deletion: $e'),
+            content: Text(errorMsg),
             backgroundColor: AppTheme.errorRed,
           ),
         );
       }
     }
+  }
+
+  void _showOtpVerificationModal(String maskedEmail) {
+    final authProvider = context.read<AuthProvider>();
+    final profileProvider = context.read<ProfileProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) {
+        return _OtpVerificationSheet(
+          maskedEmail: maskedEmail,
+          onCancel: () => Navigator.pop(modalCtx),
+          onResendOtp: () async {
+            await authProvider.requestDeleteAccountOtp();
+          },
+          onVerifyOtp: (enteredOtp) async {
+            final userId = authProvider.userId;
+            if (userId != null) {
+              try {
+                await profileProvider.deleteProfile(userId);
+              } catch (_) {}
+            }
+
+            await authProvider.verifyDeleteAccountOtp(enteredOtp);
+
+            if (mounted) {
+              context.read<FavoritesApiProvider>().reset();
+              context.read<NotificationsProvider>().reset();
+              context.read<UserOrderProvider>().reset();
+              context.read<ApiCartProvider>().clearCart();
+              context.read<ReviewProvider>().reset();
+              profileProvider.reset();
+            }
+
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove(_profileImagePathKey);
+
+            if (modalCtx.mounted) {
+              Navigator.pop(modalCtx);
+            }
+
+            if (mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(context.tr('delete_account_success')),
+                  backgroundColor: AppTheme.textPrimary,
+                ),
+              );
+            }
+          },
+        );
+      },
+    );
   }
 
   Widget _buildListTile(
@@ -1044,6 +1030,573 @@ class _ProfilePageState extends State<ProfilePage> {
     return Padding(
       padding: const EdgeInsets.only(left: 72, right: AppTheme.lg),
       child: Divider(height: 1, color: AppTheme.veryLightGray),
+    );
+  }
+}
+
+
+// ── Standalone Stateful Sheet Widgets (Prevent Controller Disposal Collisions) ──
+
+class _LanguageSelectionSheet extends StatefulWidget {
+  final LanguageProvider provider;
+
+  const _LanguageSelectionSheet({required this.provider});
+
+  @override
+  State<_LanguageSelectionSheet> createState() => _LanguageSelectionSheetState();
+}
+
+class _LanguageSelectionSheetState extends State<_LanguageSelectionSheet> {
+  late final TextEditingController _searchController;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filteredLanguages = LanguageProvider.supportedLanguages.where((lang) {
+      if (_query.isEmpty) return true;
+      final q = _query.toLowerCase();
+      final name = (lang['name'] ?? '').toLowerCase();
+      final english = (lang['englishName'] ?? '').toLowerCase();
+      final code = (lang['code'] ?? '').toLowerCase();
+      return name.contains(q) || english.contains(q) || code.contains(q);
+    }).toList();
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: AppTheme.sm),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppTheme.veryLightGray,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: AppTheme.md),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
+              child: Text(
+                widget.provider.tr('select_language'),
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppTheme.md),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppTheme.xl),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {
+                    _query = value.trim();
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: widget.provider.tr('search_languages'),
+                  hintStyle: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 14,
+                    color: AppTheme.textTertiary,
+                  ),
+                  prefixIcon: const Icon(
+                    LucideIcons.search,
+                    size: 18,
+                    color: AppTheme.textSecondary,
+                  ),
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(
+                            LucideIcons.x,
+                            size: 16,
+                            color: AppTheme.textSecondary,
+                          ),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _query = '';
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppTheme.bgSecondary,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppTheme.md,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppTheme.md),
+            const Divider(height: 1, color: AppTheme.veryLightGray),
+            Expanded(
+              child: filteredLanguages.isEmpty
+                  ? Center(
+                      child: Text(
+                        widget.provider.tr('no_languages_found'),
+                        style: const TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 14,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: filteredLanguages.length,
+                      separatorBuilder: (_, __) => const Divider(
+                        height: 1,
+                        indent: AppTheme.xl,
+                        endIndent: AppTheme.xl,
+                        color: AppTheme.veryLightGray,
+                      ),
+                      itemBuilder: (context, index) {
+                        final lang = filteredLanguages[index];
+                        final code = lang['code']!;
+                        final nativeName = lang['name']!;
+                        final englishName = lang['englishName'] ?? nativeName;
+                        final isSelected =
+                            widget.provider.currentLocale.languageCode == code;
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: AppTheme.xl,
+                            vertical: 2,
+                          ),
+                          title: Text(
+                            nativeName,
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 16,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? AppTheme.primaryBlue
+                                  : AppTheme.textPrimary,
+                            ),
+                          ),
+                          subtitle: englishName != nativeName
+                              ? Text(
+                                  englishName,
+                                  style: const TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                )
+                              : null,
+                          trailing: isSelected
+                              ? const Icon(
+                                  LucideIcons.check,
+                                  color: AppTheme.primaryBlue,
+                                )
+                              : null,
+                          onTap: () {
+                            Navigator.pop(context, code);
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OtpVerificationSheet extends StatefulWidget {
+  final String maskedEmail;
+  final VoidCallback onCancel;
+  final Future<void> Function() onResendOtp;
+  final Future<void> Function(String otp) onVerifyOtp;
+
+  const _OtpVerificationSheet({
+    required this.maskedEmail,
+    required this.onCancel,
+    required this.onResendOtp,
+    required this.onVerifyOtp,
+  });
+
+  @override
+  State<_OtpVerificationSheet> createState() => _OtpVerificationSheetState();
+}
+
+class _OtpVerificationSheetState extends State<_OtpVerificationSheet> {
+  late final TextEditingController _otpController;
+  bool _isVerifying = false;
+  String? _localError;
+
+  @override
+  void initState() {
+    super.initState();
+    _otpController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      margin: EdgeInsets.only(bottom: bottomInset),
+      decoration: const BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.veryLightGray,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.errorRed.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      LucideIcons.shieldAlert,
+                      color: AppTheme.errorRed,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Verify Account Deletion',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Security verification required',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSecondary,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(color: AppTheme.veryLightGray),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      LucideIcons.mail,
+                      color: AppTheme.primaryBlue,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 13,
+                            color: AppTheme.textPrimary,
+                            height: 1.4,
+                          ),
+                          children: [
+                            const TextSpan(text: 'A 6-digit confirmation code was sent to '),
+                            TextSpan(
+                              text: widget.maskedEmail,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.primaryBlue,
+                              ),
+                            ),
+                            const TextSpan(text: '. Enter it below to complete deletion.'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: _otpController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                autofocus: true,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 24,
+                  letterSpacing: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textPrimary,
+                ),
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: '••••••',
+                  hintStyle: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 24,
+                    letterSpacing: 12,
+                    color: AppTheme.textSecondary.withOpacity(0.4),
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.bgSecondary,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    borderSide: const BorderSide(color: AppTheme.veryLightGray),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    borderSide: const BorderSide(color: AppTheme.veryLightGray),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    borderSide: const BorderSide(color: AppTheme.errorRed, width: 1.5),
+                  ),
+                ),
+                onChanged: (_) {
+                  if (_localError != null) {
+                    setState(() => _localError = null);
+                  }
+                },
+              ),
+              if (_localError != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _localError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 12,
+                    color: AppTheme.errorRed,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Icon(
+                      LucideIcons.info,
+                      color: Colors.amber,
+                      size: 16,
+                    ),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Personal profile, saved addresses and favorites will be permanently removed. Order records remain archived for merchant bookkeeping and tax compliance.',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    "Didn't receive the email?",
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _isVerifying
+                        ? null
+                        : () async {
+                            try {
+                              await widget.onResendOtp();
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('A fresh verification code was sent to your Gmail.'),
+                                    backgroundColor: AppTheme.textPrimary,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                setState(() {
+                                  _localError = 'Failed to resend code: $e';
+                                });
+                              }
+                            }
+                          },
+                    child: const Text(
+                      'Resend Code',
+                      style: TextStyle(
+                        fontFamily: 'Outfit',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primaryBlue,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.errorRed,
+                  foregroundColor: AppTheme.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  ),
+                ),
+                onPressed: _isVerifying
+                    ? null
+                    : () async {
+                        final enteredOtp = _otpController.text.trim();
+                        if (enteredOtp.length != 6) {
+                          setState(() {
+                            _localError = 'Please enter the complete 6-digit verification code.';
+                          });
+                          return;
+                        }
+
+                        setState(() {
+                          _isVerifying = true;
+                          _localError = null;
+                        });
+
+                        try {
+                          await widget.onVerifyOtp(enteredOtp);
+                        } catch (e) {
+                          if (mounted) {
+                            setState(() {
+                              _isVerifying = false;
+                              String raw = e.toString().replaceAll('Exception: ', '').replaceAll('AuthException: ', '').trim();
+                              if (raw.contains('description:')) {
+                                final match = RegExp(r'description:\s*([^,}]+)').firstMatch(raw);
+                                if (match != null && match.group(1) != null) {
+                                  raw = match.group(1)!.trim();
+                                }
+                              } else if (raw.contains('detail:')) {
+                                final match = RegExp(r'detail:\s*([^,}]+)').firstMatch(raw);
+                                if (match != null && match.group(1) != null) {
+                                  raw = match.group(1)!.trim();
+                                }
+                              }
+                              _localError = raw;
+                            });
+                          }
+                        }
+                      },
+                child: _isVerifying
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.white,
+                        ),
+                      )
+                    : const Text(
+                        'Verify & Permanently Delete',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _isVerifying ? null : widget.onCancel,
+                child: Text(
+                  context.tr('delete_account_cancel_btn'),
+                  style: const TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
